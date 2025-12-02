@@ -10,6 +10,7 @@
     "postinstall": "npm run build",
     "seed": "ts-node scripts/seedUsers.ts",
     "qr": "ts-node src/scripts/generateQRCode.ts",
+    "migrate:meetings": "ts-node src/scripts/migrate-meetings.ts",
     "lint": "eslint . --ext .ts"
   },
   "keywords": [

@@ -3,6 +3,7 @@ import { AuthRequest } from "../middleware/auth.middleware";
 import { scanBusinessCard } from "../services/businessCardScanner.service";
 import { processQRCode } from "../services/qrCodeProcessor.service";
 import * as leadService from "../services/lead.service";
+import { uploadFileToS3 } from '../services/awsS3.service';
 
 // Scan Business Card
 export const scanCard = async (req: AuthRequest, res: Response) => {
@@ -70,50 +71,42 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       images, // New: array of S3 URLs
       entryCode,
       ocrText,
-      details,
+      details: detailsRaw,
       rating,
     } = req.body;
     const userId = req.user?.userId;
 
+    // Parse details if it's a JSON string (from multipart/form-data)
+    let details;
+    if (detailsRaw) {
+      try {
+        details = typeof detailsRaw === 'string' ? JSON.parse(detailsRaw) : detailsRaw;
+      } catch (e) {
+        return res.status(400).json({ success: false, message: 'Invalid details format' });
+      }
+    }
+
+    // Validation based on lead type
+    // Handle up to 3 image uploads (card/QR + additional)
+    let imageUrls: string[] = [];
+    if (req.files && Array.isArray(req.files)) {
+      if (req.files.length > 3) {
+        return res.status(400).json({ success: false, message: 'Maximum 3 images allowed.' });
+      }
+      // Upload all images to S3 (leads folder)
+      const uploadPromises = req.files.map(file => uploadFileToS3(file, { folder: 'leads', makePublic: false }));
+      const results = await Promise.all(uploadPromises);
+      imageUrls = results.map(r => r.url);
+    }
+
     // Validation based on lead type
     if (leadType === "entry_code") {
       if (!entryCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Entry code is required for entry code type leads",
-        });
+        return res.status(400).json({ success: false, message: "Entry code is required for entry code type leads" });
       }
     } else if (leadType === "full_scan") {
-      // Accept either images array or scannedCardImage for backward compatibility
-      if (!images && !scannedCardImage) {
-        return res.status(400).json({
-          success: false,
-          message: "At least one image is required for full scan type leads",
-        });
-      }
-
-      // Validate images array if provided
-      if (images) {
-        if (!Array.isArray(images)) {
-          return res.status(400).json({
-            success: false,
-            message: "Images must be an array",
-          });
-        }
-
-        if (images.length > 3) {
-          return res.status(400).json({
-            success: false,
-            message: "Maximum 3 images allowed per lead",
-          });
-        }
-
-        if (images.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: "At least one image is required for full scan type leads",
-          });
-        }
+      if (imageUrls.length === 0) {
+        return res.status(400).json({ success: false, message: "At least one image is required for full scan type leads" });
       }
     }
 
@@ -122,8 +115,7 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       eventId,
       isIndependentLead,
       leadType,
-      scannedCardImage,
-      images,
+      images: imageUrls,
       entryCode,
       ocrText,
       details,

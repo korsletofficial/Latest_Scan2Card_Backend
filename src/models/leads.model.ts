@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document, model, Types, PaginateModel } from "mongoose";
+import { Schema, Document, model, Types, PaginateModel } from "mongoose";
 import mongoosePaginate from "mongoose-paginate-v2";
 
 // Lead Details Interface
@@ -76,6 +76,12 @@ const LeadSchema = new Schema<ILead>(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function (_doc, ret) {
+        delete (ret as any).__v;
+        return ret;
+      },
+    },
   }
 );
 

@@ -11,6 +11,8 @@ import {
   getLeadAnalytics,
   exportLeads,
 } from "../controllers/lead.controller";
+import multer from 'multer';
+const leadUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 3 } });
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 
 const router = express.Router();
@@ -25,7 +27,8 @@ router.post("/scan-card", scanCard);
 router.post("/scan-qr", scanQRCode);
 
 // Lead CRUD routes
-router.post("/", createLead);
+// Lead CRUD routes (accept up to 3 images for createLead)
+router.post("/", leadUpload.array('images', 3), createLead);
 router.get("/", getLeads);
 router.get("/analytics", getLeadAnalytics);
 router.get("/stats", getLeadStats);

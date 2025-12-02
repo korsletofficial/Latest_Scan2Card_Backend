@@ -1,6 +1,5 @@
 import MeetingModel from "../models/meeting.model";
 import LeadModel from "../models/leads.model";
-import mongoose from "mongoose";
 
 interface CreateMeetingData {
   userId: string;
@@ -9,9 +8,8 @@ interface CreateMeetingData {
   title: string;
   description?: string;
   meetingMode: string;
-  date: Date;
-  startTime: string;
-  endTime: string;
+  startAt: Date;
+  endAt: Date;
   location?: string;
   notifyAttendees?: boolean;
 }
@@ -29,11 +27,10 @@ interface GetMeetingsFilter {
 interface UpdateMeetingData {
   title?: string;
   description?: string;
-  meetingMode?: string;
-  meetingStatus?: string;
-  date?: Date;
-  startTime?: string;
-  endTime?: string;
+  meetingMode?: "online" | "offline" | "phone";
+  meetingStatus?: "scheduled" | "completed" | "cancelled" | "rescheduled";
+  startAt?: Date;
+  endAt?: Date;
   location?: string;
   notifyAttendees?: boolean;
   isActive?: boolean;
@@ -59,16 +56,17 @@ export const createMeeting = async (data: CreateMeetingData) => {
     title: data.title,
     description: data.description,
     meetingMode: data.meetingMode,
-    date: data.date,
-    startTime: data.startTime,
-    endTime: data.endTime,
+    startAt: data.startAt,
+    endAt: data.endAt,
     location: data.location,
     notifyAttendees: data.notifyAttendees || false,
   });
 
   await meeting.populate([
-    { path: "leadId", select: "details scannedCardImage" },
-    { path: "eventId", select: "eventName" },
+    {
+      path: "leadId",
+      select: "details.firstName details.lastName details.email"
+    },
   ]);
 
   return meeting;
@@ -108,10 +106,12 @@ export const getMeetings = async (filter: GetMeetingsFilter) => {
   const options = {
     page: Number(page),
     limit: Number(limit),
-    sort: { date: 1, startTime: 1 }, // Ascending order (earliest first)
+    sort: { startAt: 1 }, // Ascending order (earliest first)
     populate: [
-      { path: "leadId", select: "details scannedCardImage" },
-      { path: "eventId", select: "eventName type startDate endDate" },
+      {
+        path: "leadId",
+        select: "details.firstName details.lastName details.email"
+      },
     ],
   };
 
@@ -136,9 +136,7 @@ export const getMeetingById = async (id: string, userId: string) => {
     _id: id,
     userId,
     isDeleted: false,
-  })
-    .populate("leadId", "details scannedCardImage")
-    .populate("eventId", "eventName type startDate endDate");
+  }).populate("leadId", "details.firstName details.lastName details.email");
 
   if (!meeting) {
     throw new Error("Meeting not found");
@@ -169,9 +167,8 @@ export const updateMeeting = async (
   if (data.meetingMode !== undefined) meeting.meetingMode = data.meetingMode;
   if (data.meetingStatus !== undefined)
     meeting.meetingStatus = data.meetingStatus;
-  if (data.date !== undefined) meeting.date = data.date;
-  if (data.startTime !== undefined) meeting.startTime = data.startTime;
-  if (data.endTime !== undefined) meeting.endTime = data.endTime;
+  if (data.startAt !== undefined) meeting.startAt = data.startAt;
+  if (data.endAt !== undefined) meeting.endAt = data.endAt;
   if (data.location !== undefined) meeting.location = data.location;
   if (data.notifyAttendees !== undefined)
     meeting.notifyAttendees = data.notifyAttendees;
@@ -180,8 +177,10 @@ export const updateMeeting = async (
   await meeting.save();
 
   await meeting.populate([
-    { path: "leadId", select: "details scannedCardImage" },
-    { path: "eventId", select: "eventName" },
+    {
+      path: "leadId",
+      select: "details.firstName details.lastName details.email"
+    },
   ]);
 
   return meeting;
@@ -189,18 +188,23 @@ export const updateMeeting = async (
 
 // Delete Meeting (soft delete)
 export const deleteMeeting = async (id: string, userId: string) => {
-  const meeting = await MeetingModel.findOne({
-    _id: id,
-    userId,
-    isDeleted: false,
-  });
+  const meeting = await MeetingModel.findOneAndUpdate(
+    {
+      _id: id,
+      userId,
+      isDeleted: false,
+    },
+    {
+      isDeleted: true,
+    },
+    {
+      new: false, // Return original document to check if it existed
+    }
+  );
 
   if (!meeting) {
     throw new Error("Meeting not found");
   }
-
-  meeting.isDeleted = true;
-  await meeting.save();
 
   return { message: "Meeting deleted successfully" };
 };

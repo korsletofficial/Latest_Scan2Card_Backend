@@ -1185,14 +1185,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"leadId\": \"leadId\",\n  \"eventId\": \"eventId\",\n  \"title\": \"Product Demo\",\n  \"description\": \"Demonstration of new features\",\n  \"meetingMode\": \"In-Person\",\n  \"date\": \"2024-12-15\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"11:00\",\n  \"location\": \"Conference Room A\",\n  \"notifyAttendees\": true\n}"
+							"raw": "{\n  \"leadId\": \"674f2a1e5b8c9d001a2b3c4d\",\n  \"eventId\": \"674f2a1e5b8c9d001a2b3c4e\",\n  \"title\": \"Product Demo Meeting\",\n  \"description\": \"Demonstration of new product features and Q&A session\",\n  \"meetingMode\": \"online\",\n  \"startAt\": \"2025-12-15T14:30:00.000Z\",\n  \"endAt\": \"2025-12-15T15:30:00.000Z\",\n  \"location\": \"https://meet.google.com/abc-defg-hij\",\n  \"notifyAttendees\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/meetings",
 							"host": ["{{baseUrl}}"],
 							"path": ["meetings"]
 						},
-						"description": "Create a new meeting (ENDUSER only)"
+						"description": "Create a new meeting with a lead (ENDUSER only).\n\n**Required Fields:**\n- `leadId` (string): ID of the lead for this meeting\n- `title` (string): Meeting title\n- `meetingMode` (string): One of: 'online', 'offline', 'phone'\n- `startAt` (string): Meeting start time in UTC (ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sssZ)\n- `endAt` (string): Meeting end time in UTC (ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sssZ)\n\n**Optional Fields:**\n- `eventId` (string): ID of associated event\n- `description` (string): Meeting description/agenda\n- `location` (string): Meeting location (address for offline, link for online)\n- `notifyAttendees` (boolean): Whether to notify attendees (default: false)\n\n**Meeting Modes:**\n- `online`: Virtual meeting (provide meeting link in location)\n- `offline`: In-person meeting (provide venue address in location)\n- `phone`: Phone call (provide phone number in location)\n\n**UTC Timestamps:**\n- All times are stored in UTC (24-hour format)\n- Example: 2025-12-15T14:30:00.000Z = Dec 15, 2025 at 2:30 PM UTC\n- Frontend should convert user's local time to UTC before sending\n- startAt must be before endAt\n\n**Response:**\nReturns the created meeting object with status 'scheduled'."
 					}
 				},
 				{
@@ -1206,11 +1206,47 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/meetings",
+							"raw": "{{baseUrl}}/meetings?page=1&limit=10&meetingStatus=scheduled&meetingMode=online",
 							"host": ["{{baseUrl}}"],
-							"path": ["meetings"]
+							"path": ["meetings"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (default: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Items per page (default: 10)"
+								},
+								{
+									"key": "leadId",
+									"value": "",
+									"description": "Filter by lead ID",
+									"disabled": true
+								},
+								{
+									"key": "eventId",
+									"value": "",
+									"description": "Filter by event ID",
+									"disabled": true
+								},
+								{
+									"key": "meetingStatus",
+									"value": "scheduled",
+									"description": "Filter by status: scheduled, completed, cancelled, rescheduled",
+									"disabled": true
+								},
+								{
+									"key": "meetingMode",
+									"value": "online",
+									"description": "Filter by mode: online, offline, phone",
+									"disabled": true
+								}
+							]
 						},
-						"description": "Get all meetings for authenticated user"
+						"description": "Get all meetings for authenticated user with pagination and filters.\n\n**Query Parameters:**\n- `page` (number): Page number (default: 1)\n- `limit` (number): Items per page (default: 10)\n- `leadId` (string): Filter by specific lead\n- `eventId` (string): Filter by specific event\n- `meetingStatus` (string): Filter by status (scheduled, completed, cancelled, rescheduled)\n- `meetingMode` (string): Filter by mode (online, offline, phone)\n\n**Response:**\nReturns paginated list of meetings sorted by startAt (earliest first).\nEach meeting includes populated lead details and event info."
 					}
 				},
 				{
@@ -1253,7 +1289,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"title\": \"Updated Meeting Title\",\n  \"scheduledAt\": \"2024-12-15T14:00:00Z\",\n  \"status\": \"Confirmed\"\n}"
+							"raw": "{\n  \"title\": \"Rescheduled Product Demo\",\n  \"description\": \"Updated meeting agenda with additional topics\",\n  \"meetingMode\": \"offline\",\n  \"meetingStatus\": \"rescheduled\",\n  \"startAt\": \"2025-12-16T10:00:00.000Z\",\n  \"endAt\": \"2025-12-16T11:30:00.000Z\",\n  \"location\": \"Conference Room B, Building 2\",\n  \"notifyAttendees\": true,\n  \"isActive\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/meetings/:id",
@@ -1262,11 +1298,12 @@
 							"variable": [
 								{
 									"key": "id",
-									"value": "meetingId"
+									"value": "674f2a1e5b8c9d001a2b3c4f",
+									"description": "Meeting ID"
 								}
 							]
 						},
-						"description": "Update meeting details"
+						"description": "Update meeting details (ENDUSER only - must own the meeting).\n\n**All Fields Optional:**\n- `title` (string): Meeting title\n- `description` (string): Meeting description/agenda\n- `meetingMode` (string): 'online', 'offline', or 'phone'\n- `meetingStatus` (string): 'scheduled', 'completed', 'cancelled', or 'rescheduled'\n- `startAt` (string): Meeting start time in UTC (ISO 8601 format)\n- `endAt` (string): Meeting end time in UTC (ISO 8601 format)\n- `location` (string): Meeting location/link\n- `notifyAttendees` (boolean): Whether to notify attendees\n- `isActive` (boolean): Whether meeting is active\n\n**Meeting Status Values:**\n- `scheduled`: Meeting is scheduled and confirmed\n- `completed`: Meeting has been completed\n- `cancelled`: Meeting has been cancelled\n- `rescheduled`: Meeting has been rescheduled\n\n**Validation:**\n- If both startAt and endAt are provided, startAt must be before endAt\n- All timestamps must be in UTC ISO 8601 format\n\n**Response:**\nReturns the updated meeting object with populated lead and event details."
 					}
 				},
 				{
@@ -1286,11 +1323,12 @@
 							"variable": [
 								{
 									"key": "id",
-									"value": "meetingId"
+									"value": "674f2a1e5b8c9d001a2b3c4f",
+									"description": "Meeting ID to delete"
 								}
 							]
 						},
-						"description": "Delete a meeting"
+						"description": "Soft delete a meeting (ENDUSER only - must own the meeting).\n\nThis performs a soft delete by setting isDeleted=true.\nThe meeting will no longer appear in GET requests but remains in the database.\n\n**Response:**\nReturns success message confirming deletion."
 					}
 				}
 			],

@@ -10,9 +10,8 @@ export interface IMeeting extends Document {
   description?: string;
   meetingMode: "online" | "offline" | "phone";
   meetingStatus: "scheduled" | "completed" | "cancelled" | "rescheduled";
-  date: Date;
-  startTime: string;
-  endTime: string;
+  startAt: Date; // Meeting start time in UTC
+  endAt: Date; // Meeting end time in UTC
   location?: string; // Address for offline or meeting link for online
   notifyAttendees: boolean;
   isActive: boolean;
@@ -29,9 +28,8 @@ const MeetingSchema = new Schema<IMeeting>(
     description: { type: String },
     meetingMode: { type: String, enum: ["online", "offline", "phone"], required: true },
     meetingStatus: { type: String, enum: ["scheduled", "completed", "cancelled", "rescheduled"], default: "scheduled" },
-    date: { type: Date, required: true },
-    startTime: { type: String, required: true },
-    endTime: { type: String, required: true },
+    startAt: { type: Date, required: true },
+    endAt: { type: Date, required: true },
     location: { type: String },
     notifyAttendees: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
@@ -39,6 +37,12 @@ const MeetingSchema = new Schema<IMeeting>(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function (_doc, ret) {
+        delete (ret as any).__v;
+        return ret;
+      },
+    },
   }
 );
 

@@ -11,19 +11,29 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
       title,
       description,
       meetingMode,
-      date,
-      startTime,
-      endTime,
+      startAt,
+      endAt,
       location,
       notifyAttendees,
     } = req.body;
     const userId = req.user?.userId;
 
     // Validation
-    if (!leadId || !title || !meetingMode || !date || !startTime || !endTime) {
+    if (!leadId || !title || !meetingMode || !startAt || !endAt) {
       return res.status(400).json({
         success: false,
-        message: "leadId, title, meetingMode, date, startTime, and endTime are required",
+        message: "leadId, title, meetingMode, startAt, and endAt are required",
+      });
+    }
+
+    // Validate that startAt is before endAt
+    const startDate = new Date(startAt);
+    const endDate = new Date(endAt);
+
+    if (startDate >= endDate) {
+      return res.status(400).json({
+        success: false,
+        message: "startAt must be before endAt",
       });
     }
 
@@ -34,9 +44,8 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
       title,
       description,
       meetingMode,
-      date: new Date(date),
-      startTime,
-      endTime,
+      startAt: startDate,
+      endAt: endDate,
       location,
       notifyAttendees,
     });
@@ -123,22 +132,33 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
       description,
       meetingMode,
       meetingStatus,
-      date,
-      startTime,
-      endTime,
+      startAt,
+      endAt,
       location,
       notifyAttendees,
       isActive,
     } = req.body;
+
+    // Validate that startAt is before endAt if both are provided
+    if (startAt && endAt) {
+      const startDate = new Date(startAt);
+      const endDate = new Date(endAt);
+
+      if (startDate >= endDate) {
+        return res.status(400).json({
+          success: false,
+          message: "startAt must be before endAt",
+        });
+      }
+    }
 
     const meeting = await meetingService.updateMeeting(id, userId!, {
       title,
       description,
       meetingMode,
       meetingStatus,
-      date: date ? new Date(date) : undefined,
-      startTime,
-      endTime,
+      startAt: startAt ? new Date(startAt) : undefined,
+      endAt: endAt ? new Date(endAt) : undefined,
       location,
       notifyAttendees,
       isActive,
