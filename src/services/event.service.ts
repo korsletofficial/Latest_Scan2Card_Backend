@@ -11,7 +11,7 @@ interface CreateEventData {
   exhibitorId: string;
   eventName: string;
   description?: string;
-  type: string;
+  type: "Offline" | "Online" | "Hybrid";
   startDate: Date;
   endDate: Date;
   location?: any;
@@ -20,7 +20,7 @@ interface CreateEventData {
 interface UpdateEventData {
   eventName?: string;
   description?: string;
-  type?: string;
+  type?: "Offline" | "Online" | "Hybrid";
   startDate?: Date;
   endDate?: Date;
   location?: any;
@@ -191,7 +191,7 @@ export const updateEvent = async (
   // Update fields
   if (data.eventName) event.eventName = data.eventName;
   if (data.description !== undefined) event.description = data.description;
-  if (data.type) event.type = data.type;
+  if (data.type !== undefined) event.type = data.type;
   if (data.startDate) event.startDate = data.startDate;
   if (data.endDate) event.endDate = data.endDate;
   if (data.location) event.location = data.location;
