@@ -24,6 +24,7 @@ interface GetLeadsFilter {
   isIndependentLead?: string;
   rating?: string;
   search?: string;
+  minimal?: boolean;
 }
 
 interface UpdateLeadData {
@@ -90,6 +91,7 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     isIndependentLead,
     rating,
     search,
+    minimal = false,
   } = filter;
 
   // Build filter query based on role
@@ -132,15 +134,19 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     ];
   }
 
-  const options = {
+  const options: any = {
     page: parseInt(page.toString()),
     limit: parseInt(limit.toString()),
     sort: { createdAt: 1 }, // Ascending order (oldest first)
-    populate: [
-      { path: "eventId", select: "eventName type startDate endDate" },
-      { path: "userId", select: "firstName lastName email" },
-    ],
   };
+
+  // If minimal mode, only select ID and name fields, skip populates
+  if (minimal) {
+    options.select = "_id details.firstName details.lastName details.email";
+  } else {
+    // Default mode: return only essential fields without populates
+    options.select = "details isIndependentLead rating isActive isDeleted createdAt updatedAt";
+  }
 
   const leads = await LeadModel.paginate(query, options);
 

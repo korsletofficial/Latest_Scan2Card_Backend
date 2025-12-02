@@ -148,6 +148,7 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       isIndependentLead,
       rating,
       search,
+      minimal,
     } = req.query;
 
     const result = await leadService.getLeads({
@@ -159,6 +160,7 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       isIndependentLead: isIndependentLead as string,
       rating: rating as string,
       search: search as string,
+      minimal: minimal === 'true',
     });
 
     return res.status(200).json({
