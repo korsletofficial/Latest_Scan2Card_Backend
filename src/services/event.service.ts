@@ -4,7 +4,7 @@ import TeamModel from "../models/team.model";
 import UserModel from "../models/user.model";
 import RoleModel from "../models/role.model";
 import mongoose from "mongoose";
-import { nanoid } from "nanoid";
+import { customAlphabet } from "nanoid";
 import bcrypt from "bcryptjs";
 
 interface CreateEventData {
@@ -34,9 +34,10 @@ interface LicenseKeyData {
   expiresAt: Date;
 }
 
-// Helper function to generate unique license key (fixed 9 characters)
+// Helper function to generate unique license key (fixed 9 characters, alphanumeric only)
+const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 9);
 const generateLicenseKey = (): string => {
-  return nanoid(9).toUpperCase();
+  return nanoid();
 };
 
 // Helper function to create team manager for license
