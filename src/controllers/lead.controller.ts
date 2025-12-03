@@ -564,3 +564,38 @@ const escapeCSVValue = (value: string): string => {
 
   return stringValue;
 };
+
+// Get Lead Stats by Period (Weekly/Monthly/Yearly)
+export const getLeadStatsByPeriod = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    const { filter, timeZone = "UTC" } = req.query;
+
+    // Validate filter parameter
+    if (!filter || !["weekly", "monthly", "yearly"].includes(filter as string)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid filter. Must be 'weekly', 'monthly', or 'yearly'",
+      });
+    }
+
+    const stats = await leadService.getLeadStatsByPeriod(
+      userId!,
+      userRole!,
+      filter as "weekly" | "monthly" | "yearly",
+      timeZone as string
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error: any) {
+    console.error("Error fetching lead stats by period:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};

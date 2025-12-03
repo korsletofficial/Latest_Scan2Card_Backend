@@ -1,6 +1,7 @@
 import LeadModel from "../models/leads.model";
 import EventModel from "../models/event.model";
 import mongoose from "mongoose";
+import { fillMissingDates, fillMissingMonths, fillMissingYears } from "../helpers/dateStats.helper";
 
 interface CreateLeadData {
   userId: string;
@@ -280,40 +281,6 @@ export const getLeadStats = async (userId: string) => {
   };
 };
 
-// Helper to fill missing dates
-function fillMissingDates(data: any[], days: number) {
-  const result = [];
-  const map = new Map(data.map((item) => [item._id, item.count]));
-
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
-    result.push({
-      date: dateStr,
-      count: map.get(dateStr) || 0,
-    });
-  }
-  return result;
-}
-
-// Helper to fill missing months
-function fillMissingMonths(data: any[], months: number) {
-  const result = [];
-  const map = new Map(data.map((item) => [item._id, item.count]));
-
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const monthStr = d.toISOString().slice(0, 7); // YYYY-MM
-    result.push({
-      month: monthStr,
-      count: map.get(monthStr) || 0,
-    });
-  }
-  return result;
-}
-
 // Get Lead Analytics (Day-wise and Month-wise)
 export const getLeadAnalytics = async (
   userId: string,
@@ -397,5 +364,148 @@ export const getLeadAnalytics = async (
   return {
     daily: filledDailyStats,
     monthly: filledMonthlyStats,
+  };
+};
+
+// Get Lead Stats by Period (Weekly/Monthly/Yearly)
+export const getLeadStatsByPeriod = async (
+  userId: string,
+  userRole: string,
+  filter: "weekly" | "monthly" | "yearly",
+  timeZone: string = "UTC"
+) => {
+  console.log(
+    `[Stats] Fetching ${filter} stats for User: ${userId}, Role: ${userRole}, TimeZone: ${timeZone}`
+  );
+
+  // Build base match stage based on user role
+  let baseMatchStage: any = {
+    isDeleted: false,
+  };
+
+  if (userRole === "EXHIBITOR") {
+    const exhibitorEvents = await EventModel.find({
+      exhibitorId: userId,
+      isDeleted: false,
+    }).select("_id");
+
+    const eventIds = exhibitorEvents.map((event) => event._id);
+    baseMatchStage.eventId = { $in: eventIds };
+  } else {
+    baseMatchStage.userId = new mongoose.Types.ObjectId(userId);
+  }
+
+  let stats: any[] = [];
+  let filledStats: any[] = [];
+
+  switch (filter) {
+    case "weekly": {
+      // Last 7 days (including today)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // 6 days ago + today = 7 days
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+
+      const matchStage = {
+        ...baseMatchStage,
+        createdAt: { $gte: sevenDaysAgo },
+      };
+
+      stats = await LeadModel.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$createdAt",
+                timezone: timeZone,
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+
+      filledStats = fillMissingDates(stats, 7);
+      break;
+    }
+
+    case "monthly": {
+      // Last 12 months
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+      twelveMonthsAgo.setDate(1);
+      twelveMonthsAgo.setHours(0, 0, 0, 0);
+
+      const matchStage = {
+        ...baseMatchStage,
+        createdAt: { $gte: twelveMonthsAgo },
+      };
+
+      stats = await LeadModel.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: "%Y-%m",
+                date: "$createdAt",
+                timezone: timeZone,
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+
+      filledStats = fillMissingMonths(stats, 12);
+      break;
+    }
+
+    case "yearly": {
+      // Last 5 years
+      const fiveYearsAgo = new Date();
+      fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 4); // 4 years ago + current year = 5 years
+      fiveYearsAgo.setMonth(0, 1);
+      fiveYearsAgo.setHours(0, 0, 0, 0);
+
+      const matchStage = {
+        ...baseMatchStage,
+        createdAt: { $gte: fiveYearsAgo },
+      };
+
+      stats = await LeadModel.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: "%Y",
+                date: "$createdAt",
+                timezone: timeZone,
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+
+      filledStats = fillMissingYears(stats, 5);
+      break;
+    }
+
+    default:
+      throw new Error("Invalid filter. Must be 'weekly', 'monthly', or 'yearly'");
+  }
+
+  console.log(`[Stats] ${filter} stats:`, JSON.stringify(filledStats));
+
+  return {
+    filter,
+    data: filledStats,
+    timeZone,
   };
 };

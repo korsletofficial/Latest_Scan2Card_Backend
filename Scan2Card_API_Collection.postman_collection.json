@@ -1121,6 +1121,36 @@
 					}
 				},
 				{
+					"name": "Get Lead Stats By Period",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads/stats-by-period?filter=weekly&timeZone=UTC",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", "stats-by-period"],
+							"query": [
+								{
+									"key": "filter",
+									"value": "weekly",
+									"description": "Filter type: weekly, monthly, yearly"
+								},
+								{
+									"key": "timeZone",
+									"value": "UTC",
+									"description": "Optional IANA timezone (default UTC)"
+								}
+							]
+						},
+						"description": "Get lead statistics grouped by period. Use filter=weekly|monthly|yearly and optional timeZone (IANA)."
+					}
+				},
+				{
 					"name": "Get Lead by ID",
 					"request": {
 						"method": "GET",

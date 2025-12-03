@@ -9,6 +9,7 @@ import {
   deleteLead,
   getLeadStats,
   getLeadAnalytics,
+  getLeadStatsByPeriod,
   exportLeads,
 } from "../controllers/lead.controller";
 import multer from 'multer';
@@ -38,6 +39,7 @@ router.post("/", leadWriteLimiter, leadUpload.array('images', 3), createLead);
 router.get("/", readLimiter, getLeads);
 router.get("/analytics", readLimiter, getLeadAnalytics);
 router.get("/stats", readLimiter, getLeadStats);
+router.get("/stats-by-period", readLimiter, getLeadStatsByPeriod);
 router.get("/export", readLimiter, exportLeads);
 router.get("/:id", readLimiter, getLeadById);
 

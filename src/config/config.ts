@@ -34,7 +34,6 @@ if (config.USE_DUMMY_OTP) {
 } else {
   if (config.SMARTPING_API && config.SMARTPING_API !== "your_smartping_api_key_here") {
     console.log("📱 OTP Mode: PRODUCTION (SMS enabled)");
-    console.log(`✅ SMS API Key configured: ${config.SMARTPING_API.substring(0, 10)}...`);
   } else {
     console.log("⚠️  OTP Mode: PRODUCTION but SMS API key NOT configured!");
     console.log("💡 Set SMARTPING_APIKEY in .env or enable USE_DUMMY_OTP=true");
