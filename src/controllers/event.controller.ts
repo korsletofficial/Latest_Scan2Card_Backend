@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import * as eventService from "../services/event.service";
+import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 
 // Create Event (Exhibitor only)
 export const createEvent = async (req: AuthRequest, res: Response) => {
@@ -34,7 +35,7 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const event = await eventService.createEvent({
+    const sanitizedData = sanitizeEmptyStrings({
       exhibitorId: exhibitorId!,
       eventName,
       description,
@@ -43,6 +44,8 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
       endDate: end,
       location,
     });
+
+    const event = await eventService.createEvent(sanitizedData);
 
     return res.status(201).json({
       success: true,
@@ -122,7 +125,7 @@ export const updateEvent = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const event = await eventService.updateEvent(id, exhibitorId!, {
+    const sanitizedData = sanitizeEmptyStrings({
       eventName,
       description,
       type,
@@ -131,6 +134,8 @@ export const updateEvent = async (req: AuthRequest, res: Response) => {
       location,
       isActive,
     });
+
+    const event = await eventService.updateEvent(id, exhibitorId!, sanitizedData);
 
     return res.status(200).json({
       success: true,
@@ -221,12 +226,14 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       });
     }
 
-    const result = await eventService.generateLicenseKeyForEvent(id, exhibitorId!, {
+    const sanitizedData = sanitizeEmptyStrings({
       stallName,
       email,
       maxActivations,
       expiresAt: expirationDate,
     });
+
+    const result = await eventService.generateLicenseKeyForEvent(id, exhibitorId!, sanitizedData);
 
     return res.status(201).json({
       success: true,
@@ -256,10 +263,13 @@ export const bulkGenerateLicenseKeys = async (req: AuthRequest, res: Response) =
       });
     }
 
+    // Sanitize each license key object in the array
+    const sanitizedLicenseKeys = licenseKeys.map((key: any) => sanitizeEmptyStrings(key));
+
     const result = await eventService.bulkGenerateLicenseKeys(
       id,
       exhibitorId!,
-      licenseKeys
+      sanitizedLicenseKeys
     );
 
     return res.status(201).json({

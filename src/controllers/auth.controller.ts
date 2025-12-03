@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import * as authService from "../services/auth.service";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 
 // Register new user
 export const register = async (req: Request, res: Response) => {
@@ -41,7 +42,7 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.registerUser({
+    const sanitizedData = sanitizeEmptyStrings({
       firstName,
       lastName,
       email,
@@ -51,6 +52,8 @@ export const register = async (req: Request, res: Response) => {
       companyName,
       exhibitorId,
     });
+
+    const result = await authService.registerUser(sanitizedData as any);
 
     res.status(201).json({
       success: true,

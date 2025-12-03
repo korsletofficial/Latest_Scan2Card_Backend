@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import * as profileService from "../services/profile.service";
 import * as feedbackService from "../services/feedback.service";
+import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 
 // Update user profile
 // Supports both JSON and multipart/form-data
@@ -47,12 +48,14 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       console.log(`✅ Profile image uploaded: ${result.key}`);
     }
 
-    const user = await profileService.updateUserProfile(userId, {
+    const sanitizedData = sanitizeEmptyStrings({
       firstName,
       lastName,
       phoneNumber,
       profileImage: profileImageUrl,
     });
+
+    const user = await profileService.updateUserProfile(userId, sanitizedData);
 
     res.status(200).json({
       success: true,
@@ -114,11 +117,13 @@ export const submitFeedback = async (req: AuthRequest, res: Response) => {
     const { message, rating, category } = req.body;
     const userId = req.user.userId;
 
-    const feedback = await feedbackService.submitFeedback(userId, {
+    const sanitizedData = sanitizeEmptyStrings({
       message,
       rating,
       category,
     });
+
+    const feedback = await feedbackService.submitFeedback(userId, sanitizedData);
 
     res.status(201).json({
       success: true,
@@ -176,7 +181,8 @@ export const toggle2FA = async (req: AuthRequest, res: Response) => {
     const { enabled } = req.body;
     const userId = req.user.userId;
 
-    const user = await profileService.toggle2FA(userId, enabled);
+    const sanitizedData = sanitizeEmptyStrings({ enabled });
+    const user = await profileService.toggle2FA(userId, sanitizedData.enabled);
 
     res.status(200).json({
       success: true,

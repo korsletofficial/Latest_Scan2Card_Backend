@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import * as rsvpService from "../services/rsvp.service";
+import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 
 // Create RSVP by License Key
 export const createRsvp = async (req: AuthRequest, res: Response) => {
@@ -8,10 +9,12 @@ export const createRsvp = async (req: AuthRequest, res: Response) => {
     const { rsvpLicenseKey } = req.body;
     const userId = req.user?._id;
 
-    const rsvp = await rsvpService.createRsvp({
+    const sanitizedData = sanitizeEmptyStrings({
       userId: userId!,
       rsvpLicenseKey,
     });
+
+    const rsvp = await rsvpService.createRsvp(sanitizedData);
 
     res.status(201).json({
       success: true,
@@ -148,7 +151,8 @@ export const validateLicenseKey = async (req: AuthRequest, res: Response) => {
   try {
     const { licenseKey } = req.body;
 
-    const result = await rsvpService.validateLicenseKey(licenseKey);
+    const sanitizedData = sanitizeEmptyStrings({ licenseKey });
+    const result = await rsvpService.validateLicenseKey(sanitizedData.licenseKey);
 
     res.status(200).json({
       success: true,

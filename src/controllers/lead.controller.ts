@@ -4,21 +4,7 @@ import { scanBusinessCard } from "../services/businessCardScanner.service";
 import { processQRCode } from "../services/qrCodeProcessor.service";
 import * as leadService from "../services/lead.service";
 import { uploadFileToS3 } from '../services/awsS3.service';
-
-// Helper: Convert empty strings to undefined
-const sanitizeEmptyStrings = <T extends Record<string, any>>(obj: T): T => {
-  if (!obj || typeof obj !== 'object') return obj;
-
-  const sanitized = { ...obj };
-  for (const key in sanitized) {
-    if (sanitized[key] === '') {
-      sanitized[key] = undefined as any;
-    } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null && !Array.isArray(sanitized[key])) {
-      sanitized[key] = sanitizeEmptyStrings(sanitized[key]);
-    }
-  }
-  return sanitized;
-};
+import { sanitizeEmptyStrings } from '../utils/sanitize.util';
 
 // Scan Business Card
 export const scanCard = async (req: AuthRequest, res: Response) => {

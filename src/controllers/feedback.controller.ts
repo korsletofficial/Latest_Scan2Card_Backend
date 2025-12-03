@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import * as feedbackService from "../services/feedback.service";
+import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 
 // Get all feedback (Admin only)
 export const getAllFeedback = async (req: AuthRequest, res: Response) => {
@@ -36,7 +37,8 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const feedback = await feedbackService.updateFeedbackStatus(id, status);
+    const sanitizedData = sanitizeEmptyStrings({ status });
+    const feedback = await feedbackService.updateFeedbackStatus(id, sanitizedData.status);
 
     res.status(200).json({
       success: true,

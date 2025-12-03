@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { registerUser } from "../services/auth.service";
 import * as adminService from "../services/admin.service";
+import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 
 type CreateExhibitorBody = {
   firstName: string;
@@ -80,15 +81,17 @@ export const createExhibitor = async (
     const normalizedEmail = email ? normalizeEmail(email) : undefined;
     const finalPassword = password || generateRandomPassword();
 
-    const exhibitor = await registerUser({
+    const sanitizedData = sanitizeEmptyStrings({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       ...(normalizedEmail && { email: normalizedEmail }),
       ...(phoneNumber && { phoneNumber: phoneNumber.trim() }),
       ...(companyName && { companyName: companyName.trim() }),
       password: finalPassword,
-      roleName: "EXHIBITOR",
+      roleName: "EXHIBITOR" as const,
     });
+
+    const exhibitor = await registerUser(sanitizedData as any);
 
     const responsePayload: Record<string, unknown> = {
       success: true,
@@ -162,7 +165,7 @@ export const updateExhibitor = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { firstName, lastName, email, phoneNumber, companyName, password, address, isActive } = req.body;
 
-    const updatedExhibitor = await adminService.updateExhibitor(id, {
+    const sanitizedData = sanitizeEmptyStrings({
       firstName,
       lastName,
       email,
@@ -172,6 +175,8 @@ export const updateExhibitor = async (req: Request, res: Response) => {
       address,
       isActive,
     });
+
+    const updatedExhibitor = await adminService.updateExhibitor(id, sanitizedData);
 
     return res.status(200).json({
       success: true,
@@ -324,10 +329,12 @@ export const updateKeyPaymentStatus = async (req: Request, res: Response) => {
     const { eventId, keyId } = req.params;
     const { paymentStatus } = req.body;
 
+    const sanitizedData = sanitizeEmptyStrings({ paymentStatus });
+
     const result = await adminService.updateKeyPaymentStatus(
       eventId,
       keyId,
-      paymentStatus
+      sanitizedData.paymentStatus
     );
 
     return res.status(200).json({

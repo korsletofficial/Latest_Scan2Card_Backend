@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import * as meetingService from "../services/meeting.service";
+import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 
 // Create Meeting
 export const createMeeting = async (req: AuthRequest, res: Response) => {
@@ -36,7 +37,7 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const meeting = await meetingService.createMeeting({
+    const sanitizedData = sanitizeEmptyStrings({
       userId: userId!,
       leadId,
       title,
@@ -47,6 +48,8 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
       location,
       notifyAttendees,
     });
+
+    const meeting = await meetingService.createMeeting(sanitizedData);
 
     return res.status(201).json({
       success: true,
@@ -148,7 +151,7 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const meeting = await meetingService.updateMeeting(id, userId!, {
+    const sanitizedData = sanitizeEmptyStrings({
       title,
       description,
       meetingMode,
@@ -159,6 +162,8 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
       notifyAttendees,
       isActive,
     });
+
+    const meeting = await meetingService.updateMeeting(id, userId!, sanitizedData);
 
     return res.status(200).json({
       success: true,
