@@ -1,9 +1,14 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import VCard from "vcard-parser";
+import puppeteerCore from "puppeteer-core";
 import puppeteer from "puppeteer";
+import chromium from "@sparticuz/chromium";
 // Uncomment and configure if you want LLM fallback
 // import OpenAI from "openai";
+
+// Detect if we're in production (serverless) or local development
+const isProduction = process.env.NODE_ENV === "production" || process.env.AWS_EXECUTION_ENV || process.env.RENDER;
 
 // Interface for extracted contact data
 export interface QRContactData {
@@ -421,7 +426,27 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
       // If Cheerio failed, try Puppeteer as fallback for dynamic content
       console.log("🌐 Cheerio extraction failed or incomplete, trying Puppeteer for:", url);
-      const browser = await puppeteer.launch({ headless: true });
+
+      // Use different Puppeteer config based on environment
+      let browser;
+      if (isProduction) {
+        // Production: Use puppeteer-core with serverless chromium
+        console.log("🔧 Using serverless Chromium for production");
+        browser = await puppeteerCore.launch({
+          args: chromium.args,
+          defaultViewport: { width: 1920, height: 1080 },
+          executablePath: await chromium.executablePath(),
+          headless: true,
+        });
+      } else {
+        // Local: Use regular puppeteer with bundled Chrome
+        console.log("🔧 Using local Puppeteer for development");
+        browser = await puppeteer.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+      }
+
       const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
       // Wait for dynamic content to load

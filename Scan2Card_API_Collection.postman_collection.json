@@ -1022,7 +1022,7 @@
 					}
 				},
 				{
-					"name": "Create Lead",
+					"name": "Scan QR Code",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -1037,7 +1037,44 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"eventId\": \"eventId\",\n  \"isIndependentLead\": false,\n  \"scannedCardImage\": \"data:image/jpeg;base64,...\",\n  \"ocrText\": \"Extracted text from card\",\n  \"details\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"phoneNumber\": \"+1234567890\",\n    \"company\": \"Acme Corp\",\n    \"position\": \"CEO\",\n    \"website\": \"https://acme.com\",\n    \"address\": \"123 Business St\",\n    \"city\": \"San Francisco\",\n    \"country\": \"USA\",\n    \"notes\": \"Interested in premium package\"\n  },\n  \"rating\": 5\n}"
+							"raw": "{\n  \"qrText\": \"SAMPLE_QR_TEXT\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/leads/scan-qr",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", "scan-qr"]
+						},
+						"description": "Scan a digital business card QR code to extract entry code or contact information. Returns structured data for lead creation."
+					}
+				},
+				{
+					"name": "Create Lead",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{ "key": "eventId", "value": "eventId", "type": "text" },
+								{ "key": "isIndependentLead", "value": "false", "type": "text" },
+								{ "key": "leadType", "value": "full_scan", "type": "text" },
+								{ "key": "entryCode", "value": "SAMPLE_ENTRY_CODE", "type": "text" },
+								{ "key": "ocrText", "value": "Extracted text from card", "type": "text" },
+								{ "key": "details", "value": "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"email\":\"john.doe@example.com\",\"phoneNumber\":\"+1234567890\",\"company\":\"Acme Corp\",\"position\":\"CEO\",\"website\":\"https://acme.com\",\"address\":\"123 Business St\",\"city\":\"San Francisco\",\"country\":\"USA\",\"notes\":\"Interested in premium package\"}", "type": "text" },
+								{ "key": "rating", "value": "5", "type": "text" },
+								{ "key": "images", "type": "file", "src": ["/path/to/image1.jpg"] },
+								{ "key": "images", "type": "file", "src": ["/path/to/image2.jpg"], "disabled": true },
+								{ "key": "images", "type": "file", "src": ["/path/to/image3.jpg"], "disabled": true }
+							]
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads",

@@ -19,7 +19,7 @@ import { AuthRequest } from "./auth.middleware";
  */
 const generateEmailKey = (req: Request): string => {
   const email = req.body?.email?.toLowerCase()?.trim();
-  return email ? `email:${email}` : `ip:${req.ip}`;
+  return email || 'no-email';
 };
 
 /**
@@ -29,15 +29,7 @@ const generateEmailKey = (req: Request): string => {
 const generateUserKey = (req: Request): string => {
   const authReq = req as AuthRequest;
   const userId = authReq.user?.userId || authReq.user?._id;
-  return userId ? `user:${userId}` : `ip:${req.ip}`;
-};
-
-/**
- * Generates key based on IP address only
- * Used for catch-all limits and public endpoints
- */
-const generateIPKey = (req: Request): string => {
-  return `ip:${req.ip}`;
+  return userId ? `${userId}` : 'no-user';
 };
 
 /**
@@ -77,6 +69,7 @@ export const registerEmailLimiter = rateLimit({
   keyGenerator: generateEmailKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -95,7 +88,6 @@ export const registerEmailLimiter = rateLimit({
 export const registerIPLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: Number(process.env.RATE_LIMIT_AUTH_REGISTER_PER_IP) || 500,
-  keyGenerator: generateIPKey,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -120,6 +112,7 @@ export const loginEmailLimiter = rateLimit({
   skip: skipSuccessfulLogin,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -138,7 +131,6 @@ export const loginEmailLimiter = rateLimit({
 export const loginIPLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: Number(process.env.RATE_LIMIT_AUTH_LOGIN_PER_IP) || 1000,
-  keyGenerator: generateIPKey,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -162,6 +154,7 @@ export const otpSendResourceLimiter = rateLimit({
   keyGenerator: generateEmailKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -180,7 +173,6 @@ export const otpSendResourceLimiter = rateLimit({
 export const otpSendIPLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: Number(process.env.RATE_LIMIT_AUTH_OTP_SEND_PER_IP) || 500,
-  keyGenerator: generateIPKey,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -204,6 +196,7 @@ export const otpVerifyResourceLimiter = rateLimit({
   keyGenerator: generateEmailKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -222,7 +215,6 @@ export const otpVerifyResourceLimiter = rateLimit({
 export const otpVerifyIPLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: Number(process.env.RATE_LIMIT_AUTH_OTP_VERIFY_PER_IP) || 500,
-  keyGenerator: generateIPKey,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -246,6 +238,7 @@ export const passwordResetEmailLimiter = rateLimit({
   keyGenerator: generateEmailKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -264,7 +257,6 @@ export const passwordResetEmailLimiter = rateLimit({
 export const passwordResetIPLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: Number(process.env.RATE_LIMIT_AUTH_PASSWORD_RESET_PER_IP) || 200,
-  keyGenerator: generateIPKey,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -292,6 +284,7 @@ export const scanLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -312,6 +305,7 @@ export const leadWriteLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -325,6 +319,7 @@ export const eventWriteLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -338,6 +333,7 @@ export const meetingWriteLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -352,6 +348,7 @@ export const profileWriteLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -365,6 +362,7 @@ export const rsvpWriteLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -379,6 +377,7 @@ export const uploadLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -404,6 +403,7 @@ export const readLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -422,6 +422,7 @@ export const adminLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -436,6 +437,7 @@ export const adminDashboardLimiter = rateLimit({
   keyGenerator: generateUserKey,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { ip: false },
   handler: standardHandler,
 });
 
@@ -452,7 +454,6 @@ export const adminDashboardLimiter = rateLimit({
 export const globalLimiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_GLOBAL_WINDOW) * 60 * 1000 || 15 * 60 * 1000, // 15 minutes
   max: Number(process.env.RATE_LIMIT_GLOBAL_PER_IP) || 5000,
-  keyGenerator: generateIPKey,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
