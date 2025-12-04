@@ -11,6 +11,10 @@ export interface AuthRequest extends Request {
     email: string;
     role: string;
   };
+  file?: Express.Multer.File;
+  files?:
+    | Express.Multer.File[]
+    | { [fieldname: string]: Express.Multer.File[] };
 }
 
 // Verify JWT token middleware
