@@ -914,7 +914,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["rsvp", "my-rsvps"]
 						},
-						"description": "Get all RSVPs for authenticated user"
+						"description": "Get all RSVPs for authenticated user.\n\n**Trial Event Auto-Join:**\nWhen a new end user calls this endpoint for the first time (with no existing RSVPs), they are automatically joined to a trial event. This allows them to create up to 5 leads without a license key. The trial event will appear in the response with `isTrialEvent: true`."
 					}
 				},
 				{
@@ -1081,7 +1081,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["leads"]
 						},
-						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card endpoint first to extract data from business card image."
+						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card endpoint first to extract data from business card image.\n\n**Trial Event Limit:**\nIf creating a lead with a trial event, users are limited to 5 leads. After reaching this limit, they must join a regular event with a license key to continue creating leads. Check trial status with GET /leads/trial-status."
 					}
 				},
 				{
@@ -1148,6 +1148,24 @@
 							]
 						},
 						"description": "Get lead statistics grouped by period. Use filter=weekly|monthly|yearly and optional timeZone (IANA)."
+					}
+				},
+				{
+					"name": "Get Trial Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads/trial-status",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", "trial-status"]
+						},
+						"description": "Get user's trial event status including:\n- Trial leads used (out of 5 maximum)\n- Remaining trial leads available\n- Whether trial is still active\n- Trial event details\n\n**Trial Event Feature:**\nNew end users are automatically joined to a trial event when they first access their RSVPs. Users can create up to 5 leads with the trial event without needing a license key. After 5 leads, they must join a regular event with a license key to continue.\n\n**Response Example:**\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"trialLeadsUsed\": 2,\n    \"remainingTrialLeads\": 3,\n    \"maxTrialLeads\": 5,\n    \"isTrialActive\": true,\n    \"hasJoinedTrialEvent\": true,\n    \"trialEvent\": {\n      \"id\": \"674f2a1e5b8c9d001a2b3c4d\",\n      \"name\": \"Trial Event - Get Started with Scan2Card\",\n      \"description\": \"Welcome! Use this trial event to explore...\"\n    }\n  }\n}\n```"
 					}
 				},
 				{
@@ -1227,7 +1245,7 @@
 								}
 							]
 						},
-						"description": "Soft delete a lead"
+						"description": "Soft delete a lead.\n\n**Trial Event Note:**\nIf deleting a lead created with a trial event, the trial lead counter will be decremented, allowing the user to create another trial lead."
 					}
 				}
 			],

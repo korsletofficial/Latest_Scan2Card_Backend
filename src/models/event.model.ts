@@ -31,7 +31,8 @@ export interface IEvent extends Document {
     city?: string;
   };
   licenseKeys: ILicenseKey[];
-  exhibitorId: Types.ObjectId;
+  exhibitorId?: Types.ObjectId;
+  isTrialEvent?: boolean;
   isActive: boolean;
   isDeleted: boolean;
 }
@@ -66,14 +67,51 @@ const EventSchema = new Schema<IEvent>(
         { timestamps: true }
       ),
     ],
-    exhibitorId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
+    exhibitorId: { type: Schema.Types.ObjectId, ref: "Users" },
+    isTrialEvent: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function (_doc, ret) {
+        delete (ret as any).__v;
+
+        // Convert undefined/null to empty string for optional fields
+        ret.description = ret.description ?? '';
+
+        // Handle nested location object
+        if (ret.location) {
+          ret.location.venue = ret.location.venue ?? '';
+          ret.location.address = ret.location.address ?? '';
+          ret.location.city = ret.location.city ?? '';
+        }
+
+        // Handle license keys array
+        ret.licenseKeys = ret.licenseKeys ?? [];
+        if (ret.licenseKeys && Array.isArray(ret.licenseKeys)) {
+          ret.licenseKeys = ret.licenseKeys.map((lk: any) => ({
+            ...lk,
+            stallName: lk.stallName ?? '',
+            usedBy: lk.usedBy ?? [],
+          }));
+        }
+
+        return ret;
+      },
+    },
   }
 );
+
+// Pre-save validation: Regular events must have exhibitorId
+EventSchema.pre('save', function(next) {
+  if (!this.isTrialEvent && !this.exhibitorId) {
+    next(new Error('exhibitorId is required for non-trial events'));
+  } else {
+    next();
+  }
+});
 
 EventSchema.plugin(mongoosePaginate);
 

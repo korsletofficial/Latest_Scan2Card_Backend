@@ -35,6 +35,17 @@ const RsvpSchema = new Schema<IRsvp>(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function (_doc, ret) {
+        delete (ret as any).__v;
+
+        // Convert undefined/null to empty string for optional fields
+        ret.eventLicenseKey = ret.eventLicenseKey ?? '';
+        ret.expiresAt = ret.expiresAt ?? null;
+
+        return ret;
+      },
+    },
   }
 );
 

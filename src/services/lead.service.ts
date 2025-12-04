@@ -1,5 +1,6 @@
 import LeadModel from "../models/leads.model";
 import EventModel from "../models/event.model";
+import UserModel from "../models/user.model";
 import mongoose from "mongoose";
 import { fillMissingDates, fillMissingMonths, fillMissingYears } from "../helpers/dateStats.helper";
 
@@ -62,6 +63,23 @@ export const createLead = async (data: CreateLeadData) => {
   }
   // Images are now optional for all lead types including full_scan
 
+  // CHECK TRIAL EVENT LIMIT
+  if (data.eventId) {
+    const event = await EventModel.findById(data.eventId);
+
+    if (event && event.isTrialEvent) {
+      // Check user's trial lead count
+      const user = await UserModel.findById(data.userId);
+
+      if (user && user.trialLeadsCount && user.trialLeadsCount >= 5) {
+        throw new Error(
+          "Trial event limit reached. You've created 5 leads with the trial event. " +
+          "Please join a regular event with a license key to continue creating leads."
+        );
+      }
+    }
+  }
+
   const lead = await LeadModel.create({
     userId: data.userId,
     eventId: data.eventId,
@@ -74,6 +92,20 @@ export const createLead = async (data: CreateLeadData) => {
     details: data.details,
     rating: data.rating,
   });
+
+  // INCREMENT TRIAL LEAD COUNT if this was for trial event
+  if (data.eventId) {
+    const event = await EventModel.findById(data.eventId);
+
+    if (event && event.isTrialEvent) {
+      await UserModel.updateOne(
+        { _id: data.userId },
+        { $inc: { trialLeadsCount: 1 } }
+      );
+
+      console.log(`✅ Incremented trial lead count for user ${data.userId}`);
+    }
+  }
 
   return lead;
 };
@@ -140,10 +172,10 @@ export const getLeads = async (filter: GetLeadsFilter) => {
 
   // If minimal mode, only select ID and name fields, skip populates
   if (minimal) {
-    options.select = "_id details.firstName details.lastName details.email";
+    options.select = "_id details.firstName details.lastName details.email entryCode";
   } else {
     // Default mode: return only essential fields without populates
-    options.select = "details isIndependentLead rating isActive isDeleted createdAt updatedAt";
+    options.select = "details isIndependentLead rating isActive isDeleted entryCode createdAt updatedAt";
   }
 
   const leads = await LeadModel.paginate(query, options);
@@ -234,6 +266,21 @@ export const deleteLead = async (id: string, userId: string) => {
 
   if (!lead) {
     throw new Error("Lead not found");
+  }
+
+  // Check if this is a trial event lead - decrement counter if so
+  if (lead.eventId) {
+    const event = await EventModel.findById(lead.eventId);
+
+    if (event && event.isTrialEvent) {
+      // Decrement trial lead count
+      await UserModel.updateOne(
+        { _id: userId },
+        { $inc: { trialLeadsCount: -1 } }
+      );
+
+      console.log(`✅ Decremented trial lead count for user ${userId}`);
+    }
   }
 
   lead.isDeleted = true;
@@ -507,5 +554,39 @@ export const getLeadStatsByPeriod = async (
     filter,
     data: filledStats,
     timeZone,
+  };
+};
+
+// Get User Trial Status
+export const getUserTrialStatus = async (userId: string) => {
+  const user = await UserModel.findById(userId).select('trialLeadsCount hasJoinedTrialEvent');
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const trialLeadsCount = user.trialLeadsCount || 0;
+  const hasJoinedTrialEvent = user.hasJoinedTrialEvent || false;
+  const remainingTrialLeads = Math.max(0, 5 - trialLeadsCount);
+  const isTrialActive = trialLeadsCount < 5;
+
+  // Get trial event details
+  const trialEvent = await EventModel.findOne({
+    isTrialEvent: true,
+    isDeleted: false,
+    isActive: true
+  }).select('_id eventName description');
+
+  return {
+    trialLeadsUsed: trialLeadsCount,
+    remainingTrialLeads,
+    maxTrialLeads: 5,
+    isTrialActive,
+    hasJoinedTrialEvent,
+    trialEvent: trialEvent ? {
+      id: trialEvent._id,
+      name: trialEvent.eventName,
+      description: trialEvent.description
+    } : null,
   };
 };

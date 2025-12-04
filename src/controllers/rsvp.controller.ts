@@ -36,8 +36,10 @@ export const getMyRsvps = async (req: AuthRequest, res: Response) => {
     const userId = req.user?._id;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
+    const sanitizedQuery = sanitizeEmptyStrings({ search: req.query.search });
+    const search = (sanitizedQuery.search as string)?.trim() || "";
 
-    const result = await rsvpService.getUserRsvps(userId!, page, limit);
+    const result = await rsvpService.getUserRsvps(userId!, page, limit, search);
 
     res.status(200).json({
       success: true,

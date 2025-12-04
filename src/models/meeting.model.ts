@@ -38,6 +38,11 @@ const MeetingSchema = new Schema<IMeeting>(
     toJSON: {
       transform: function (_doc, ret) {
         delete (ret as any).__v;
+
+        // Convert undefined/null to empty string for optional fields
+        ret.description = ret.description ?? '';
+        ret.location = ret.location ?? '';
+
         return ret;
       },
     },

@@ -29,6 +29,7 @@ export interface QRContactData {
   city?: string;
   country?: string;
   notes?: string;
+  uniqueCode?: string; // Optional entry/unique code (9-15 chars)
 }
 
 // Interface for QR processing result
@@ -225,6 +226,50 @@ const extractPhone = (text: string): string | undefined => {
       }
     }
   }
+  return undefined;
+};
+
+/**
+ * Extracts unique code (9-15 alphanumeric characters) from text
+ * Looks for patterns like: code=ABC123, UniqueCode: ABC123, NOTE:UniqueCode=ABC123
+ */
+const extractUniqueCode = (text: string): string | undefined => {
+  // Pattern 1: Key-value pairs (code=, uniqueCode=, unique_code=, entryCode=, entry_code=)
+  const keyValuePatterns = [
+    /(?:code|uniquecode|unique_code|entrycode|entry_code|uniqueid|unique_id)\s*[=:]\s*([A-Za-z0-9]{9,15})/i,
+    /NOTE\s*:\s*(?:code|uniquecode|unique_code)\s*[=:]\s*([A-Za-z0-9]{9,15})/i,
+  ];
+
+  for (const pattern of keyValuePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  // Pattern 2: Standalone alphanumeric code (9-15 chars) on its own line or after label
+  const standalonePattern = /\b([A-Za-z0-9]{9,15})\b/g;
+  const matches = text.match(standalonePattern);
+
+  if (matches) {
+    // Filter out common non-code patterns (phone numbers, emails, URLs)
+    for (const match of matches) {
+      // Skip if it looks like phone number (too many digits)
+      const digitCount = match.replace(/[^\d]/g, '').length;
+      if (digitCount > 10) continue;
+
+      // Skip if it's all numbers (likely phone/zip)
+      if (/^\d+$/.test(match)) continue;
+
+      // Skip if it's part of email or URL context
+      const context = text.substring(Math.max(0, text.indexOf(match) - 10), text.indexOf(match) + match.length + 10);
+      if (context.includes('@') || context.includes('http') || context.includes('www')) continue;
+
+      // This looks like a valid unique code
+      return match;
+    }
+  }
+
   return undefined;
 };
 
@@ -590,7 +635,25 @@ const parseVCard = (vcardText: string): QRContactData => {
       }
     }
 
-    // Do not include notes in the response
+    // Parse NOTE field for unique code (optional)
+    // Example: NOTE:UniqueCode=ABC123XYZ or NOTE:ABC123XYZ456
+    if (parsed && parsed.note && parsed.note[0]) {
+      const noteValue = parsed.note[0].value;
+      const uniqueCode = extractUniqueCode(noteValue);
+      if (uniqueCode) {
+        contactData.uniqueCode = uniqueCode;
+        console.log(`📌 Extracted unique code from vCard NOTE: ${uniqueCode}`);
+      }
+    }
+
+    // Also try extracting from the raw vCard text (in case NOTE isn't parsed correctly)
+    if (!contactData.uniqueCode) {
+      const uniqueCode = extractUniqueCode(vcardText);
+      if (uniqueCode) {
+        contactData.uniqueCode = uniqueCode;
+        console.log(`📌 Extracted unique code from vCard raw text: ${uniqueCode}`);
+      }
+    }
 
     return contactData;
   } catch (error: any) {
@@ -610,6 +673,13 @@ const parsePlainText = (text: string): QRContactData => {
 
   // Extract phone
   contactData.phoneNumber = extractPhone(text);
+
+  // Extract unique code (optional)
+  const uniqueCode = extractUniqueCode(text);
+  if (uniqueCode) {
+    contactData.uniqueCode = uniqueCode;
+    console.log(`📌 Extracted unique code from plain text: ${uniqueCode}`);
+  }
 
   // Try to extract name from first line
   const lines = text.split("\n").filter((line) => line.trim());

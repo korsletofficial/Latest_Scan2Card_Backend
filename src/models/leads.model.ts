@@ -79,6 +79,28 @@ const LeadSchema = new Schema<ILead>(
     toJSON: {
       transform: function (_doc, ret) {
         delete (ret as any).__v;
+
+        // Convert undefined/null to empty string for top-level fields
+        ret.entryCode = ret.entryCode ?? '';
+        ret.ocrText = ret.ocrText ?? '';
+        ret.scannedCardImage = ret.scannedCardImage ?? '';
+        ret.images = ret.images ?? [];
+
+        // Convert undefined/null to empty string for details fields
+        if (ret.details) {
+          ret.details.firstName = ret.details.firstName ?? '';
+          ret.details.lastName = ret.details.lastName ?? '';
+          ret.details.company = ret.details.company ?? '';
+          ret.details.position = ret.details.position ?? '';
+          ret.details.email = ret.details.email ?? '';
+          ret.details.phoneNumber = ret.details.phoneNumber ?? '';
+          ret.details.website = ret.details.website ?? '';
+          ret.details.address = ret.details.address ?? '';
+          ret.details.city = ret.details.city ?? '';
+          ret.details.country = ret.details.country ?? '';
+          ret.details.notes = ret.details.notes ?? '';
+        }
+
         return ret;
       },
     },

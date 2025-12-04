@@ -25,6 +25,17 @@ const FeedbackSchema = new Schema<IFeedback>(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function (_doc, ret) {
+        delete (ret as any).__v;
+
+        // Convert undefined/null to empty string for optional fields
+        ret.rating = ret.rating ?? 0;
+        ret.category = ret.category ?? '';
+
+        return ret;
+      },
+    },
   }
 );
 

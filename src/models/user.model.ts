@@ -15,6 +15,8 @@ export interface IUser extends Document {
   events?: mongoose.Types.ObjectId[];
   profileImage?: string;
   addedBy?: Types.ObjectId;
+  trialLeadsCount?: number;
+  hasJoinedTrialEvent?: boolean;
   twoFactorEnabled: boolean;
   isVerified: boolean;
   isActive: boolean;
@@ -38,6 +40,8 @@ const UserSchema = new Schema<IUser>(
     events: [{ type: Schema.Types.ObjectId, ref: "Events" }],
     profileImage: { type: String },
     addedBy: { type: Schema.Types.ObjectId, ref: "Users" },
+    trialLeadsCount: { type: Number, default: 0 },
+    hasJoinedTrialEvent: { type: Boolean, default: false },
     twoFactorEnabled: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
@@ -45,6 +49,19 @@ const UserSchema = new Schema<IUser>(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function (_doc, ret) {
+        delete (ret as any).__v;
+
+        // Convert undefined/null to empty string for optional fields
+        ret.phoneNumber = ret.phoneNumber ?? '';
+        ret.companyName = ret.companyName ?? '';
+        ret.profileImage = ret.profileImage ?? '';
+        ret.events = ret.events ?? [];
+
+        return ret;
+      },
+    },
   }
 );
 

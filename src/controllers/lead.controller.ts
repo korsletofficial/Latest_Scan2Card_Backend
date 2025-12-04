@@ -95,7 +95,7 @@ export const createLead = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ success: false, message: 'Maximum 3 images allowed.' });
       }
       // Upload all images to S3 (leads folder)
-      const uploadPromises = req.files.map(file => uploadFileToS3(file, { folder: 'leads', makePublic: false }));
+      const uploadPromises = req.files.map(file => uploadFileToS3(file, { folder: 'leads', makePublic: true }));
       const results = await Promise.all(uploadPromises);
       imageUrls = results.map(r => r.url);
     }
@@ -593,6 +593,33 @@ export const getLeadStatsByPeriod = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error fetching lead stats by period:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+// Get User Trial Status
+export const getTrialStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
+    const trialStatus = await leadService.getUserTrialStatus(userId);
+
+    return res.status(200).json({
+      success: true,
+      data: trialStatus,
+    });
+  } catch (error: any) {
+    console.error("Error fetching trial status:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error",

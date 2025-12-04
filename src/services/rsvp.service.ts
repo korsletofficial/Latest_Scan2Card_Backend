@@ -99,13 +99,90 @@ export const createRsvp = async (data: CreateRsvpData) => {
 export const getUserRsvps = async (
   userId: string,
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  search: string = ''
 ) => {
-  const rsvps = await RsvpModel.paginate(
-    {
-      userId: userId,
+  const normalizedSearch = search?.trim() || "";
+
+  // Check if user has any RSVPs
+  const totalRsvps = await RsvpModel.countDocuments({
+    userId: userId,
+    isDeleted: false,
+  });
+
+  // If no RSVPs and user hasn't joined trial event, auto-join them
+  if (totalRsvps === 0) {
+    const user = await UserModel.findById(userId);
+
+    if (user && !user.hasJoinedTrialEvent) {
+      // Find trial event
+      const trialEvent = await EventModel.findOne({
+        isTrialEvent: true,
+        isDeleted: false,
+        isActive: true
+      });
+
+      if (trialEvent) {
+        // Auto-create RSVP for trial event
+        await RsvpModel.create({
+          eventId: trialEvent._id,
+          userId: userId,
+          eventLicenseKey: '', // No key needed
+          status: 1,
+          isActive: true,
+          isDeleted: false,
+        });
+
+        // Mark user as joined trial event
+        await UserModel.updateOne(
+          { _id: userId },
+          { hasJoinedTrialEvent: true }
+        );
+
+        console.log(`✅ Auto-joined user ${userId} to trial event`);
+      }
+    }
+  }
+
+  // Build query for RSVPs
+  const rsvpQuery: any = {
+    userId: userId,
+    isDeleted: false,
+  };
+
+  // If search is provided, find matching event IDs first
+  if (normalizedSearch) {
+    const eventQuery: any = {
       isDeleted: false,
-    },
+      $or: [
+        { eventName: { $regex: normalizedSearch, $options: "i" } },
+        { type: { $regex: normalizedSearch, $options: "i" } },
+        { "location.venue": { $regex: normalizedSearch, $options: "i" } },
+        { "location.city": { $regex: normalizedSearch, $options: "i" } },
+      ],
+    };
+
+    const matchingEvents = await EventModel.find(eventQuery).select("_id");
+    const eventIds = matchingEvents.map((event) => event._id);
+
+    if (eventIds.length === 0) {
+      return {
+        rsvps: [],
+        pagination: {
+          total: 0,
+          page,
+          pages: 0,
+          limit,
+        },
+      };
+    }
+
+    // Add event filter to RSVP query
+    rsvpQuery.eventId = { $in: eventIds };
+  }
+
+  const rsvps = await RsvpModel.paginate(
+    rsvpQuery,
     {
       page,
       limit,
@@ -113,7 +190,7 @@ export const getUserRsvps = async (
       populate: [
         {
           path: "eventId",
-          select: "eventName type startDate endDate location isActive",
+          select: "eventName type startDate endDate location isActive isTrialEvent",
         },
       ],
     }

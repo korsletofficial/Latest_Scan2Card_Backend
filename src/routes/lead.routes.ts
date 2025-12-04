@@ -11,6 +11,7 @@ import {
   getLeadAnalytics,
   getLeadStatsByPeriod,
   exportLeads,
+  getTrialStatus,
 } from "../controllers/lead.controller";
 import multer from 'multer';
 const leadUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 3 } });
@@ -40,6 +41,7 @@ router.get("/", readLimiter, getLeads);
 router.get("/analytics", readLimiter, getLeadAnalytics);
 router.get("/stats", readLimiter, getLeadStats);
 router.get("/stats-by-period", readLimiter, getLeadStatsByPeriod);
+router.get("/trial-status", readLimiter, getTrialStatus);
 router.get("/export", readLimiter, exportLeads);
 router.get("/:id", readLimiter, getLeadById);
 
