@@ -1270,7 +1270,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"leadId\": \"674f2a1e5b8c9d001a2b3c4d\",\n  \"eventId\": \"674f2a1e5b8c9d001a2b3c4e\",\n  \"title\": \"Product Demo Meeting\",\n  \"description\": \"Demonstration of new product features and Q&A session\",\n  \"meetingMode\": \"online\",\n  \"startAt\": \"2025-12-15T14:30:00.000Z\",\n  \"endAt\": \"2025-12-15T15:30:00.000Z\",\n  \"location\": \"https://meet.google.com/abc-defg-hij\",\n  \"notifyAttendees\": true\n}"
+							"raw": "{\n  \"eventId\": \"674f2a1e5b8c9d001a2b3c4e\",\n  \"title\": \"Product Demo Meeting\",\n  \"description\": \"Demonstration of new product features and Q&A session\",\n  \"meetingMode\": \"online\",\n  \"startAt\": \"2025-12-15T14:30:00.000Z\",\n  \"endAt\": \"2025-12-15T15:30:00.000Z\",\n  \"location\": \"https://meet.google.com/abc-defg-hij\",\n  \"notifyAttendees\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/meetings",
