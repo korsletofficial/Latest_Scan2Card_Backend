@@ -13,10 +13,17 @@ export const sanitizeEmptyStrings = <T extends Record<string, any>>(obj: T): T =
 
   const sanitized = { ...obj };
   for (const key in sanitized) {
-    if (sanitized[key] === '') {
+    const value = sanitized[key];
+
+    if (value === '') {
       sanitized[key] = undefined as any;
-    } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null && !Array.isArray(sanitized[key])) {
-      sanitized[key] = sanitizeEmptyStrings(sanitized[key]);
+    } else if (
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value) &&
+      Object.prototype.toString.call(value) !== '[object Date]' // Exclude Date objects from recursive sanitization
+    ) {
+      sanitized[key] = sanitizeEmptyStrings(value);
     }
   }
   return sanitized;
