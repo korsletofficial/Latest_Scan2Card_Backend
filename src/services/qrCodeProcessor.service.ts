@@ -1163,16 +1163,13 @@
 
 
 
+
+
 import VCard from "vcard-parser";
-import puppeteerCore from "puppeteer-core";
-import puppeteer from "puppeteer";
-import chromium from "@sparticuz/chromium";
+import puppeteer, { type Browser } from "puppeteer";
 import axios from "axios";
 // Uncomment and configure if you want LLM fallback
 // import OpenAI from "openai";
-
-// Detect environment - use serverless Chromium for production (AWS App Runner, Lambda, etc.)
-const isProduction = process.env.NODE_ENV === 'production' || process.env.USE_SERVERLESS_CHROMIUM === 'true';
 
 // Interface for extracted contact data
 export interface QRContactData {
@@ -1201,16 +1198,16 @@ export interface QRContactData {
  */
 const normalizeContactData = (data: QRContactData): QRContactData => {
   const normalized = {
-    firstName: data.firstName || '',
-    lastName: data.lastName || '',
-    company: data.company || '',
-    position: data.position || '',
-    email: data.email || '',
-    phoneNumber: data.phoneNumber || '',
-    website: data.website || '',
-    address: data.address || '',
-    city: data.city || '',
-    country: data.country || '',
+    firstName: data.firstName || "",
+    lastName: data.lastName || "",
+    company: data.company || "",
+    position: data.position || "",
+    email: data.email || "",
+    phoneNumber: data.phoneNumber || "",
+    website: data.website || "",
+    address: data.address || "",
+    city: data.city || "",
+    country: data.country || "",
     ...data, // Preserve other fields like title, department, etc.
   };
 
@@ -1273,7 +1270,7 @@ const isEntryCode = (text: string): boolean => {
   }
 
   // Should not look like a URL, email, or phone number
-  if (trimmed.includes('.') || trimmed.includes('@') || trimmed.includes('/')) {
+  if (trimmed.includes(".") || trimmed.includes("@") || trimmed.includes("/")) {
     return false;
   }
 
@@ -1296,7 +1293,8 @@ const isValidName = (text: string): boolean => {
   }
 
   // Filter out common non-name terms
-  const invalidTerms = /(download|phone|email|address|website|contact|card|call|directions|fax|mobile|office|home)/i;
+  const invalidTerms =
+    /(download|phone|email|address|website|contact|card|call|directions|fax|mobile|office|home)/i;
   if (invalidTerms.test(text)) {
     return false;
   }
@@ -1313,7 +1311,7 @@ const isValidCompany = (text: string): boolean => {
   }
 
   // Should not contain email addresses
-  if (text.includes('@')) {
+  if (text.includes("@")) {
     return false;
   }
 
@@ -1323,7 +1321,8 @@ const isValidCompany = (text: string): boolean => {
   }
 
   // Filter out job titles that might be mistaken for company names
-  const jobTitles = /(director|manager|ceo|cto|cfo|engineer|developer|designer|download|phone|email)/i;
+  const jobTitles =
+    /(director|manager|ceo|cto|cfo|engineer|developer|designer|download|phone|email)/i;
   if (jobTitles.test(text)) {
     return false;
   }
@@ -1341,14 +1340,34 @@ const isValidPosition = (text: string): boolean => {
 
   // Common position keywords
   const positionKeywords = [
-    'manager', 'director', 'engineer', 'developer', 'designer', 'analyst',
-    'specialist', 'coordinator', 'officer', 'executive', 'president',
-    'vice', 'assistant', 'associate', 'senior', 'junior', 'lead',
-    'head', 'chief', 'ceo', 'cto', 'cfo', 'coo', 'consultant'
+    "manager",
+    "director",
+    "engineer",
+    "developer",
+    "designer",
+    "analyst",
+    "specialist",
+    "coordinator",
+    "officer",
+    "executive",
+    "president",
+    "vice",
+    "assistant",
+    "associate",
+    "senior",
+    "junior",
+    "lead",
+    "head",
+    "chief",
+    "ceo",
+    "cto",
+    "cfo",
+    "coo",
+    "consultant",
   ];
 
   const textLower = text.toLowerCase();
-  return positionKeywords.some(keyword => textLower.includes(keyword));
+  return positionKeywords.some((keyword) => textLower.includes(keyword));
 };
 
 /**
@@ -1408,9 +1427,9 @@ const extractPhone = (text: string): string | undefined => {
     const match = text.match(pattern);
     if (match) {
       // Clean up the phone number
-      const cleaned = match[0].replace(/[^\d+\-\s()]/g, '').trim();
+      const cleaned = match[0].replace(/[^\d+\-\s()]/g, "").trim();
       // Validate: should have at least 7 digits, at most 15
-      const digitCount = cleaned.replace(/[^\d]/g, '').length;
+      const digitCount = cleaned.replace(/[^\d]/g, "").length;
       if (digitCount >= 7 && digitCount <= 15) {
         return cleaned;
       }
@@ -1445,15 +1464,18 @@ const extractUniqueCode = (text: string): string | undefined => {
     // Filter out common non-code patterns (phone numbers, emails, URLs)
     for (const match of matches) {
       // Skip if it looks like phone number (too many digits)
-      const digitCount = match.replace(/[^\d]/g, '').length;
+      const digitCount = match.replace(/[^\d]/g, "").length;
       if (digitCount > 10) continue;
 
       // Skip if it's all numbers (likely phone/zip)
       if (/^\d+$/.test(match)) continue;
 
       // Skip if it's part of email or URL context
-      const context = text.substring(Math.max(0, text.indexOf(match) - 10), text.indexOf(match) + match.length + 10);
-      if (context.includes('@') || context.includes('http') || context.includes('www')) continue;
+      const context = text.substring(
+        Math.max(0, text.indexOf(match) - 10),
+        text.indexOf(match) + match.length + 10
+      );
+      if (context.includes("@") || context.includes("http") || context.includes("www")) continue;
 
       // This looks like a valid unique code
       return match;
@@ -1471,8 +1493,8 @@ const parseMailtoLink = (mailtoLink: string): QRContactData => {
 
   try {
     // Remove 'mailto:' prefix
-    const emailPart = mailtoLink.replace('mailto:', '');
-    const [email, queryString] = emailPart.split('?');
+    const emailPart = mailtoLink.replace("mailto:", "");
+    const [email, queryString] = emailPart.split("?");
 
     contactData.email = decodeURIComponent(email.trim());
 
@@ -1481,18 +1503,18 @@ const parseMailtoLink = (mailtoLink: string): QRContactData => {
       const params = new URLSearchParams(queryString);
 
       // Extract subject and body as notes
-      const subject = params.get('subject');
-      const body = params.get('body');
+      const subject = params.get("subject");
+      const body = params.get("body");
 
       if (subject || body) {
         const notes = [];
         if (subject) notes.push(`Subject: ${subject}`);
         if (body) notes.push(`Body: ${body}`);
-        contactData.notes = notes.join(' | ');
+        contactData.notes = notes.join(" | ");
       }
     }
   } catch (error: any) {
-    console.error('Error parsing mailto link:', error.message);
+    console.error("Error parsing mailto link:", error.message);
   }
 
   return contactData;
@@ -1506,15 +1528,12 @@ const parseTelLink = (telLink: string): QRContactData => {
 
   try {
     // Remove 'tel:' prefix and clean up
-    const phoneNumber = telLink
-      .replace('tel:', '')
-      .replace(/[^\d+\-\s()]/g, '')
-      .trim();
+    const phoneNumber = telLink.replace("tel:", "").replace(/[^\d+\-\s()]/g, "").trim();
 
     contactData.phoneNumber = phoneNumber;
     contactData.mobile = phoneNumber; // Also set as mobile
   } catch (error: any) {
-    console.error('Error parsing tel link:', error.message);
+    console.error("Error parsing tel link:", error.message);
   }
 
   return contactData;
@@ -1524,7 +1543,7 @@ const parseTelLink = (telLink: string): QRContactData => {
  * Delay utility for retry logic
  */
 const delay = (ms: number): Promise<void> => {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
 /**
@@ -1558,7 +1577,10 @@ const fieldMap: Record<string, keyof QRContactData> = {
   note: "notes",
 };
 
-const parseQRCodeChimpPayload = (rawScript: string, fallbackUrl: string): QRContactData | null => {
+const parseQRCodeChimpPayload = (
+  rawScript: string,
+  fallbackUrl: string
+): QRContactData | null => {
   if (!rawScript) {
     return null;
   }
@@ -1571,7 +1593,7 @@ const parseQRCodeChimpPayload = (rawScript: string, fallbackUrl: string): QRCont
     const ensureWebsite = (): string | undefined => {
       if (payload?.short_url) {
         const shortUrl: string = payload.short_url;
-        if (shortUrl.startsWith('http')) {
+        if (shortUrl.startsWith("http")) {
           return shortUrl;
         }
         return `https://linko.page/${shortUrl}`;
@@ -1586,55 +1608,58 @@ const parseQRCodeChimpPayload = (rawScript: string, fallbackUrl: string): QRCont
       }
     };
 
-    const profileComponent = content.find((item: any) => item?.component === 'profile');
+    const profileComponent = content.find((item: any) => item?.component === "profile");
     if (profileComponent?.name) {
       const nameParts = String(profileComponent.name).trim().split(/\s+/);
-      setIfEmpty('firstName', nameParts[0]);
+      setIfEmpty("firstName", nameParts[0]);
       if (nameParts.length > 1) {
-        setIfEmpty('lastName', nameParts.slice(1).join(' '));
+        setIfEmpty("lastName", nameParts.slice(1).join(" "));
       }
     }
 
-    setIfEmpty('company', profileComponent?.company);
-    setIfEmpty('position', profileComponent?.desc);
+    setIfEmpty("company", profileComponent?.company);
+    setIfEmpty("position", profileComponent?.desc);
 
     if (Array.isArray(profileComponent?.contact_shortcuts)) {
       for (const shortcut of profileComponent.contact_shortcuts) {
-        if (shortcut?.type === 'mobile') {
-          setIfEmpty('phoneNumber', shortcut.value);
+        if (shortcut?.type === "mobile") {
+          setIfEmpty("phoneNumber", shortcut.value);
         }
-        if (shortcut?.type === 'email') {
-          setIfEmpty('email', shortcut.value);
+        if (shortcut?.type === "email") {
+          setIfEmpty("email", shortcut.value);
         }
       }
     }
 
-    const contactComponent = content.find((item: any) => item?.component === 'contact');
+    const contactComponent = content.find((item: any) => item?.component === "contact");
     if (Array.isArray(contactComponent?.contact_infos)) {
       for (const info of contactComponent.contact_infos) {
-        if (info?.type === 'email') {
-          setIfEmpty('email', info.email);
+        if (info?.type === "email") {
+          setIfEmpty("email", info.email);
         }
-        if (info?.type === 'number' || info?.type === 'mobile') {
-          setIfEmpty('phoneNumber', info.number ?? info.value);
+        if (info?.type === "number" || info?.type === "mobile") {
+          setIfEmpty("phoneNumber", info.number ?? info.value);
         }
-        if (info?.type === 'address') {
+        if (info?.type === "address") {
           const street = info.street ?? info.address;
           const city = info.city ?? info.town;
           const country = info.country;
-          setIfEmpty('address', street);
-          setIfEmpty('city', city);
-          setIfEmpty('country', country);
+          setIfEmpty("address", street);
+          setIfEmpty("city", city);
+          setIfEmpty("country", country);
         }
       }
     }
 
-    setIfEmpty('website', ensureWebsite());
+    setIfEmpty("website", ensureWebsite());
 
     const hasData = Object.values(contactData).some((value) => Boolean(value));
     return hasData ? contactData : null;
   } catch (error: any) {
-    console.error('Failed to parse embedded QR template payload:', error?.message || error);
+    console.error(
+      "Failed to parse embedded QR template payload:",
+      error?.message || error
+    );
     return null;
   }
 };
@@ -1643,13 +1668,16 @@ const parseQRCodeChimpPayload = (rawScript: string, fallbackUrl: string): QRCont
  * New: Attempt to fetch HTML directly and extract __savedQrCodeParams block.
  * Returns raw JSON string if found, null otherwise.
  */
-const fetchHtmlAndExtractJson = async (url: string): Promise<{ rawScript: string | null; htmlText: string | null }> => {
+const fetchHtmlAndExtractJson = async (
+  url: string
+): Promise<{ rawScript: string | null; htmlText: string | null }> => {
   try {
     const res = await axios.get(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
       timeout: 15000,
     });
@@ -1669,31 +1697,40 @@ const fetchHtmlAndExtractJson = async (url: string): Promise<{ rawScript: string
 /**
  * New: Detect common Cloudflare interstitial text or challenge
  */
-const isCloudflareChallenge = (text = '') => {
+const isCloudflareChallenge = (text = "") => {
   if (!text) return false;
   const t = text.toLowerCase();
-  return t.includes('checking if the site connection is secure') ||
-         t.includes('just a moment') ||
-         t.includes('please enable javascript') ||
-         t.includes('checking your browser before accessing') ||
-         t.includes('you are being redirected');
+  return (
+    t.includes("checking if the site connection is secure") ||
+    t.includes("just a moment") ||
+    t.includes("please enable javascript") ||
+    t.includes("checking your browser before accessing") ||
+    t.includes("you are being redirected")
+  );
 };
 
-const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QRContactData> => {
+const scrapeWebpage = async (
+  url: string,
+  retryAttempts: number = 3
+): Promise<QRContactData> => {
   let lastError: Error | null = null;
 
   // Try quick axios HTML fetch first (Option A)
   try {
     const { rawScript, htmlText } = await fetchHtmlAndExtractJson(url);
     if (rawScript) {
-      console.log("Found __savedQrCodeParams via axios — returning parsed payload without Puppeteer");
+      console.log(
+        "Found __savedQrCodeParams via axios — returning parsed payload without Puppeteer"
+      );
       const parsed = parseQRCodeChimpPayload(rawScript, url);
       if (parsed) return parsed;
     }
 
     // If HTML looks like Cloudflare's interstitial, skip heavy Puppeteer attempts
     if (htmlText && isCloudflareChallenge(htmlText)) {
-      console.warn("Detected Cloudflare interstitial in direct HTML fetch — skipping Puppeteer and returning at least the URL.");
+      console.warn(
+        "Detected Cloudflare interstitial in direct HTML fetch — skipping Puppeteer and returning at least the URL."
+      );
       return { website: url };
     }
   } catch (e) {
@@ -1703,53 +1740,41 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
   // Retry logic with exponential backoff for Puppeteer approach
   for (let attempt = 0; attempt < retryAttempts; attempt++) {
+    let browser: Browser | null = null;
+
     try {
       console.log(`🔍 Attempt ${attempt + 1}/${retryAttempts} - Scraping: ${url}`);
 
-      // Use different Puppeteer config based on environment
-      let browser;
-      if (isProduction) {
-        // Production: Use puppeteer-core with serverless chromium
-        const executablePath = await chromium.executablePath();
-        const chromiumArgs = [
-          ...chromium.args,
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
-        ];
-        console.log(`🔧 Using serverless Chromium for production (path: ${executablePath})`);
-        browser = await puppeteerCore.launch({
-          args: chromiumArgs,
-          defaultViewport: { width: 1920, height: 1080 },
-          executablePath,
-          headless: (chromium as any).headless ?? true,
-        });
-      } else {
-        // Local: Use regular puppeteer with bundled Chrome
-        console.log("🔧 Using local Puppeteer for development");
-        browser = await puppeteer.launch({
-          headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--disable-dev-shm-usage'],
-        });
-      }
+      // Always use bundled Puppeteer Chromium
+      console.log("🔧 Using bundled Puppeteer Chromium (no serverless chromium)");
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-web-security",
+          "--disable-features=IsolateOrigins,site-per-process",
+        ],
+      });
 
       const page = await browser.newPage();
-      await page.setExtraHTTPHeaders({ 'accept-language': 'en-US,en;q=0.9' });
+      await page.setExtraHTTPHeaders({ "accept-language": "en-US,en;q=0.9" });
       await page.setViewport({ width: 1280, height: 720 });
 
       // Set user agent to avoid bot detection
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      );
 
       console.log(`📄 Navigating to ${url}...`);
       await page.goto(url, {
-        waitUntil: 'networkidle0',
-        timeout: 30000
+        waitUntil: "networkidle0",
+        timeout: 30000,
       });
 
       // Wait for dynamic content to load
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       console.log("📊 Extracting data from rendered page...");
 
@@ -1766,20 +1791,22 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
               if (text && text.length > 0) return text;
             }
           }
-          return '';
+          return "";
         };
 
         // Helper to get meta content
         const getMeta = (names: string[]): string => {
           for (const name of names) {
             // @ts-ignore
-            const meta = document.querySelector(`meta[name="${name}"], meta[property="${name}"]`);
+            const meta = document.querySelector(
+              `meta[name="${name}"], meta[property="${name}"]`
+            );
             if (meta) {
-              const content = meta.getAttribute('content');
+              const content = meta.getAttribute("content");
               if (content) return content.trim();
             }
           }
-          return '';
+          return "";
         };
 
         // Extract data using various selectors and patterns
@@ -1791,11 +1818,13 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
         // Try structured data (JSON-LD)
         // @ts-ignore
-        const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+        const jsonLdScripts = document.querySelectorAll(
+          'script[type="application/ld+json"]'
+        );
         for (const script of jsonLdScripts) {
           try {
-            const jsonData = JSON.parse(script.textContent || '');
-            if (jsonData['@type'] === 'Person') {
+            const jsonData = JSON.parse(script.textContent || "");
+            if (jsonData["@type"] === "Person") {
               data.jsonLd = jsonData;
             }
           } catch (e) {
@@ -1804,75 +1833,95 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
         }
 
         // Extract from meta tags
-        data.metaTitle = getMeta(['title', 'og:title', 'twitter:title']);
-        data.metaDescription = getMeta(['description', 'og:description', 'twitter:description']);
+        data.metaTitle = getMeta(["title", "og:title", "twitter:title"]);
+        data.metaDescription = getMeta([
+          "description",
+          "og:description",
+          "twitter:description",
+        ]);
 
         // Extract from common selectors
         data.name = getText([
           '[itemprop="name"]',
-          '.name', '.full-name', '.person-name',
-          'h1.name', 'h2.name', 'h1', 'h2'
+          ".name",
+          ".full-name",
+          ".person-name",
+          "h1.name",
+          "h2.name",
+          "h1",
+          "h2",
         ]);
 
         data.email = getText([
           '[itemprop="email"]',
           'a[href^="mailto:"]',
-          '.email', '.e-mail',
-          '[data-email]'
+          ".email",
+          ".e-mail",
+          "[data-email]",
         ]);
 
         // Extract email from href if present
         // @ts-ignore
         const emailLink = document.querySelector('a[href^="mailto:"]');
         if (emailLink && !data.email) {
-          const href = emailLink.getAttribute('href');
+          const href = emailLink.getAttribute("href");
           if (href) {
-            data.email = href.replace('mailto:', '').split('?')[0];
+            data.email = href.replace("mailto:", "").split("?")[0];
           }
         }
 
         data.phone = getText([
           '[itemprop="telephone"]',
           'a[href^="tel:"]',
-          '.phone', '.tel', '.telephone', '.mobile',
-          '[data-phone]'
+          ".phone",
+          ".tel",
+          ".telephone",
+          ".mobile",
+          "[data-phone]",
         ]);
 
         // Extract phone from href if present
         // @ts-ignore
         const phoneLink = document.querySelector('a[href^="tel:"]');
         if (phoneLink && !data.phone) {
-          const href = phoneLink.getAttribute('href');
+          const href = phoneLink.getAttribute("href");
           if (href) {
-            data.phone = href.replace('tel:', '').trim();
+            data.phone = href.replace("tel:", "").trim();
           }
         }
 
         data.company = getText([
           '[itemprop="worksFor"]',
           '[itemprop="organization"]',
-          '.company', '.organization', '.org'
+          ".company",
+          ".organization",
+          ".org",
         ]);
 
         data.position = getText([
           '[itemprop="jobTitle"]',
-          '.title', '.job-title', '.position', '.role'
+          ".title",
+          ".job-title",
+          ".position",
+          ".role",
         ]);
 
         data.address = getText([
           '[itemprop="address"]',
           '[itemprop="streetAddress"]',
-          '.address', '.street-address'
+          ".address",
+          ".street-address",
         ]);
 
         data.city = getText([
           '[itemprop="addressLocality"]',
-          '.city', '.locality'
+          ".city",
+          ".locality",
         ]);
 
         data.country = getText([
           '[itemprop="addressCountry"]',
-          '.country'
+          ".country",
         ]);
 
         try {
@@ -1880,9 +1929,11 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
           // @ts-ignore
           const scripts = Array.from(document.scripts || []) as Array<any>;
           for (const script of scripts) {
-            const text = script.textContent || '';
-            if (text.includes('__savedQrCodeParams')) {
-              const match = text.match(/__savedQrCodeParams\s*=\s*(\{[\s\S]*?\});?/);
+            const text = script.textContent || "";
+            if (text.includes("__savedQrCodeParams")) {
+              const match = text.match(
+                /__savedQrCodeParams\s*=\s*(\{[\s\S]*?\});?/
+              );
               if (match && match[1]) {
                 data.qrCodeChimpRaw = match[1];
                 break;
@@ -1895,8 +1946,6 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
         return data;
       });
-
-      await browser.close();
 
       console.log("✅ Data extraction complete, processing...");
       console.log("📦 Extracted data:", JSON.stringify(extractedData, null, 2));
@@ -1917,10 +1966,10 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
       if (extractedData.jsonLd) {
         const jld = extractedData.jsonLd;
         if (jld.name) {
-          const nameParts = jld.name.split(' ');
+          const nameParts = jld.name.split(" ");
           contactData.firstName = nameParts[0];
           if (nameParts.length > 1) {
-            contactData.lastName = nameParts.slice(1).join(' ');
+            contactData.lastName = nameParts.slice(1).join(" ");
           }
         }
         if (jld.givenName) contactData.firstName = jld.givenName;
@@ -1933,19 +1982,21 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
       // Process extracted fields
       if (extractedData.name && !contactData.firstName) {
-        const nameParts = extractedData.name.split(' ');
+        const nameParts = extractedData.name.split(" ");
         contactData.firstName = nameParts[0];
         if (nameParts.length > 1) {
-          contactData.lastName = nameParts.slice(1).join(' ');
+          contactData.lastName = nameParts.slice(1).join(" ");
         }
       }
 
       if (extractedData.email) {
-        contactData.email = extractEmail(extractedData.email) || extractedData.email;
+        contactData.email =
+          extractEmail(extractedData.email) || extractedData.email;
       }
 
       if (extractedData.phone) {
-        contactData.phoneNumber = extractPhone(extractedData.phone) || extractedData.phone;
+        contactData.phoneNumber =
+          extractPhone(extractedData.phone) || extractedData.phone;
       }
 
       if (extractedData.company) {
@@ -1969,19 +2020,27 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
       }
 
       if (extractedData.qrCodeChimpRaw) {
-        console.log('🧩 Embedded QR template payload detected, parsing as fallback...');
+        console.log(
+          "🧩 Embedded QR template payload detected, parsing as fallback..."
+        );
         mergeIfMissing(parseQRCodeChimpPayload(extractedData.qrCodeChimpRaw, url));
       }
 
       const normalizedPageText = extractedData.fullText?.toLowerCase();
-      if (normalizedPageText && normalizedPageText.includes('just a moment') && normalizedPageText.includes('checking if the site connection is secure')) {
-        console.warn('⚠️ Possible bot challenge detected on page content.');
+      if (
+        normalizedPageText &&
+        normalizedPageText.includes("just a moment") &&
+        normalizedPageText.includes("checking if the site connection is secure")
+      ) {
+        console.warn("⚠️ Possible bot challenge detected on page content.");
       }
 
       // Fallback: Parse from full text if we don't have enough data
       if (!contactData.email && !contactData.phoneNumber && extractedData.fullText) {
         console.log("🔄 Applying fallback text extraction...");
-        const lines = extractedData.fullText.split("\n").filter((line: string) => line.trim());
+        const lines = extractedData.fullText
+          .split("\n")
+          .filter((line: string) => line.trim());
 
         // Extract email from text
         contactData.email = extractEmail(extractedData.fullText);
@@ -2037,23 +2096,37 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
       console.log("✨ Final contact data:", JSON.stringify(contactData, null, 2));
       return contactData;
-
     } catch (error: any) {
-      lastError = error instanceof Error ? error : new Error('Unknown error');
+      lastError = error instanceof Error ? error : new Error("Unknown error");
       console.error(`❌ Error on attempt ${attempt + 1}:`, error.message);
       console.error(`Stack trace:`, error.stack);
 
       // If this isn't the last attempt, wait with exponential backoff
       if (attempt < retryAttempts - 1) {
         const delayMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
-        console.log(`⏳ Retry attempt ${attempt + 2}/${retryAttempts} after ${delayMs}ms...`);
+        console.log(
+          `⏳ Retry attempt ${attempt + 2}/${retryAttempts} after ${delayMs}ms...`
+        );
         await delay(delayMs);
+      }
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeErr) {
+          console.warn("Error closing browser:", closeErr);
+        }
       }
     }
   }
 
   // All retries failed
-  console.error("❌ Error scraping webpage after", retryAttempts, "attempts:", lastError?.message);
+  console.error(
+    "❌ Error scraping webpage after",
+    retryAttempts,
+    "attempts:",
+    lastError?.message
+  );
   console.error("Full error:", lastError);
   // Return at least the URL
   return { website: url };
@@ -2198,9 +2271,7 @@ const parsePlainText = (text: string): QRContactData => {
 /**
  * Processes QR code text and extracts contact information
  */
-export const processQRCode = async (
-  qrText: string
-): Promise<QRProcessResult> => {
+export const processQRCode = async (qrText: string): Promise<QRProcessResult> => {
   try {
     if (!qrText || qrText.trim().length === 0) {
       return {
@@ -2228,10 +2299,10 @@ export const processQRCode = async (
     }
 
     // Check if it's a mailto: link
-    if (trimmedText.toLowerCase().startsWith('mailto:')) {
+    if (trimmedText.toLowerCase().startsWith("mailto:")) {
       console.log("📧 Detected mailto link in QR code");
       const rawContactData = parseMailtoLink(trimmedText);
-      const entryCode = rawContactData.uniqueCode || '';
+      const entryCode = rawContactData.uniqueCode || "";
       const contactData = normalizeContactData(rawContactData);
       const rating = calculateRating(contactData);
 
@@ -2249,10 +2320,10 @@ export const processQRCode = async (
     }
 
     // Check if it's a tel: link
-    if (trimmedText.toLowerCase().startsWith('tel:')) {
+    if (trimmedText.toLowerCase().startsWith("tel:")) {
       console.log("📞 Detected tel link in QR code");
       const rawContactData = parseTelLink(trimmedText);
-      const entryCode = rawContactData.uniqueCode || '';
+      const entryCode = rawContactData.uniqueCode || "";
       const contactData = normalizeContactData(rawContactData);
       const rating = calculateRating(contactData);
 
@@ -2273,7 +2344,7 @@ export const processQRCode = async (
     if (isURL(trimmedText)) {
       console.log("🌐 Detected URL in QR code, scraping webpage...");
       const rawContactData = await scrapeWebpage(trimmedText);
-      const entryCode = rawContactData.uniqueCode || '';
+      const entryCode = rawContactData.uniqueCode || "";
       const contactData = normalizeContactData(rawContactData);
 
       // Optionally: Use LLM to fill missing fields (uncomment and configure)
@@ -2319,7 +2390,7 @@ export const processQRCode = async (
     if (isVCard(trimmedText)) {
       console.log("📇 Detected vCard in QR code, parsing...");
       const rawContactData = parseVCard(trimmedText);
-      const entryCode = rawContactData.uniqueCode || '';
+      const entryCode = rawContactData.uniqueCode || "";
       const contactData = normalizeContactData(rawContactData);
 
       // Calculate confidence based on fields found
@@ -2345,7 +2416,7 @@ export const processQRCode = async (
     // Treat as plain text
     console.log("📄 Detected plain text in QR code, extracting info...");
     const rawContactData = parsePlainText(trimmedText);
-    const entryCode = rawContactData.uniqueCode || '';
+    const entryCode = rawContactData.uniqueCode || "";
     const contactData = normalizeContactData(rawContactData);
 
     // Calculate confidence
