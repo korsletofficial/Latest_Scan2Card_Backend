@@ -1,5 +1,3 @@
-import axios from "axios";
-import * as cheerio from "cheerio";
 import VCard from "vcard-parser";
 import puppeteerCore from "puppeteer-core";
 import puppeteer from "puppeteer";
@@ -7,8 +5,8 @@ import chromium from "@sparticuz/chromium";
 // Uncomment and configure if you want LLM fallback
 // import OpenAI from "openai";
 
-// Always use production mode (serverless Chromium) for all environments
-const isProduction = true;
+// Detect environment - use serverless Chromium for production (AWS App Runner, Lambda, etc.)
+const isProduction =true;
 
 // Interface for extracted contact data
 export interface QRContactData {
@@ -36,7 +34,7 @@ export interface QRContactData {
  * Normalizes contact data to ensure all required fields are present with empty strings
  */
 const normalizeContactData = (data: QRContactData): QRContactData => {
-  return {
+  const normalized = {
     firstName: data.firstName || '',
     lastName: data.lastName || '',
     company: data.company || '',
@@ -47,9 +45,15 @@ const normalizeContactData = (data: QRContactData): QRContactData => {
     address: data.address || '',
     city: data.city || '',
     country: data.country || '',
-    notes: data.notes || '',
-    ...data, // Preserve other fields like uniqueCode, title, department, etc.
+    ...data, // Preserve other fields like title, department, etc.
   };
+
+  // Remove notes and uniqueCode from the response
+  // (uniqueCode is already passed separately as entryCode)
+  delete normalized.notes;
+  delete normalized.uniqueCode;
+
+  return normalized;
 };
 
 // Interface for QR processing result
@@ -394,103 +398,11 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
   // Retry logic with exponential backoff
   for (let attempt = 0; attempt < retryAttempts; attempt++) {
     try {
-      const response = await axios.get(url, {
-        timeout: 15000,
-        maxRedirects: 10,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-      });
+      console.log(`🔍 Attempt ${attempt + 1}/${retryAttempts} - Scraping: ${url}`);
 
-      // Try JSON first
-      if (typeof response.data === "object") {
-        const contactData: QRContactData = {};
-        for (const [key, value] of Object.entries(response.data)) {
-          const mapped = fieldMap[key.toLowerCase()];
-          if (mapped && value) contactData[mapped] = String(value);
-        }
-        // Always store website
-        contactData.website = url;
-        return contactData;
-      }
-
-      // Otherwise, treat as HTML
-      const $ = cheerio.load(response.data);
-      const contactData: QRContactData = {};
-
-      // ...existing Cheerio extraction code...
-
-      // Parse JSON-LD structured data first
-      $('script[type="application/ld+json"]').each((_, elem) => {
-        try {
-          const htmlContent = $(elem).html();
-          if (!htmlContent) return;
-          const jsonData = JSON.parse(htmlContent);
-          if (jsonData && typeof jsonData === 'object') {
-            // Handle both single objects and arrays
-            const entities = Array.isArray(jsonData) ? jsonData : [jsonData];
-
-            for (const entity of entities) {
-              if (entity['@type'] === 'Person' || entity.type === 'Person') {
-                if (entity.name && !contactData.firstName) {
-                  const nameParts = entity.name.split(' ');
-                  if (nameParts.length >= 2) {
-                    contactData.firstName = nameParts[0];
-                    contactData.lastName = nameParts.slice(1).join(' ');
-                  } else {
-                    contactData.firstName = entity.name;
-                  }
-                }
-                if (entity.givenName) contactData.firstName = entity.givenName;
-                if (entity.familyName) contactData.lastName = entity.familyName;
-                if (entity.jobTitle) contactData.position = entity.jobTitle;
-                if (entity.organization?.name) contactData.company = entity.organization.name;
-                if (entity.email) contactData.email = entity.email;
-                if (entity.telephone) contactData.phoneNumber = entity.telephone;
-                if (entity.address) {
-                  if (entity.address.streetAddress) contactData.address = entity.address.streetAddress;
-                  if (entity.address.addressLocality) contactData.city = entity.address.addressLocality;
-                  if (entity.address.addressCountry) contactData.country = entity.address.addressCountry;
-                  if (entity.address.postalCode) contactData.zipCode = entity.address.postalCode;
-                }
-              }
-            }
-          }
-        } catch (e) {
-          // Ignore JSON parsing errors
-        }
-      });
-
-      // Helper to try selectors and map to schema
-      const trySelectors = (selectors: string[], field: keyof QRContactData, maxLen = 200) => {
-        for (const selector of selectors) {
-          const val = $(selector).attr("content") || $(selector).text().trim();
-          if (val && val.length < maxLen) {
-            contactData[field] = val;
-            break;
-          }
-        }
-      };
-
-      // ...existing selector tries...
-
-      // Always store the URL as website
-      contactData.website = url;
-
-      // ...existing fallback and validation code...
-
-      // If we have at least a name, email, or phone, return
-      if (
-        (contactData.firstName && isValidName(contactData.firstName)) ||
-        (contactData.email && contactData.email.length > 3) ||
-        (contactData.phoneNumber && contactData.phoneNumber.length > 5)
-      ) {
-        return contactData;
-      }
-
-      // If Cheerio failed, try Puppeteer as fallback for dynamic content
-      console.log("🌐 Cheerio extraction failed or incomplete, trying Puppeteer for:", url);
+      // Skip axios/cheerio and go straight to Puppeteer for dynamic content
+      // This ensures we can extract data from JavaScript-rendered pages
+      console.log("🌐 Using Puppeteer for dynamic content extraction");
 
       // Use different Puppeteer config based on environment
       let browser;
@@ -498,7 +410,7 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
         // Production: Use puppeteer-core with serverless chromium
         console.log("🔧 Using serverless Chromium for production");
         browser = await puppeteerCore.launch({
-          args: chromium.args,
+          args: [...chromium.args, '--disable-web-security', '--disable-features=IsolateOrigins,site-per-process'],
           defaultViewport: { width: 1920, height: 1080 },
           executablePath: await chromium.executablePath(),
           headless: true,
@@ -508,77 +420,283 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
         console.log("🔧 Using local Puppeteer for development");
         browser = await puppeteer.launch({
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security'],
         });
       }
 
       const page = await browser.newPage();
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
-      // Wait for dynamic content to load
-      await new Promise(r => setTimeout(r, 3000));
-      // Extract visible text from main card area
-      const textContent = await page.evaluate(() => {
-        const selectors = [
-          '.vcard', '.card', '.profile', '.container', '.main', '.business-card', 'body'
-        ];
-        let card = null;
-        for (const sel of selectors) {
-          // @ts-ignore
-          card = document.querySelector(sel);
-          // @ts-ignore
-          if (card && card.innerText.trim().length > 0) break;
-        }
-        // @ts-ignore
-        return card ? card.innerText : document.body.innerText;
+
+      // Set user agent to avoid bot detection
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+      console.log(`📄 Navigating to ${url}...`);
+      await page.goto(url, {
+        waitUntil: 'networkidle0',
+        timeout: 30000
       });
+
+      // Wait for dynamic content to load
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      console.log("📊 Extracting data from rendered page...");
+
+      // Extract all data from the page
+      // @ts-ignore - This code runs in browser context, not Node.js
+      const extractedData = await page.evaluate(() => {
+        // Helper function to extract text from selectors
+        const getText = (selectors: string[]): string => {
+          for (const selector of selectors) {
+            // @ts-ignore
+            const elements = document.querySelectorAll(selector);
+            for (const el of elements) {
+              const text = el.textContent?.trim();
+              if (text && text.length > 0) return text;
+            }
+          }
+          return '';
+        };
+
+        // Helper to get meta content
+        const getMeta = (names: string[]): string => {
+          for (const name of names) {
+            // @ts-ignore
+            const meta = document.querySelector(`meta[name="${name}"], meta[property="${name}"]`);
+            if (meta) {
+              const content = meta.getAttribute('content');
+              if (content) return content.trim();
+            }
+          }
+          return '';
+        };
+
+        // Extract data using various selectors and patterns
+        const data: any = {};
+
+        // Get all visible text for fallback parsing
+        // @ts-ignore
+        data.fullText = document.body.innerText;
+
+        // Try structured data (JSON-LD)
+        // @ts-ignore
+        const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+        for (const script of jsonLdScripts) {
+          try {
+            const jsonData = JSON.parse(script.textContent || '');
+            if (jsonData['@type'] === 'Person') {
+              data.jsonLd = jsonData;
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+
+        // Extract from meta tags
+        data.metaTitle = getMeta(['title', 'og:title', 'twitter:title']);
+        data.metaDescription = getMeta(['description', 'og:description', 'twitter:description']);
+
+        // Extract from common selectors
+        data.name = getText([
+          '[itemprop="name"]',
+          '.name', '.full-name', '.person-name',
+          'h1.name', 'h2.name', 'h1', 'h2'
+        ]);
+
+        data.email = getText([
+          '[itemprop="email"]',
+          'a[href^="mailto:"]',
+          '.email', '.e-mail',
+          '[data-email]'
+        ]);
+
+        // Extract email from href if present
+        // @ts-ignore
+        const emailLink = document.querySelector('a[href^="mailto:"]');
+        if (emailLink && !data.email) {
+          const href = emailLink.getAttribute('href');
+          if (href) {
+            data.email = href.replace('mailto:', '').split('?')[0];
+          }
+        }
+
+        data.phone = getText([
+          '[itemprop="telephone"]',
+          'a[href^="tel:"]',
+          '.phone', '.tel', '.telephone', '.mobile',
+          '[data-phone]'
+        ]);
+
+        // Extract phone from href if present
+        // @ts-ignore
+        const phoneLink = document.querySelector('a[href^="tel:"]');
+        if (phoneLink && !data.phone) {
+          const href = phoneLink.getAttribute('href');
+          if (href) {
+            data.phone = href.replace('tel:', '').trim();
+          }
+        }
+
+        data.company = getText([
+          '[itemprop="worksFor"]',
+          '[itemprop="organization"]',
+          '.company', '.organization', '.org'
+        ]);
+
+        data.position = getText([
+          '[itemprop="jobTitle"]',
+          '.title', '.job-title', '.position', '.role'
+        ]);
+
+        data.address = getText([
+          '[itemprop="address"]',
+          '[itemprop="streetAddress"]',
+          '.address', '.street-address'
+        ]);
+
+        data.city = getText([
+          '[itemprop="addressLocality"]',
+          '.city', '.locality'
+        ]);
+
+        data.country = getText([
+          '[itemprop="addressCountry"]',
+          '.country'
+        ]);
+
+        return data;
+      });
+
       await browser.close();
 
-      // Try to extract fields from the visible text
-      const fallbackData: QRContactData = {};
-      // Extract email
-      fallbackData.email = extractEmail(textContent);
-      // Extract phone
-      fallbackData.phoneNumber = extractPhone(textContent);
-      // Try to extract name from first line
-      const lines = textContent.split("\n").filter((line: string) => line.trim());
-      if (lines.length > 0) {
-        const firstLine = lines[0].trim();
-        if (
-          firstLine.length < 50 &&
-          !firstLine.includes("@") &&
-          !firstLine.match(/\d{3}/)
-        ) {
-          const nameParts = firstLine.split(" ");
-          if (nameParts.length >= 2) {
-            fallbackData.firstName = nameParts[0];
-            fallbackData.lastName = nameParts.slice(1).join(" ");
-          } else {
-            fallbackData.firstName = firstLine;
+      console.log("✅ Data extraction complete, processing...");
+      console.log("📦 Extracted data:", JSON.stringify(extractedData, null, 2));
+
+      // Process the extracted data
+      const contactData: QRContactData = { website: url };
+
+      // Process JSON-LD if available
+      if (extractedData.jsonLd) {
+        const jld = extractedData.jsonLd;
+        if (jld.name) {
+          const nameParts = jld.name.split(' ');
+          contactData.firstName = nameParts[0];
+          if (nameParts.length > 1) {
+            contactData.lastName = nameParts.slice(1).join(' ');
+          }
+        }
+        if (jld.givenName) contactData.firstName = jld.givenName;
+        if (jld.familyName) contactData.lastName = jld.familyName;
+        if (jld.email) contactData.email = jld.email;
+        if (jld.telephone) contactData.phoneNumber = jld.telephone;
+        if (jld.jobTitle) contactData.position = jld.jobTitle;
+        if (jld.worksFor?.name) contactData.company = jld.worksFor.name;
+      }
+
+      // Process extracted fields
+      if (extractedData.name && !contactData.firstName) {
+        const nameParts = extractedData.name.split(' ');
+        contactData.firstName = nameParts[0];
+        if (nameParts.length > 1) {
+          contactData.lastName = nameParts.slice(1).join(' ');
+        }
+      }
+
+      if (extractedData.email) {
+        contactData.email = extractEmail(extractedData.email) || extractedData.email;
+      }
+
+      if (extractedData.phone) {
+        contactData.phoneNumber = extractPhone(extractedData.phone) || extractedData.phone;
+      }
+
+      if (extractedData.company) {
+        contactData.company = extractedData.company;
+      }
+
+      if (extractedData.position) {
+        contactData.position = extractedData.position;
+      }
+
+      if (extractedData.address) {
+        contactData.address = extractedData.address;
+      }
+
+      if (extractedData.city) {
+        contactData.city = extractedData.city;
+      }
+
+      if (extractedData.country) {
+        contactData.country = extractedData.country;
+      }
+
+      // Fallback: Parse from full text if we don't have enough data
+      if (!contactData.email && !contactData.phoneNumber && extractedData.fullText) {
+        console.log("🔄 Applying fallback text extraction...");
+        const lines = extractedData.fullText.split("\n").filter((line: string) => line.trim());
+
+        // Extract email from text
+        contactData.email = extractEmail(extractedData.fullText);
+
+        // Extract phone from text
+        contactData.phoneNumber = extractPhone(extractedData.fullText);
+
+        // Try to extract name from first meaningful line
+        if (!contactData.firstName && lines.length > 0) {
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (
+              trimmedLine.length >= 3 &&
+              trimmedLine.length < 50 &&
+              !trimmedLine.includes("@") &&
+              !trimmedLine.match(/\d{3}/) &&
+              isValidName(trimmedLine)
+            ) {
+              const nameParts = trimmedLine.split(" ");
+              if (nameParts.length >= 2) {
+                contactData.firstName = nameParts[0];
+                contactData.lastName = nameParts.slice(1).join(" ");
+              } else {
+                contactData.firstName = trimmedLine;
+              }
+              break;
+            }
+          }
+        }
+
+        // Try to extract company
+        if (!contactData.company && lines.length > 1) {
+          for (let i = 1; i < Math.min(lines.length, 5); i++) {
+            const line = lines[i].trim();
+            if (line.length > 2 && line.length < 100 && isValidCompany(line)) {
+              contactData.company = line;
+              break;
+            }
+          }
+        }
+
+        // Try to extract position
+        if (!contactData.position && lines.length > 1) {
+          for (let i = 1; i < Math.min(lines.length, 5); i++) {
+            const line = lines[i].trim();
+            if (line.length > 2 && line.length < 100 && isValidPosition(line)) {
+              contactData.position = line;
+              break;
+            }
           }
         }
       }
-      // Try to extract company from second or third line
-      if (lines.length > 1) {
-        const possibleCompany = lines[1].trim();
-        if (isValidCompany(possibleCompany)) {
-          fallbackData.company = possibleCompany;
-        }
-      }
-      // Try to extract position from third or fourth line
-      if (lines.length > 2) {
-        const possiblePosition = lines[2].trim();
-        if (isValidPosition(possiblePosition)) {
-          fallbackData.position = possiblePosition;
-        }
-      }
-      fallbackData.website = url;
-      return fallbackData;
+
+      console.log("✨ Final contact data:", JSON.stringify(contactData, null, 2));
+      return contactData;
+
     } catch (error: any) {
       lastError = error instanceof Error ? error : new Error('Unknown error');
+      console.error(`❌ Error on attempt ${attempt + 1}:`, error.message);
+      console.error(`Stack trace:`, error.stack);
+
       // If this isn't the last attempt, wait with exponential backoff
       if (attempt < retryAttempts - 1) {
         const delayMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
-        console.log(`⏳ Retry attempt ${attempt + 1}/${retryAttempts} after ${delayMs}ms...`);
+        console.log(`⏳ Retry attempt ${attempt + 2}/${retryAttempts} after ${delayMs}ms...`);
         await delay(delayMs);
       }
     }
@@ -586,6 +704,7 @@ const scrapeWebpage = async (url: string, retryAttempts: number = 3): Promise<QR
 
   // All retries failed
   console.error("❌ Error scraping webpage after", retryAttempts, "attempts:", lastError?.message);
+  console.error("Full error:", lastError);
   // Return at least the URL
   return { website: url };
 };
@@ -761,7 +880,9 @@ export const processQRCode = async (
     // Check if it's a mailto: link
     if (trimmedText.toLowerCase().startsWith('mailto:')) {
       console.log("📧 Detected mailto link in QR code");
-      const contactData = normalizeContactData(parseMailtoLink(trimmedText));
+      const rawContactData = parseMailtoLink(trimmedText);
+      const entryCode = rawContactData.uniqueCode || '';
+      const contactData = normalizeContactData(rawContactData);
       const rating = calculateRating(contactData);
 
       return {
@@ -769,7 +890,7 @@ export const processQRCode = async (
         type: "mailto",
         data: {
           details: contactData,
-          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
+          entryCode,
           rawData: trimmedText,
           confidence: contactData.email ? 1.0 : 0.5,
           rating,
@@ -780,7 +901,9 @@ export const processQRCode = async (
     // Check if it's a tel: link
     if (trimmedText.toLowerCase().startsWith('tel:')) {
       console.log("📞 Detected tel link in QR code");
-      const contactData = normalizeContactData(parseTelLink(trimmedText));
+      const rawContactData = parseTelLink(trimmedText);
+      const entryCode = rawContactData.uniqueCode || '';
+      const contactData = normalizeContactData(rawContactData);
       const rating = calculateRating(contactData);
 
       return {
@@ -788,7 +911,7 @@ export const processQRCode = async (
         type: "tel",
         data: {
           details: contactData,
-          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
+          entryCode,
           rawData: trimmedText,
           confidence: contactData.phoneNumber ? 1.0 : 0.5,
           rating,
@@ -799,7 +922,9 @@ export const processQRCode = async (
     // Check if it's a URL
     if (isURL(trimmedText)) {
       console.log("🌐 Detected URL in QR code, scraping webpage...");
-      const contactData = normalizeContactData(await scrapeWebpage(trimmedText));
+      const rawContactData = await scrapeWebpage(trimmedText);
+      const entryCode = rawContactData.uniqueCode || '';
+      const contactData = normalizeContactData(rawContactData);
 
       // Optionally: Use LLM to fill missing fields (uncomment and configure)
       /*
@@ -832,7 +957,7 @@ export const processQRCode = async (
         type: "url",
         data: {
           details: contactData,
-          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
+          entryCode,
           rawData: trimmedText,
           confidence: parseFloat(confidence.toFixed(2)),
           rating,
@@ -843,7 +968,9 @@ export const processQRCode = async (
     // Check if it's a vCard
     if (isVCard(trimmedText)) {
       console.log("📇 Detected vCard in QR code, parsing...");
-      const contactData = normalizeContactData(parseVCard(trimmedText));
+      const rawContactData = parseVCard(trimmedText);
+      const entryCode = rawContactData.uniqueCode || '';
+      const contactData = normalizeContactData(rawContactData);
 
       // Calculate confidence based on fields found
       const fieldCount = Object.values(contactData).filter(
@@ -857,7 +984,7 @@ export const processQRCode = async (
         type: "vcard",
         data: {
           details: contactData,
-          entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
+          entryCode,
           rawData: trimmedText,
           confidence: parseFloat(confidence.toFixed(2)),
           rating,
@@ -867,7 +994,9 @@ export const processQRCode = async (
 
     // Treat as plain text
     console.log("📄 Detected plain text in QR code, extracting info...");
-    const contactData = normalizeContactData(parsePlainText(trimmedText));
+    const rawContactData = parsePlainText(trimmedText);
+    const entryCode = rawContactData.uniqueCode || '';
+    const contactData = normalizeContactData(rawContactData);
 
     // Calculate confidence
     const fieldCount = Object.values(contactData).filter(
@@ -881,7 +1010,7 @@ export const processQRCode = async (
       type: "plaintext",
       data: {
         details: contactData,
-        entryCode: contactData.uniqueCode || '', // Include uniqueCode as entryCode for consistency
+        entryCode,
         rawData: trimmedText,
         confidence: parseFloat(confidence.toFixed(2)),
         rating,
