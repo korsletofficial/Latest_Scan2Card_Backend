@@ -22,6 +22,8 @@ export interface IUser extends Document {
   isActive: boolean;
   isDeleted: boolean;
   fcmTokens?: string[]; // Firebase Cloud Messaging tokens for push notifications
+  refreshToken?: string; // Refresh token for session renewal
+  refreshTokenExpiry?: Date; // Expiry date for refresh token
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -48,6 +50,8 @@ const UserSchema = new Schema<IUser>(
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
     fcmTokens: { type: [String], default: [] }, // Firebase Cloud Messaging tokens
+    refreshToken: { type: String, select: false }, // Refresh token (not returned by default)
+    refreshTokenExpiry: { type: Date, select: false }, // Refresh token expiry
   },
   {
     timestamps: true,

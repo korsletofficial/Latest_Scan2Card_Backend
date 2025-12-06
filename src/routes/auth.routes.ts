@@ -8,7 +8,8 @@ import {
   verifyUserOTP,
   forgotPassword,
   resetPasswordWithOTP,
-  changePassword
+  changePassword,
+  refreshToken
 } from "../controllers/auth.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import {
@@ -34,6 +35,9 @@ router.post("/register", registerEmailLimiter, registerIPLimiter, register);
 
 // Login: Track failed attempts by email (10/15min) + IP catch-all (1000/15min)
 router.post("/login", loginEmailLimiter, loginIPLimiter, login);
+
+// Refresh Token: Public route (no auth required) - Track by IP (100/15min)
+router.post("/refresh-token", loginIPLimiter, refreshToken);
 
 // Verify OTP: Track by email (10/15min) + IP catch-all (500/hour)
 router.post("/verify-otp", otpVerifyResourceLimiter, otpVerifyIPLimiter, verifyLoginOTP);

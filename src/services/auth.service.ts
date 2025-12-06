@@ -137,18 +137,49 @@ export const loginUser = async (data: LoginData) => {
     throw error;
   }
 
-  // Generate JWT token
+  // Generate JWT tokens (access + refresh)
+  const jwtSecret = process.env.JWT_SECRET || "scan2card_secret";
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || "scan2card_refresh_secret";
+
+  // Access token (short-lived: 1 hour default, backward compatible as 'token')
   const token = jwt.sign(
     {
       userId: user._id.toString(),
       email: user.email,
       role: (user.role as any).name,
     },
-    process.env.JWT_SECRET || "scan2card_secret"
+    jwtSecret,
+    {
+      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h') as any,
+    }
   );
 
+  // Refresh token (long-lived: 7 days default)
+  const refreshToken = jwt.sign(
+    {
+      userId: user._id.toString(),
+      type: 'refresh',
+    },
+    refreshSecret,
+    {
+      expiresIn: (process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || '7d') as any,
+    }
+  );
+
+  // Calculate refresh token expiry date
+  const refreshTokenExpiry = new Date();
+  const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace('d', '') || '7');
+  refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + expiryDays);
+
+  // Store refresh token in database
+  user.refreshToken = refreshToken;
+  user.refreshTokenExpiry = refreshTokenExpiry;
+  await user.save();
+
   return {
-    token,
+    token, // Access token (backward compatible key name)
+    refreshToken, // NEW: Refresh token for session renewal
+    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h', // NEW: Token expiry time
     user: {
       _id: user._id,
       firstName: user.firstName,
@@ -356,5 +387,79 @@ export const send2FALoginOTP = async (userId: string) => {
   return {
     requires2FA: true,
     ...result,
+  };
+};
+
+// Refresh Access Token using Refresh Token
+export const refreshAccessToken = async (refreshToken: string) => {
+  await connectToMongooseDatabase();
+
+  if (!refreshToken) {
+    throw new Error("Refresh token is required");
+  }
+
+  // Verify refresh token
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || "scan2card_refresh_secret";
+  let decoded: any;
+
+  try {
+    decoded = jwt.verify(refreshToken, refreshSecret);
+  } catch (error) {
+    throw new Error("Invalid or expired refresh token");
+  }
+
+  // Check if it's a refresh token
+  if (decoded.type !== 'refresh') {
+    throw new Error("Invalid token type");
+  }
+
+  // Find user with this refresh token
+  const user = await UserModel.findOne({
+    _id: decoded.userId,
+    refreshToken: refreshToken,
+    isDeleted: false,
+    isActive: true,
+  })
+    .select('+refreshToken +refreshTokenExpiry')
+    .populate('role');
+
+  if (!user) {
+    throw new Error("Invalid refresh token or user not found");
+  }
+
+  // Check if refresh token has expired
+  if (user.refreshTokenExpiry && user.refreshTokenExpiry < new Date()) {
+    throw new Error("Refresh token has expired. Please login again.");
+  }
+
+  // Generate new access token
+  const jwtSecret = process.env.JWT_SECRET || "scan2card_secret";
+  const newAccessToken = jwt.sign(
+    {
+      userId: user._id.toString(),
+      email: user.email,
+      role: (user.role as any).name,
+    },
+    jwtSecret,
+    {
+      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h') as any,
+    }
+  );
+
+  return {
+    token: newAccessToken, // New access token (backward compatible key name)
+    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h',
+    user: {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      role: (user.role as any).name,
+      companyName: user.companyName,
+      twoFactorEnabled: user.twoFactorEnabled,
+      isVerified: user.isVerified,
+      profileImage: user.profileImage || null,
+    },
   };
 };

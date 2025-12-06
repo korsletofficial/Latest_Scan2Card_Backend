@@ -66,6 +66,28 @@
 					}
 				},
 				{
+					"name": "Refresh Access Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"YOUR_REFRESH_TOKEN_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/refresh-token",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "refresh-token"]
+						},
+						"description": "Refresh access token using refresh token to prevent user logout.\n\n**Authentication Required:** None (Public endpoint)\n\n**Purpose:**\nPrevents users from getting logged out when their access token expires during active usage. The frontend should call this endpoint automatically before the access token expires.\n\n**Request Body:**\n- `refreshToken` (required, string): The refresh token received during login\n\n**How It Works:**\n1. Login returns both `token` (access token, 15min) and `refreshToken` (7 days)\n2. Frontend uses access token for all API requests\n3. Before access token expires, frontend calls this endpoint with refresh token\n4. Backend validates refresh token and issues new access token\n5. User stays logged in without re-entering credentials\n\n**Token Lifetimes:**\n- Access Token: 15 minutes (configurable via JWT_ACCESS_TOKEN_EXPIRES_IN)\n- Refresh Token: 7 days (configurable via JWT_REFRESH_TOKEN_EXPIRES_IN)\n\n**Response:**\n- Success: Returns new access token with same user data\n  ```json\n  {\n    \"success\": true,\n    \"message\": \"Access token refreshed successfully\",\n    \"data\": {\n      \"token\": \"new_access_token_here\",\n      \"expiresIn\": \"15m\",\n      \"user\": { ... }\n    }\n  }\n  ```\n- Error 400: Invalid refresh token format\n- Error 401: Refresh token expired (user must login again)\n\n**Frontend Implementation:**\nStore both tokens after login:\n```javascript\nconst { token, refreshToken } = response.data;\nlocalStorage.setItem('accessToken', token);\nlocalStorage.setItem('refreshToken', refreshToken);\n```\n\nSet up automatic token refresh:\n```javascript\n// Refresh 1 minute before expiry (14 min for 15min token)\nsetTimeout(() => {\n  refreshAccessToken();\n}, 14 * 60 * 1000);\n```\n\n**Security Notes:**\n- Refresh tokens are stored in database (can be revoked)\n- Each refresh token can only be used by the user who owns it\n- Refresh tokens expire after 7 days of inactivity\n- If refresh token expires, user must login again\n\n**Rate Limiting:** 1000 requests per 15 minutes per IP (loginIPLimiter)"
+					}
+				},
+				{
 					"name": "Verify OTP",
 					"request": {
 						"method": "POST",
@@ -1222,6 +1244,85 @@
 							]
 						},
 						"description": "Update lead information"
+					}
+				},
+				{
+					"name": "Export Leads (Full Data)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads/export?eventId=all&search=&rating=",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", "export"],
+							"query": [
+								{
+									"key": "eventId",
+									"value": "all",
+									"description": "Filter by event ID or 'all' for all events"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search filter (optional)",
+									"disabled": true
+								},
+								{
+									"key": "rating",
+									"value": "",
+									"description": "Filter by rating 1-5 (optional)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Export leads to CSV with full data (15 columns).\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports all leads scanned by the authenticated user\n- **EXHIBITOR**: Exports all leads from events owned by the exhibitor\n\n**Query Parameters:**\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter for name, company, email, or phone\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 15 columns:\n1. Entry Code\n2. First Name\n3. Last Name\n4. Company\n5. Position\n6. Email\n7. Phone Number\n8. Website\n9. City\n10. Country\n11. Notes\n12. Event\n13. Lead Type\n14. Rating\n15. Created Date\n\n**Response:**\n- Content-Type: text/csv\n- File download with name: leads-export-YYYY-MM-DD.csv\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Export all leads for CRM import\n- Download leads for offline analysis\n- Backup lead data\n- Share leads with team members"
+					}
+				},
+				{
+					"name": "Export Entry Codes Only",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/leads/export?type=entryOnly&eventId=all",
+							"host": ["{{baseUrl}}"],
+							"path": ["leads", "export"],
+							"query": [
+								{
+									"key": "type",
+									"value": "entryOnly",
+									"description": "Export type: 'entryOnly' for entry codes only"
+								},
+								{
+									"key": "eventId",
+									"value": "all",
+									"description": "Filter by event ID or 'all' for all events"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search filter (optional)",
+									"disabled": true
+								},
+								{
+									"key": "rating",
+									"value": "",
+									"description": "Filter by rating 1-5 (optional)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Export only entry codes to CSV (1 column).\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports entry codes of leads scanned by the authenticated user\n- **EXHIBITOR**: Exports entry codes from leads in events owned by the exhibitor\n\n**Important:** Only leads with entry codes will be included in the export. Leads without entry codes are filtered out automatically.\n\n**Query Parameters:**\n- `type` (required): Must be 'entryOnly' for entry code export\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 1 column:\n1. Entry Code\n\n**Example CSV Output:**\n```\nEntry Code\nABC123XYZ456\nDEF789GHI012\nJKL345MNO678\n```\n\n**Response:**\n- Content-Type: text/csv\n- File download with name: entry-codes-YYYY-MM-DD.csv\n- Only includes leads that have non-empty entry codes\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Quick export of entry codes for lookup systems\n- Minimal data export for privacy-sensitive scenarios\n- Integration with entry code validation systems\n- Bulk entry code verification"
 					}
 				},
 				{

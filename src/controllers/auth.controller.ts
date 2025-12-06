@@ -323,3 +323,34 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+// Refresh Access Token
+export const refreshToken = async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Refresh token is required",
+      });
+    }
+
+    const result = await authService.refreshAccessToken(refreshToken);
+
+    res.status(200).json({
+      success: true,
+      message: "Access token refreshed successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Refresh token error:", error);
+
+    const statusCode = error.message.includes("expired") ? 401 : 400;
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || "Token refresh failed",
+    });
+  }
+};
