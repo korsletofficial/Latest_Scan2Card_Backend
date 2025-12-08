@@ -150,7 +150,7 @@ export const loginUser = async (data: LoginData) => {
     },
     jwtSecret,
     {
-      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h') as any,
+      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h') as any,
     }
   );
 
@@ -179,7 +179,7 @@ export const loginUser = async (data: LoginData) => {
   return {
     token, // Access token (backward compatible key name)
     refreshToken, // NEW: Refresh token for session renewal
-    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h', // NEW: Token expiry time
+    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h', // NEW: Token expiry time
     user: {
       _id: user._id,
       firstName: user.firstName,
@@ -442,13 +442,13 @@ export const refreshAccessToken = async (refreshToken: string) => {
     },
     jwtSecret,
     {
-      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h') as any,
+      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h') as any,
     }
   );
 
   return {
     token: newAccessToken, // New access token (backward compatible key name)
-    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h',
+    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h',
     user: {
       _id: user._id,
       firstName: user.firstName,
