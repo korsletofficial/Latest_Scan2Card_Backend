@@ -158,6 +158,8 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     query.rating = parseInt(rating);
   }
 
+  
+
   // Time-based filtering
   if (period) {
     const dateRanges = getDateRangesByPeriod(period, timeZone);
