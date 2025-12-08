@@ -194,11 +194,16 @@ export const getDashboardStats = async (teamManagerId: string) => {
   // Total license keys assigned
   const totalLicenseKeys = licenseKeys.length;
 
+  // Sort license keys by expiresAt (most recent first) and get only the latest 5
+  const sortedKeys = licenseKeys
+    .sort((a, b) => new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime())
+    .slice(0, 5);
+
   return {
     totalMembers,
     totalLeads,
     totalLicenseKeys,
-    licenseKeys: licenseKeys.map((key) => ({
+    licenseKeys: sortedKeys.map((key) => ({
       key: key.key,
       email: key.email,
       stallName: key.stallName,
@@ -454,4 +459,73 @@ export const getMyEvents = async (teamManagerId: string) => {
   });
 
   return formattedEvents;
+};
+
+// Get all license keys for team manager with pagination
+export const getAllLicenseKeys = async (
+  teamManagerId: string,
+  page: number = 1,
+  limit: number = 10,
+  search: string = ""
+) => {
+  // Find license keys assigned to this team manager
+  const events = await EventModel.find({
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  })
+    .populate("exhibitorId", "firstName lastName companyName")
+    .select("eventName licenseKeys")
+    .sort({ startDate: -1 });
+
+  // Extract and format all license keys with event info
+  let allKeys: any[] = [];
+  events.forEach((event) => {
+    const myLicenseKeys = event.licenseKeys.filter(
+      (key) => key.teamManagerId?.toString() === teamManagerId
+    );
+
+    myLicenseKeys.forEach((key) => {
+      allKeys.push({
+        key: key.key,
+        email: key.email,
+        stallName: key.stallName,
+        expiresAt: key.expiresAt,
+        usedCount: key.usedCount,
+        maxActivations: key.maxActivations,
+        eventId: event._id,
+        eventName: event.eventName,
+      });
+    });
+  });
+
+  // Apply search filter
+  if (search) {
+    const searchLower = search.toLowerCase();
+    allKeys = allKeys.filter(
+      (key) =>
+        key.key.toLowerCase().includes(searchLower) ||
+        key.email.toLowerCase().includes(searchLower) ||
+        key.stallName?.toLowerCase().includes(searchLower) ||
+        key.eventName.toLowerCase().includes(searchLower)
+    );
+  }
+
+  // Sort by expiresAt (most recent first)
+  allKeys.sort((a, b) => new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime());
+
+  // Pagination
+  const total = allKeys.length;
+  const startIndex = (page - 1) * limit;
+  const endIndex = startIndex + limit;
+  const paginatedKeys = allKeys.slice(startIndex, endIndex);
+
+  return {
+    licenseKeys: paginatedKeys,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit,
+    },
+  };
 };

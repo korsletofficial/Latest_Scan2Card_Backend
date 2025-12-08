@@ -9,6 +9,7 @@ import {
   getMyEvents,
   getMemberLeads,
   getAllLeadsForManager,
+  getAllLicenseKeys,
 } from "../controllers/teamManager.controller";
 import {
   adminDashboardLimiter,
@@ -28,5 +29,6 @@ router.get("/team/members", authenticateToken, authorizeRoles("TEAMMANAGER"), ad
 router.get("/team/member/:memberId/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMemberLeads);
 router.get("/events", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMyEvents);
 router.get("/meetings/team", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getTeamMeetings);
+router.get("/license-keys", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLicenseKeys);
 
 export default router;

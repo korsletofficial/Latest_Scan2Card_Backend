@@ -185,3 +185,29 @@ export const getMyEvents = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+// Get all license keys for team manager
+export const getAllLicenseKeys = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const result = await teamManagerService.getAllLicenseKeys(
+      teamManagerId!,
+      Number(page),
+      Number(limit),
+      search as string
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get all license keys error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get license keys",
+    });
+  }
+};
