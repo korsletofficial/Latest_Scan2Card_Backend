@@ -237,13 +237,15 @@ export const getLeadsGraph = async (
   let groupByFormat: any;
   let dateArray: any[] = [];
 
+  const dateField = "$createdAt"; // Use created timestamp since leads don't persist scannedAt yet
+
   if (period === "hourly") {
     // Group by hour for single day or short events
     groupByFormat = {
-      year: { $year: "$scannedAt" },
-      month: { $month: "$scannedAt" },
-      day: { $dayOfMonth: "$scannedAt" },
-      hour: { $hour: "$scannedAt" },
+      year: { $year: { $toDate: dateField } },
+      month: { $month: { $toDate: dateField } },
+      day: { $dayOfMonth: { $toDate: dateField } },
+      hour: { $hour: { $toDate: dateField } },
     };
 
     // Generate hourly slots
@@ -267,9 +269,9 @@ export const getLeadsGraph = async (
   } else {
     // Group by day for longer events
     groupByFormat = {
-      year: { $year: "$scannedAt" },
-      month: { $month: "$scannedAt" },
-      day: { $dayOfMonth: "$scannedAt" },
+      year: { $year: { $toDate: dateField } },
+      month: { $month: { $toDate: dateField } },
+      day: { $dayOfMonth: { $toDate: dateField } },
     };
 
     // Generate daily slots
@@ -294,7 +296,7 @@ export const getLeadsGraph = async (
     {
       $match: {
         eventId: new mongoose.Types.ObjectId(eventId),
-        scannedAt: {
+        createdAt: {
           $gte: startDate,
           $lte: endDate,
         },
