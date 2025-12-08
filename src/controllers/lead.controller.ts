@@ -3,7 +3,7 @@ import { AuthRequest } from "../middleware/auth.middleware";
 import { scanBusinessCard } from "../services/businessCardScanner.service";
 import { processQRCode } from "../services/qrCodeProcessor.service";
 import * as leadService from "../services/lead.service";
-import { uploadFileToS3 } from '../services/awsS3.service';
+import { uploadFileToS3, uploadCSVToS3 } from '../services/awsS3.service';
 import { sanitizeEmptyStrings } from '../utils/sanitize.util';
 
 // Scan Business Card
@@ -372,7 +372,6 @@ export const scanQRCode = async (req: AuthRequest, res: Response) => {
       data: {
         details: result.data?.details,
         entryCode: result.data?.entryCode || '', // Always include entryCode for consistency
-        rating: result.data?.rating,
         rawData: result.data?.rawData,
         confidence: result.data?.confidence,
       },
@@ -473,14 +472,24 @@ export const exportLeads = async (req: AuthRequest, res: Response) => {
       filename = `leads-export-${new Date().toISOString().split("T")[0]}.csv`;
     }
 
-    // Set response headers for CSV download
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
+    // Upload CSV to S3 instead of sending raw data
+    const uploadResult = await uploadCSVToS3(csvContent, filename, {
+      folder: 'csv-exports',
+      makePublic: true,
+    });
 
-    res.send(csvContent);
+    // Return the S3 URL
+    return res.status(200).json({
+      success: true,
+      message: "Leads exported successfully",
+      data: {
+        url: uploadResult.url,
+        filename: filename,
+        key: uploadResult.key,
+        size: uploadResult.size,
+        leadsCount: filteredLeads.length,
+      },
+    });
   } catch (error: any) {
     console.error("Export error:", error);
     return res.status(500).json({

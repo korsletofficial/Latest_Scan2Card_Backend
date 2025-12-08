@@ -252,3 +252,68 @@ export const uploadStreamToS3 = async (
     throw new Error(`Failed to upload stream to S3: ${error.message}`);
   }
 };
+
+/**
+ * Upload CSV content to S3 (for exports)
+ */
+export const uploadCSVToS3 = async (
+  csvContent: string,
+  filename: string,
+  options: UploadOptions = {}
+): Promise<UploadResult> => {
+  const { folder = 'csv-exports', makePublic = true, expiresIn = 3600 } = options;
+
+  // Generate unique filename
+  const sanitizedName = sanitizeFilename(filename);
+  const ext = path.extname(sanitizedName);
+  const baseName = path.basename(sanitizedName, ext);
+  const uniqueFilename = `${baseName}-${uuidv4()}${ext}`;
+  const key = `${folder}/${uniqueFilename}`;
+
+  // Convert CSV string to buffer
+  const buffer = Buffer.from(csvContent, 'utf-8');
+
+  const uploadParams = {
+    Bucket: process.env.AWS_S3_BUCKET_NAME!,
+    Key: key,
+    Body: buffer,
+    ContentType: 'text/csv',
+    ContentDisposition: `attachment; filename="${sanitizedName}"`,
+    Metadata: {
+      'original-name': filename,
+      'uploaded-at': new Date().toISOString(),
+      'export-type': 'csv',
+    },
+  };
+
+  try {
+    const command = new PutObjectCommand(uploadParams);
+    await s3Client.send(command);
+
+    const result: UploadResult = {
+      key,
+      url: '',
+      bucket: process.env.AWS_S3_BUCKET_NAME!,
+      size: buffer.length,
+      contentType: 'text/csv',
+    };
+
+    if (makePublic) {
+      // Public URL
+      result.publicUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+      result.url = result.publicUrl;
+    } else {
+      // Generate signed URL for private files
+      const getCommand = new GetObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET_NAME!,
+        Key: key,
+      });
+      result.url = await getSignedUrl(s3Client, getCommand, { expiresIn });
+    }
+
+    return result;
+  } catch (error: any) {
+    console.error('Error uploading CSV to S3:', error);
+    throw new Error(`Failed to upload CSV to S3: ${error.message}`);
+  }
+};

@@ -1324,7 +1324,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@newemail.com\",\n  \"company\": \"Updated Company Inc\",\n  \"phoneNumber\": \"+1234567890\"\n}"
+							"raw": "{\n  \"details\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john.doe@newemail.com\",\n    \"company\": \"Updated Company Inc\",\n    \"phoneNumber\": \"+1234567890\",\n    \"position\": \"CTO\",\n    \"website\": \"https://example.com\",\n    \"address\": \"123 Main St\",\n    \"city\": \"San Francisco\",\n    \"country\": \"USA\"\n  },\n  \"rating\": 4,\n  \"isActive\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/:id",
@@ -1337,7 +1337,7 @@
 								}
 							]
 						},
-						"description": "Update lead information.\n\n**Request Body (all fields optional):**\n- `firstName`, `lastName`: Contact name\n- `company`, `position`: Company details\n- `email`, `phoneNumber`: Contact information\n- `website`, `address`, `city`, `country`: Additional details\n- `rating`: Lead quality rating (1-5)\n\n**Note:** The following fields are no longer supported:\n- `notes`: Removed from lead details\n- `fax`: Not supported\n- `zipCode`: Not supported"
+						"description": "Update lead information.\n\n**IMPORTANT: Contact fields must be nested inside `details` object!**\n\n**Request Body (all fields optional):**\n\n**Top-level fields:**\n- `eventId` (string): Event ID to associate lead with\n- `isIndependentLead` (boolean): Whether lead is independent\n- `leadType` (string): Type of lead (full_scan, entry_code, manual)\n- `entryCode` (string): Entry code\n- `rating` (number): Lead quality rating (1-5)\n- `isActive` (boolean): Whether lead is active\n- `images` (array): Array of S3 image URLs (max 3)\n\n**Contact details (nested inside `details` object):**\n- `details.firstName` (string): First name\n- `details.lastName` (string): Last name\n- `details.company` (string): Company name\n- `details.position` (string): Job position\n- `details.email` (string): Email address\n- `details.phoneNumber` (string): Phone number\n- `details.website` (string): Website URL\n- `details.address` (string): Street address\n- `details.city` (string): City\n- `details.country` (string): Country\n\n**Example - Update only phone number:**\n```json\n{\n  \"details\": {\n    \"phoneNumber\": \"+1234567890\"\n  }\n}\n```\n\n**Example - Update rating and contact info:**\n```json\n{\n  \"details\": {\n    \"email\": \"newemail@example.com\",\n    \"company\": \"New Company Inc\"\n  },\n  \"rating\": 5\n}\n```\n\n**Note:** The following fields are no longer supported:\n- `notes`: Removed from lead details\n- `fax`: Not supported\n- `zipCode`: Not supported"
 					}
 				},
 				{
@@ -1374,7 +1374,7 @@
 								}
 							]
 						},
-						"description": "Export leads to CSV with full data.\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports all leads scanned by the authenticated user\n- **EXHIBITOR**: Exports all leads from events owned by the exhibitor\n\n**Query Parameters:**\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter for name, company, email, or phone\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 13 columns:\n1. Entry Code\n2. First Name\n3. Last Name\n4. Company\n5. Position\n6. Email\n7. Phone Number\n8. Website\n9. City\n10. Country\n11. Event\n12. Lead Type\n13. Rating\n14. Created Date\n\n**Removed Columns (compared to previous versions):**\n- Notes (field removed from schema)\n- Fax (not supported)\n- ZipCode (not supported)\n\n**Response:**\n- Content-Type: text/csv\n- File download with name: leads-export-YYYY-MM-DD.csv\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Export all leads for CRM import\n- Download leads for offline analysis\n- Backup lead data\n- Share leads with team members"
+						"description": "Export leads to CSV with full data.\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports all leads scanned by the authenticated user\n- **EXHIBITOR**: Exports all leads from events owned by the exhibitor\n\n**Query Parameters:**\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter for name, company, email, or phone\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 13 columns:\n1. Entry Code\n2. First Name\n3. Last Name\n4. Company\n5. Position\n6. Email\n7. Phone Number\n8. Website\n9. City\n10. Country\n11. Event\n12. Lead Type\n13. Rating\n14. Created Date\n\n**Removed Columns (compared to previous versions):**\n- Notes (field removed from schema)\n- Fax (not supported)\n- ZipCode (not supported)\n\n**Response:** JSON with S3 URL (Changed from direct CSV download)\n```json\n{\n  \"success\": true,\n  \"message\": \"Leads exported successfully\",\n  \"data\": {\n    \"url\": \"https://bucket.s3.region.amazonaws.com/csv-exports/leads-export-2025-12-08-uuid.csv\",\n    \"filename\": \"leads-export-2025-12-08.csv\",\n    \"key\": \"csv-exports/leads-export-2025-12-08-uuid.csv\",\n    \"size\": 1234,\n    \"leadsCount\": 50\n  }\n}\n```\n\n**Frontend Implementation:**\nThe frontend should download the CSV from the provided S3 URL:\n```javascript\nconst response = await axios.get('/leads/export', { params });\nconst { url, filename } = response.data.data;\nwindow.open(url, '_blank'); // Download from S3\n```\n\n**Storage:**\n- CSV files are stored in S3 bucket under `csv-exports/` folder\n- Files are publicly accessible\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Export all leads for CRM import\n- Download leads for offline analysis\n- Backup lead data\n- Share leads with team members"
 					}
 				},
 				{
@@ -1416,7 +1416,7 @@
 								}
 							]
 						},
-						"description": "Export only entry codes to CSV (1 column).\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports entry codes of leads scanned by the authenticated user\n- **EXHIBITOR**: Exports entry codes from leads in events owned by the exhibitor\n\n**Important:** Only leads with entry codes will be included in the export. Leads without entry codes are filtered out automatically.\n\n**Query Parameters:**\n- `type` (required): Must be 'entryOnly' for entry code export\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 1 column:\n1. Entry Code\n\n**Example CSV Output:**\n```\nEntry Code\nABC123XYZ456\nDEF789GHI012\nJKL345MNO678\n```\n\n**Response:**\n- Content-Type: text/csv\n- File download with name: entry-codes-YYYY-MM-DD.csv\n- Only includes leads that have non-empty entry codes\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Quick export of entry codes for lookup systems\n- Minimal data export for privacy-sensitive scenarios\n- Integration with entry code validation systems\n- Bulk entry code verification"
+						"description": "Export only entry codes to CSV (1 column).\n\n**Authentication Required:** Bearer token\n\n**Roles:** ENDUSER or EXHIBITOR\n\n**What Data is Exported:**\n- **ENDUSER**: Exports entry codes of leads scanned by the authenticated user\n- **EXHIBITOR**: Exports entry codes from leads in events owned by the exhibitor\n\n**Important:** Only leads with entry codes will be included in the export. Leads without entry codes are filtered out automatically.\n\n**Query Parameters:**\n- `type` (required): Must be 'entryOnly' for entry code export\n- `eventId` (optional): Filter by specific event ID, or use 'all' for all events\n- `search` (optional): Search filter\n- `rating` (optional): Filter by rating (1-5)\n\n**Export Format:** CSV file with 1 column:\n1. Entry Code\n\n**Example CSV Output:**\n```\nEntry Code\nABC123XYZ456\nDEF789GHI012\nJKL345MNO678\n```\n\n**Response:** JSON with S3 URL (Changed from direct CSV download)\n```json\n{\n  \"success\": true,\n  \"message\": \"Leads exported successfully\",\n  \"data\": {\n    \"url\": \"https://bucket.s3.region.amazonaws.com/csv-exports/entry-codes-2025-12-08-uuid.csv\",\n    \"filename\": \"entry-codes-2025-12-08.csv\",\n    \"key\": \"csv-exports/entry-codes-2025-12-08-uuid.csv\",\n    \"size\": 456,\n    \"leadsCount\": 25\n  }\n}\n```\n\n**Frontend Implementation:**\nThe frontend should download the CSV from the provided S3 URL:\n```javascript\nconst response = await axios.get('/leads/export?type=entryOnly', { params });\nconst { url, filename } = response.data.data;\nwindow.open(url, '_blank'); // Download from S3\n```\n\n**Storage:**\n- CSV files are stored in S3 bucket under `csv-exports/` folder\n- Files are publicly accessible\n- Only includes leads that have non-empty entry codes\n- Maximum 1000 leads per export\n\n**Use Cases:**\n- Quick export of entry codes for lookup systems\n- Minimal data export for privacy-sensitive scenarios\n- Integration with entry code validation systems\n- Bulk entry code verification"
 					}
 				},
 				{
@@ -1782,14 +1782,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"category\": \"Bug\",\n  \"message\": \"Found an issue with the dashboard\",\n  \"priority\": \"Medium\"\n}"
+							"raw": "{\n  \"message\": \"Found an issue with the dashboard loading\",\n  \"rating\": 3,\n  \"category\": \"bug\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile/feedback",
 							"host": ["{{baseUrl}}"],
 							"path": ["profile", "feedback"]
 						},
-						"description": "Submit feedback, bug reports, or feature requests.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `category` (required, string): Feedback category\n  - Valid values: \"Bug\", \"Feature Request\", \"Improvement\", \"Question\", \"Other\"\n- `message` (required, string): Detailed feedback message\n- `priority` (optional, string): Priority level\n  - Valid values: \"Low\", \"Medium\", \"High\", \"Critical\"\n  - Default: \"Medium\"\n\n**Functionality:**\n- Feedback is linked to user account for follow-up\n- Admins can view all feedback through admin dashboard\n- Users can retrieve their own feedback history\n- Helps product team improve the application\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns created feedback object with ID and timestamp\n- Error 400: Missing required fields (category, message)\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Best Practices:**\n- Provide detailed description for bugs (steps to reproduce, expected vs actual behavior)\n- Include specific examples when suggesting improvements\n- Use appropriate priority levels"
+						"description": "Submit feedback, bug reports, or feature requests.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `message` (required, string): Detailed feedback message\n- `rating` (optional, number): Quality/satisfaction rating (1-5 stars)\n- `category` (optional, string): Feedback category (default: \"other\")\n  - Valid values: \"bug\", \"feature_request\", \"improvement\", \"other\"\n\n**Functionality:**\n- Feedback is linked to user account for follow-up\n- Admins can view all feedback through admin dashboard\n- Users can retrieve their own feedback history\n- Helps product team improve the application\n- Status is automatically set to \"pending\"\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns created feedback object with ID, status, and timestamp\n- Error 400: Missing required field (message)\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Best Practices:**\n- Provide detailed description for bugs (steps to reproduce, expected vs actual behavior)\n- Include specific examples when suggesting improvements\n- Use rating to indicate severity or satisfaction level"
 					}
 				},
 				{
@@ -1803,7 +1803,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/profile/feedback?page=1&limit=10&category=Bug&priority=High",
+							"raw": "{{baseUrl}}/profile/feedback?page=1&limit=10",
 							"host": ["{{baseUrl}}"],
 							"path": ["profile", "feedback"],
 							"query": [
@@ -1816,22 +1816,10 @@
 									"key": "limit",
 									"value": "10",
 									"description": "Number of items per page (default: 10, max: 100)"
-								},
-								{
-									"key": "category",
-									"value": "Bug",
-									"description": "Filter by category: Bug, Feature Request, Improvement, Question, Other",
-									"disabled": true
-								},
-								{
-									"key": "priority",
-									"value": "High",
-									"description": "Filter by priority: Low, Medium, High, Critical",
-									"disabled": true
 								}
 							]
 						},
-						"description": "Retrieve all feedback submitted by the authenticated user.\n\n**Authentication Required:** Bearer token\n\n**Query Parameters:**\n- `page` (optional, number): Page number for pagination (default: 1)\n- `limit` (optional, number): Items per page (default: 10, max: 100)\n- `category` (optional, string): Filter by feedback category\n  - Valid values: \"Bug\", \"Feature Request\", \"Improvement\", \"Question\", \"Other\"\n- `priority` (optional, string): Filter by priority level\n  - Valid values: \"Low\", \"Medium\", \"High\", \"Critical\"\n\n**Functionality:**\n- Returns all feedback submitted by the current user\n- Results are paginated for better performance\n- Can filter by category and priority\n- Sorted by creation date (newest first)\n\n**Rate Limiting:** 200 requests per minute per user (readLimiter)\n\n**Response:**\n- Success: Returns array of feedback objects with pagination metadata\n  - Each feedback includes: id, category, message, priority, status, createdAt, updatedAt\n  - Pagination: total, page, limit, totalPages, hasNextPage, hasPrevPage\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Use Cases:**\n- Track status of submitted bug reports\n- Review previously submitted feature requests\n- Check feedback history"
+						"description": "Retrieve all feedback submitted by the authenticated user.\n\n**Authentication Required:** Bearer token\n\n**Query Parameters:**\n- `page` (optional, number): Page number for pagination (default: 1)\n- `limit` (optional, number): Items per page (default: 10, max: 100)\n\n**Functionality:**\n- Returns all feedback submitted by the current user\n- Results are paginated for better performance\n- Sorted by creation date (newest first)\n\n**Rate Limiting:** 200 requests per minute per user (readLimiter)\n\n**Response:**\n- Success: Returns array of feedback objects with pagination metadata\n  - Each feedback includes: id, category, message, rating, status, createdAt, updatedAt\n  - Category values: \"bug\", \"feature_request\", \"improvement\", \"other\"\n  - Status values: \"pending\", \"reviewed\", \"resolved\"\n  - Rating: 1-5 stars (optional)\n  - Pagination: total, page, limit, totalPages, hasNextPage, hasPrevPage\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Use Cases:**\n- Track status of submitted bug reports\n- Review previously submitted feature requests\n- Check feedback history"
 					}
 				}
 			],
@@ -1851,7 +1839,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/feedback?page=1&limit=10&category=Bug&status=Pending",
+							"raw": "{{baseUrl}}/feedback?page=1&limit=10&category=bug&status=pending",
 							"host": ["{{baseUrl}}"],
 							"path": ["feedback"],
 							"query": [
@@ -1865,17 +1853,17 @@
 								},
 								{
 									"key": "category",
-									"value": "Bug",
-									"description": "Bug, Feature, Improvement, Other"
+									"value": "bug",
+									"description": "bug, feature_request, improvement, other"
 								},
 								{
 									"key": "status",
-									"value": "Pending",
-									"description": "Pending, InProgress, Resolved, Closed"
+									"value": "pending",
+									"description": "pending, reviewed, resolved"
 								}
 							]
 						},
-						"description": "Get all feedback with filters (SUPERADMIN only)"
+						"description": "Get all feedback with filters (SUPERADMIN only).\n\n**Query Parameters:**\n- `page` (optional): Page number (default: 1)\n- `limit` (optional): Items per page (default: 10)\n- `category` (optional): Filter by category: \"bug\", \"feature_request\", \"improvement\", \"other\"\n- `status` (optional): Filter by status: \"pending\", \"reviewed\", \"resolved\"\n\n**Response includes:**\n- Feedback list with populated user details (firstName, lastName, email, role, companyName)\n- Pagination metadata"
 					}
 				},
 				{
@@ -1912,7 +1900,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"status\": \"Resolved\"\n}"
+							"raw": "{\n  \"status\": \"resolved\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/feedback/:id/status",
@@ -1925,7 +1913,7 @@
 								}
 							]
 						},
-						"description": "Update feedback status (SUPERADMIN only)"
+						"description": "Update feedback status (SUPERADMIN only).\n\n**Request Body:**\n- `status` (required, string): New status for the feedback\n  - Valid values: \"pending\", \"reviewed\", \"resolved\"\n\n**Response:**\nReturns updated feedback object with populated user details."
 					}
 				}
 			],
