@@ -360,3 +360,81 @@ export const refreshToken = async (req: Request, res: Response) => {
     });
   }
 };
+
+// Unified OTP Verification Controller
+export const verifyOTPUnified = async (req: Request, res: Response) => {
+  try {
+    const { userId, otp, type } = req.body;
+
+    // Validation
+    if (!userId || !otp || !type) {
+      return res.status(400).json({
+        success: false,
+        message: "userId, otp, and type are required",
+      });
+    }
+
+    // Type validation
+    const validTypes = ["login", "verification", "forgot_password"];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid type. Must be one of: ${validTypes.join(", ")}`,
+      });
+    }
+
+    const result = await authService.verifyOTPUnified(userId, otp, type);
+
+    // Type-specific response messages
+    const messages: { [key: string]: string } = {
+      login: "2FA verification successful",
+      verification: "User verified successfully",
+      forgot_password: "OTP verified. You may now reset your password",
+    };
+
+    res.status(200).json({
+      success: true,
+      message: messages[type],
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Unified OTP verification error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "OTP verification failed",
+    });
+  }
+};
+
+// Reset Password with Verification Token Controller
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { userId, verificationToken, newPassword } = req.body;
+
+    // Validation
+    if (!userId || !verificationToken || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "userId, verificationToken, and newPassword are required",
+      });
+    }
+
+    const result = await authService.resetPasswordWithVerificationToken(
+      userId,
+      verificationToken,
+      newPassword
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Reset password error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Password reset failed",
+    });
+  }
+};

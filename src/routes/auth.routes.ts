@@ -9,7 +9,9 @@ import {
   forgotPassword,
   resetPasswordWithOTP,
   changePassword,
-  refreshToken
+  refreshToken,
+  verifyOTPUnified,
+  resetPassword
 } from "../controllers/auth.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import {
@@ -21,6 +23,7 @@ import {
   otpSendIPLimiter,
   otpVerifyResourceLimiter,
   otpVerifyIPLimiter,
+  otpVerifyTypeLimiter,
   passwordResetEmailLimiter,
   passwordResetIPLimiter,
   readLimiter,
@@ -39,7 +42,22 @@ router.post("/login", loginEmailLimiter, loginIPLimiter, login);
 // Refresh Token: Public route (no auth required) - Track by IP (100/15min)
 router.post("/refresh-token", loginIPLimiter, refreshToken);
 
-// Verify OTP: Track by email (10/15min) + IP catch-all (500/hour)
+// ========================================================================
+// NEW UNIFIED OTP VERIFICATION ENDPOINT
+// ========================================================================
+// Unified OTP Verification: Type-aware rate limiting (login/verification: 10/15min, forgot_password: 3/hour)
+router.post("/verify-otp-unified", otpVerifyTypeLimiter, otpVerifyIPLimiter, verifyOTPUnified);
+
+// Updated Password Reset: Requires verification token (no OTP)
+router.post("/reset-password-new", passwordResetEmailLimiter, passwordResetIPLimiter, resetPassword);
+
+// ========================================================================
+// LEGACY ENDPOINTS (BACKWARD COMPATIBILITY) - Will be deprecated
+// ========================================================================
+// These endpoints remain for backward compatibility
+// Frontend should migrate to the new unified endpoints
+
+// Verify OTP (Login 2FA): Track by email (10/15min) + IP catch-all (500/hour)
 router.post("/verify-otp", otpVerifyResourceLimiter, otpVerifyIPLimiter, verifyLoginOTP);
 
 // User verification routes
@@ -53,7 +71,7 @@ router.post("/verify-user", otpVerifyResourceLimiter, otpVerifyIPLimiter, verify
 // Forgot Password: Track by email (5/hour) + IP catch-all (500/hour)
 router.post("/forgot-password", otpSendResourceLimiter, otpSendIPLimiter, forgotPassword);
 
-// Reset Password: Track by email (3/hour) + IP catch-all (200/hour)
+// Reset Password (with OTP): Track by email (3/hour) + IP catch-all (200/hour)
 router.post("/reset-password", passwordResetEmailLimiter, passwordResetIPLimiter, resetPasswordWithOTP);
 
 // Protected routes - Authenticated endpoints with user-based rate limiting

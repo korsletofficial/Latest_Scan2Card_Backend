@@ -228,6 +228,45 @@ export const otpVerifyIPLimiter = rateLimit({
 });
 
 /**
+ * Unified OTP Verify Rate Limiter - Type Aware
+ * Different limits based on verification type
+ * - login/verification: 10 attempts per 15 minutes
+ * - forgot_password: 3 attempts per hour
+ */
+export const otpVerifyTypeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes base window
+  max: (req: Request) => {
+    const type = req.body?.type;
+    switch (type) {
+      case "login":
+      case "verification":
+        return Number(process.env.RATE_LIMIT_AUTH_OTP_VERIFY_PER_RESOURCE) || 10;
+      case "forgot_password":
+        return Number(process.env.RATE_LIMIT_AUTH_PASSWORD_RESET_PER_EMAIL) || 3;
+      default:
+        return 10; // Default fallback
+    }
+  },
+  keyGenerator: (req: Request) => {
+    const email = req.body?.email?.toLowerCase()?.trim() || req.body?.userId || 'no-identifier';
+    const type = req.body?.type || 'unknown';
+    return `${email}-${type}`; // Separate counters per type
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
+  handler: (req, res) => {
+    const type = req.body?.type || 'verification';
+    res.status(429).json({
+      success: false,
+      message: `Too many ${type} verification attempts. Please try again later.`,
+      error: "Rate limit exceeded",
+      retryAfter: res.getHeader("Retry-After"),
+    });
+  },
+});
+
+/**
  * Password Reset Rate Limiter - Per Email
  * Prevents targeting specific accounts with reset requests
  * Limit: 3 reset requests per email per hour

@@ -249,6 +249,7 @@ import {
   handleCheckVerificationCode,
   handleSendForgotPasswordOTP,
   handleVerifyForgotPasswordOTP,
+  handleUnifiedOTPVerification,
 } from "../helpers/otp.helper";
 
 // Verify Login OTP
@@ -472,5 +473,166 @@ export const refreshAccessToken = async (refreshToken: string) => {
       isVerified: user.isVerified,
       profileImage: user.profileImage || null,
     },
+  };
+};
+
+// Unified OTP Verification Service
+export const verifyOTPUnified = async (
+  userId: string,
+  otp: string,
+  type: "login" | "verification" | "forgot_password"
+) => {
+  await connectToMongooseDatabase();
+
+  // Validate type
+  const validTypes = ["login", "verification", "forgot_password"];
+  if (!validTypes.includes(type)) {
+    throw new Error(`Invalid type. Must be one of: ${validTypes.join(", ")}`);
+  }
+
+  // Call unified helper
+  const verification = await handleUnifiedOTPVerification({ userId, otp, type });
+
+  // Type-specific post-processing
+  switch (type) {
+    case "login": {
+      // Generate JWT tokens for login
+      const user = await UserModel.findById(userId).populate("role");
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        throw new Error("JWT_SECRET not configured");
+      }
+
+      // Generate access token
+      const token = jwt.sign(
+        {
+          userId: user._id.toString(),
+          email: user.email,
+          role: (user.role as any).name,
+        },
+        jwtSecret,
+        {
+          expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h") as any,
+        }
+      );
+
+      // Generate refresh token
+      const refreshToken = jwt.sign(
+        {
+          userId: user._id.toString(),
+        },
+        jwtSecret,
+        {
+          expiresIn: (process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || "7d") as any,
+        }
+      );
+
+      return {
+        token,
+        refreshToken,
+        expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h",
+        user: {
+          _id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: (user.role as any).name,
+          companyName: user.companyName,
+          twoFactorEnabled: user.twoFactorEnabled,
+          isVerified: user.isVerified,
+          profileImage: user.profileImage || null,
+        },
+      };
+    }
+
+    case "verification":
+      return {
+        userId: verification.userId,
+        isVerified: verification.isVerified,
+      };
+
+    case "forgot_password":
+      return {
+        userId: verification.userId,
+        verificationToken: verification.verificationToken,
+      };
+
+    default:
+      throw new Error(`Unhandled verification type: ${type}`);
+  }
+};
+
+// Reset Password with Verification Token
+export const resetPasswordWithVerificationToken = async (
+  userId: string,
+  verificationToken: string,
+  newPassword: string
+) => {
+  await connectToMongooseDatabase();
+
+  // Verify the verification token (VOT)
+  const secret = process.env.JWT_SECRET + "_VOT";
+  let decoded: any;
+
+  try {
+    decoded = jwt.verify(verificationToken, secret);
+  } catch (error) {
+    throw new Error("Verification token is invalid or expired. Please verify OTP again.");
+  }
+
+  // Ensure token is for password reset
+  if (decoded.purpose !== "password_reset_verified") {
+    throw new Error("Invalid verification token");
+  }
+
+  // Ensure token userId matches request userId
+  if (decoded.userId !== userId) {
+    throw new Error("Verification token does not match user");
+  }
+
+  // Find the OTP record with this token to ensure it hasn't been used
+  const otpRecord = await OTPModel.findOne({
+    userId,
+    purpose: "forgot_password",
+    verificationToken,
+    isUsed: true, // Should be marked as used after OTP verification
+  }).sort({ createdAt: -1 });
+
+  if (!otpRecord) {
+    throw new Error("Verification token not found. Please verify OTP again.");
+  }
+
+  // Check if VOT has been used for password reset already (check expiry)
+  if (otpRecord.verificationTokenExpiry && otpRecord.verificationTokenExpiry < new Date()) {
+    throw new Error("Verification token has expired. Please verify OTP again.");
+  }
+
+  // Password validation
+  if (newPassword.length < 6) {
+    throw new Error("Password must be at least 6 characters long");
+  }
+
+  // Find user and update password
+  const user = await UserModel.findById(userId).select("+password");
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  // Hash new password
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  user.password = hashedPassword;
+  await user.save();
+
+  // Mark the verification token as fully consumed (expire it)
+  otpRecord.verificationTokenExpiry = new Date(Date.now() - 1000); // Set to past
+  await otpRecord.save();
+
+  return {
+    email: user.email,
   };
 };

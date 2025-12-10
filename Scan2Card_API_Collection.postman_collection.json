@@ -1,9 +1,9 @@
 {
 	"info": {
 		"name": "Scan2Card API Collection",
-		"description": "Complete API collection for Scan2Card backend application with Firebase Cloud Messaging support",
+		"description": "Complete API collection for Scan2Card backend application with Firebase Cloud Messaging support and unified OTP verification",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"version": "1.1.0"
+		"version": "2.0.0"
 	},
 	"variable": [
 		{
@@ -134,7 +134,29 @@
 					}
 				},
 				{
-					"name": "Verify OTP",
+					"name": "Verify OTP Unified (NEW)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\",\n  \"type\": \"login\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/verify-otp-unified",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "verify-otp-unified"]
+						},
+						"description": "**NEW UNIFIED OTP VERIFICATION ENDPOINT**\n\nSingle endpoint that handles all OTP verification types. Replaces separate /verify-otp, /verify-user, and forgot password OTP verification.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID to verify\n- `otp` (required, string): 6-digit OTP code\n- `type` (required, string): Verification type - \"login\" | \"verification\" | \"forgot_password\"\n\n**Type: login (2FA)**\nFor users with 2FA enabled after password authentication.\n\n**Example Request:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"login\"\n}\n```\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"2FA verification successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1...\",\n    \"expiresIn\": \"24h\",\n    \"user\": { ... }\n  }\n}\n```\n\n**Type: verification**\nFor verifying newly registered users.\n\n**Example Request:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"verification\"\n}\n```\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"User verified successfully\",\n  \"data\": {\n    \"userId\": \"507f1f77bcf86cd799439011\",\n    \"isVerified\": true\n  }\n}\n```\n\n**Type: forgot_password**\nStep 2 of password reset flow. Returns verification token for password update.\n\n**Example Request:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"forgot_password\"\n}\n```\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"OTP verified. You may now reset your password\",\n  \"data\": {\n    \"userId\": \"507f1f77bcf86cd799439011\",\n    \"verificationToken\": \"eyJhbGciOiJIUzI1...\"\n  }\n}\n```\n\n**Rate Limiting (Type-Aware):**\n- login/verification: 10 attempts per 15 minutes\n- forgot_password: 3 attempts per hour\n- Separate counters per type per email/userId\n\n**Development Mode:**\n- Test OTP: 000000 (when USE_DUMMY_OTP=true)\n- Master OTP works for all types\n\n**Security Features:**\n- OTP expires after 10 minutes\n- Single-use only (marked as used after verification)\n- Type-specific rate limiting\n- Verification token (for forgot_password) expires in 10 minutes\n\n**Error Responses:**\n- 400: Missing required fields or invalid type\n- 400: Invalid/expired/used OTP\n- 429: Rate limit exceeded\n\n**Next Steps:**\n- login: Use returned tokens for authenticated requests\n- verification: User account is now verified\n- forgot_password: Use verificationToken in /reset-password-new endpoint"
+					}
+				},
+				{
+					"name": "Verify OTP (Legacy - Deprecated)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -152,7 +174,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "verify-otp"]
 						},
-						"description": "Verify OTP for 2FA enabled accounts (Test OTP: 000000)"
+						"description": "⚠️ DEPRECATED: Use /verify-otp-unified with type=\"login\" instead.\n\nVerify OTP for 2FA enabled accounts (Test OTP: 000000)\n\nThis endpoint remains for backward compatibility but will be removed in a future version. Please migrate to the new unified endpoint."
 					}
 				},
 				{
@@ -178,7 +200,7 @@
 					}
 				},
 				{
-					"name": "Verify User",
+					"name": "Verify User (Legacy - Deprecated)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -196,7 +218,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "verify-user"]
 						},
-						"description": "Verify user with OTP. Sets isVerified to true. (Test OTP: 000000)"
+						"description": "⚠️ DEPRECATED: Use /verify-otp-unified with type=\"verification\" instead.\n\nVerify user with OTP. Sets isVerified to true. (Test OTP: 000000)\n\nThis endpoint remains for backward compatibility but will be removed in a future version. Please migrate to the new unified endpoint."
 					}
 				},
 				{
@@ -222,7 +244,29 @@
 					}
 				},
 				{
-					"name": "Reset Password (Forgot Password Flow)",
+					"name": "Reset Password (NEW - 2 Step Flow)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"verificationToken\": \"VERIFICATION_TOKEN_FROM_OTP_UNIFIED\",\n  \"newPassword\": \"NewPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/reset-password-new",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "reset-password-new"]
+						},
+						"description": "**NEW PASSWORD RESET ENDPOINT - 2-Step Flow**\n\nStep 3 of the forgot password flow. Updates password using verification token (NO OTP required).\n\n**Authentication Required:** None (Public endpoint)\n\n**Prerequisites:**\n1. User requested password reset via /forgot-password (Step 1)\n2. User verified OTP via /verify-otp-unified with type=\"forgot_password\" (Step 2)\n3. User received verificationToken from Step 2\n\n**Request Body:**\n- `userId` (required, string): User ID from previous steps\n- `verificationToken` (required, string): JWT token from /verify-otp-unified response\n- `newPassword` (required, string): New password to set (minimum 6 characters)\n\n**Complete Flow Example:**\n\n**Step 1: Request OTP**\n```bash\nPOST /auth/forgot-password\n{\n  \"email\": \"user@example.com\"\n}\n# Response: { userId: \"...\" }\n```\n\n**Step 2: Verify OTP**\n```bash\nPOST /auth/verify-otp-unified\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"forgot_password\"\n}\n# Response: { userId: \"...\", verificationToken: \"eyJhbGc...\" }\n```\n\n**Step 3: Reset Password (THIS ENDPOINT)**\n```bash\nPOST /auth/reset-password-new\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"verificationToken\": \"eyJhbGc...\",\n  \"newPassword\": \"NewPassword123\"\n}\n# Response: { email: \"user@example.com\" }\n```\n\n**Password Requirements:**\n- Minimum 6 characters\n- Should contain mix of characters for security\n\n**Security Features:**\n- Verification token expires in 10 minutes\n- Single-use only (token invalidated after password reset)\n- Separate JWT secret for verification tokens\n- Token must match the userId\n- OTP must have been verified before token was issued\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"Password reset successfully\",\n  \"data\": {\n    \"email\": \"user@example.com\"\n  }\n}\n```\n\n**Error Responses:**\n- 400: Missing required fields\n- 400: Invalid or expired verification token (retry from Step 1)\n- 400: Verification token doesn't match user\n- 400: Password too short (minimum 6 characters)\n- 404: User not found\n- 429: Rate limit exceeded\n\n**Why This Design?**\nThis 2-step approach provides better security:\n1. OTP verification is separate from password update\n2. Short-lived verification token (10 min) prevents replay attacks\n3. User has limited time window to reset password after OTP verification\n4. Clear separation of concerns between verification and password update"
+					}
+				},
+				{
+					"name": "Reset Password (Legacy - Deprecated)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -240,7 +284,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "reset-password"]
 						},
-						"description": "Complete password reset process with OTP verification.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID returned from forgot-password endpoint\n- `otp` (required, string): 6-digit OTP received via SMS\n- `newPassword` (required, string): New password to set for the account\n\n**Process Flow:**\n1. Verifies OTP matches and hasn't expired (10-minute validity)\n2. Validates new password meets security requirements\n3. Updates user password in database\n4. Invalidates used OTP\n5. Returns success confirmation\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n- Cannot be same as previous password\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n- Success: Returns success message confirming password reset\n- Error 400: Invalid or expired OTP, or password requirements not met\n- Error 404: User not found\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- Useful for testing without SMS integration\n\n**Security Notes:**\n- OTP can only be used once\n- Each OTP expires after 10 minutes\n- Failed attempts count towards rate limiting"
+						"description": "⚠️ DEPRECATED: Use the new 2-step flow instead:\n1. /forgot-password\n2. /verify-otp-unified (type=\"forgot_password\")\n3. /reset-password-new\n\nComplete password reset process with OTP verification.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID returned from forgot-password endpoint\n- `otp` (required, string): 6-digit OTP received via SMS\n- `newPassword` (required, string): New password to set for the account\n\n**Process Flow:**\n1. Verifies OTP matches and hasn't expired (10-minute validity)\n2. Validates new password meets security requirements\n3. Updates user password in database\n4. Invalidates used OTP\n5. Returns success confirmation\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n- Cannot be same as previous password\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n- Success: Returns success message confirming password reset\n- Error 400: Invalid or expired OTP, or password requirements not met\n- Error 404: User not found\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- Useful for testing without SMS integration\n\n**Security Notes:**\n- OTP can only be used once\n- Each OTP expires after 10 minutes\n- Failed attempts count towards rate limiting\n\nThis endpoint remains for backward compatibility but will be removed in a future version. Please migrate to the new 2-step flow for better security."
 					}
 				},
 				{

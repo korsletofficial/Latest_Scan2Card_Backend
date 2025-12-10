@@ -6,6 +6,8 @@ export interface IOTP extends Document {
   purpose: "login" | "enable_2fa" | "disable_2fa" | "verification" | "forgot_password";
   expiresAt: Date;
   isUsed: boolean;
+  verificationToken?: string; // JWT token for password reset verification
+  verificationTokenExpiry?: Date; // Token expiration time
 }
 
 const OTPSchema = new Schema<IOTP>(
@@ -15,6 +17,8 @@ const OTPSchema = new Schema<IOTP>(
     purpose: { type: String, enum: ["login", "enable_2fa", "disable_2fa", "verification", "forgot_password"], required: true },
     expiresAt: { type: Date, required: true },
     isUsed: { type: Boolean, default: false },
+    verificationToken: { type: String, required: false }, // Optional JWT for password reset
+    verificationTokenExpiry: { type: Date, required: false }, // Optional token expiry
   },
   {
     timestamps: true,

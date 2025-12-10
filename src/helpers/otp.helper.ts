@@ -1,4 +1,5 @@
 import axios from "axios";
+import jwt from "jsonwebtoken";
 import { config } from "../config/config";
 import OTPModel from "../models/otp.model";
 import UserModel from "../models/user.model";
@@ -552,4 +553,87 @@ export const handleVerifyForgotPasswordOTP = async (userId: string, code: string
     isValid: true,
     userId,
   };
+};
+
+/**
+ * Generate verification token for password reset
+ */
+const generateVerificationToken = (userId: string): string => {
+  const secret = process.env.JWT_SECRET + "_VOT";
+  return jwt.sign(
+    { userId, purpose: "password_reset_verified" },
+    secret,
+    { expiresIn: "10m" } // 10 minute expiry
+  );
+};
+
+/**
+ * Unified OTP verification handler
+ * Routes to appropriate verification method based on type
+ */
+export const handleUnifiedOTPVerification = async ({
+  userId,
+  otp,
+  type,
+}: {
+  userId: string;
+  otp: string;
+  type: "login" | "verification" | "forgot_password";
+}) => {
+  let result: any;
+
+  // Route to appropriate handler based on type
+  switch (type) {
+    case "login":
+      result = await handleVerifyLoginOTP(userId, otp);
+      return {
+        isValid: result.isValid,
+        userId: result.userId,
+        type: "login",
+      };
+
+    case "verification":
+      result = await handleCheckVerificationCode({
+        userId,
+        code: otp,
+        source: "email", // Source doesn't matter for verification
+      });
+      return {
+        isValid: result.isValid,
+        userId: result.userId,
+        isVerified: result.isVerified,
+        type: "verification",
+      };
+
+    case "forgot_password":
+      // Verify the OTP first
+      result = await handleVerifyForgotPasswordOTP(userId, otp);
+
+      // Generate verification token
+      const verificationToken = generateVerificationToken(userId);
+      const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      // Store verification token in the OTP record
+      const otpRecord = await OTPModel.findOne({
+        userId,
+        purpose: "forgot_password",
+        isUsed: true, // Already marked as used by handleVerifyForgotPasswordOTP
+      }).sort({ createdAt: -1 });
+
+      if (otpRecord) {
+        otpRecord.verificationToken = verificationToken;
+        otpRecord.verificationTokenExpiry = tokenExpiry;
+        await otpRecord.save();
+      }
+
+      return {
+        isValid: result.isValid,
+        userId: result.userId,
+        verificationToken,
+        type: "forgot_password",
+      };
+
+    default:
+      throw new Error(`Invalid verification type: ${type}`);
+  }
 };
