@@ -3,6 +3,7 @@ import EventModel from "../models/event.model";
 import UserModel from "../models/user.model";
 import LeadsModel from "../models/leads.model";
 import RoleModel from "../models/role.model";
+import RsvpModel from "../models/rsvp.model";
 import mongoose from "mongoose";
 
 // Get all meetings for team manager's team members
@@ -96,7 +97,10 @@ export const getTeamMeetings = async (teamManagerId: string) => {
 export const getAllLeadsForManager = async (
   teamManagerId: string,
   eventId?: string,
-  memberId?: string
+  memberId?: string,
+  page: number = 1,
+  limit: number = 10,
+  search: string = ""
 ) => {
   // Find all events managed by this team manager
   const managedEvents = await EventModel.find({
@@ -106,7 +110,15 @@ export const getAllLeadsForManager = async (
   const managedEventIds = managedEvents.map((e) => e._id.toString());
 
   if (managedEventIds.length === 0) {
-    return [];
+    return {
+      leads: [],
+      pagination: {
+        total: 0,
+        page,
+        pages: 0,
+        limit,
+      },
+    };
   }
 
   // Build query
@@ -126,8 +138,35 @@ export const getAllLeadsForManager = async (
 
   if (memberId) query.userId = memberId;
 
-  const leads = await LeadsModel.find(query).sort({ createdAt: -1 });
-  return leads;
+  // Add search filter
+  if (search) {
+    query.$or = [
+      { "details.firstName": { $regex: search, $options: "i" } },
+      { "details.lastName": { $regex: search, $options: "i" } },
+      { "details.company": { $regex: search, $options: "i" } },
+      { "details.email": { $regex: search, $options: "i" } },
+      { "details.phoneNumber": { $regex: search, $options: "i" } },
+    ];
+  }
+
+  // Get total count for pagination
+  const total = await LeadsModel.countDocuments(query);
+
+  // Get paginated leads
+  const leads = await LeadsModel.find(query)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  return {
+    leads,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit,
+    },
+  };
 };
 
 // Get leads for a specific team member
@@ -179,17 +218,20 @@ export const getDashboardStats = async (teamManagerId: string) => {
   // Get all event IDs managed by this team manager
   const managedEventIds = events.map((e) => e._id);
 
-  // Count team members (ENDUSERs under this team manager)
-  const totalMembers = await UserModel.countDocuments({
-    exhibitorId: teamManagerId,
-    isDeleted: false,
-  });
-
   // Count total leads scanned by team members for this team manager's events only
   const totalLeads = await LeadsModel.countDocuments({
     eventId: { $in: managedEventIds },
     isDeleted: false,
   });
+
+  // Count team members (all unique users who created leads in managed events)
+  const leadsInManagedEvents = await LeadsModel.find({
+    eventId: { $in: managedEventIds },
+    isDeleted: false,
+  }).select("userId");
+
+  const uniqueUserIds = new Set(leadsInManagedEvents.map((lead) => lead.userId.toString()));
+  const totalMembers = uniqueUserIds.size;
 
   // Total license keys assigned
   const totalLicenseKeys = licenseKeys.length;
@@ -354,15 +396,37 @@ export const getTeamMembers = async (
   limit: number = 10,
   search: string = ""
 ) => {
-  // Find all team members
-  const teamManager = await UserModel.findById(teamManagerId);
+  // Get all eventIds managed by this team manager
+  const managedEvents = await EventModel.find({
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  }).select("_id");
+  const managedEventIds = managedEvents.map((e) => e._id);
 
-  if (!teamManager) {
-    throw new Error("Team manager not found");
+  if (managedEventIds.length === 0) {
+    return {
+      members: [],
+      pagination: {
+        total: 0,
+        page,
+        pages: 0,
+        limit,
+      },
+    };
   }
 
+  // Get all leads in managed events
+  const leadsInManagedEvents = await LeadsModel.find({
+    eventId: { $in: managedEventIds },
+    isDeleted: false,
+  }).select("userId");
+
+  // Get unique userIds who created leads in managed events
+  const uniqueUserIds = [...new Set(leadsInManagedEvents.map((lead) => lead.userId.toString()))];
+
+  // Build search query
   const searchQuery: any = {
-    exhibitorId: teamManager._id,
+    _id: { $in: uniqueUserIds.map((id) => new mongoose.Types.ObjectId(id)) },
     isDeleted: false,
   };
 
@@ -374,24 +438,15 @@ export const getTeamMembers = async (
     ];
   }
 
-  // Exclude the team manager's own profile from the members list
-  const members = await UserModel.find({
-    ...searchQuery,
-    _id: { $ne: teamManagerId },
-  })
+  // Get total count
+  const total = await UserModel.countDocuments(searchQuery);
+
+  // Get paginated members
+  const members = await UserModel.find(searchQuery)
     .select("firstName lastName email phoneNumber isActive createdAt")
     .skip((page - 1) * limit)
     .limit(limit)
     .sort({ createdAt: -1 });
-
-  const total = await UserModel.countDocuments(searchQuery);
-
-  // Get all eventIds managed by this team manager
-  const managedEvents = await EventModel.find({
-    "licenseKeys.teamManagerId": teamManagerId,
-    isDeleted: false,
-  }).select("_id");
-  const managedEventIds = managedEvents.map((e) => e._id);
 
   // Get lead count for each member (only for managed events)
   const membersWithLeads = await Promise.all(
@@ -476,7 +531,7 @@ export const getAllLicenseKeys = async (
     isDeleted: false,
   })
     .populate("exhibitorId", "firstName lastName companyName")
-    .select("eventName licenseKeys")
+    .select("eventName licenseKeys _id")
     .sort({ startDate: -1 });
 
   // Extract and format all license keys with event info
@@ -514,6 +569,31 @@ export const getAllLicenseKeys = async (
 
   // Sort by expiresAt (most recent first)
   allKeys.sort((a, b) => new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime());
+
+  // Get lead count for each license key - count all leads for users who used this key
+  allKeys = await Promise.all(
+    allKeys.map(async (key) => {
+      // Find all RSVPs that used this license key
+      const rsvpsWithKey = await RsvpModel.find({
+        eventLicenseKey: key.key,
+        isDeleted: false,
+      }).select("userId");
+
+      const userIds = rsvpsWithKey.map((rsvp) => rsvp.userId);
+
+      // Count leads created by these users in this event
+      const leadCount = await LeadsModel.countDocuments({
+        eventId: key.eventId,
+        userId: { $in: userIds },
+        isDeleted: false,
+      });
+
+      return {
+        ...key,
+        leadCount: leadCount,
+      };
+    })
+  );
 
   // Pagination
   const total = allKeys.length;

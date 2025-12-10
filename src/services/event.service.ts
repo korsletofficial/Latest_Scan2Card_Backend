@@ -138,13 +138,27 @@ export const getEvents = async (
 
   const total = await EventModel.countDocuments(searchQuery);
 
+  // Get lead counts for all events in a single query
+  const eventIds = events.map((event) => event._id);
+  const leadCounts = await LeadsModel.aggregate([
+    { $match: { eventId: { $in: eventIds }, isDeleted: false } },
+    { $group: { _id: "$eventId", count: { $sum: 1 } } },
+  ]);
+
+  const leadCountMap = new Map<string, number>();
+  leadCounts.forEach((item) => {
+    leadCountMap.set(item._id?.toString(), item.count);
+  });
+
   // Add isExpired field to each event
   const now = new Date();
   const eventsWithExpiry = events.map((event) => {
     const eventObj = event.toObject();
+    const leadCount = leadCountMap.get(event._id.toString()) || 0;
     return {
       ...eventObj,
       isExpired: new Date(event.endDate) < now,
+      leadCount,
     };
   });
 
@@ -174,9 +188,11 @@ export const getEventById = async (id: string, exhibitorId: string) => {
   // Add isExpired field
   const now = new Date();
   const eventObj = event.toObject();
+  const leadCount = await LeadsModel.countDocuments({ eventId: id, isDeleted: false });
   return {
     ...eventObj,
     isExpired: new Date(event.endDate) < now,
+    leadCount,
   };
 };
 
@@ -255,6 +271,17 @@ export const generateLicenseKeyForEvent = async (
 
   if (!event) {
     throw new Error("Event not found");
+  }
+
+  // Validate that license key expiration date is not before event start date
+  const eventStartDate = new Date(event.startDate);
+  eventStartDate.setHours(0, 0, 0, 0);
+  
+  const keyExpirationDate = new Date(data.expiresAt);
+  keyExpirationDate.setHours(0, 0, 0, 0);
+  
+  if (keyExpirationDate < eventStartDate) {
+    throw new Error(`License key expiration date cannot be before the event start date (${event.startDate.toISOString().split('T')[0]})`);
   }
 
   // Generate license key
@@ -356,8 +383,24 @@ export const bulkGenerateLicenseKeys = async (
       continue;
     }
 
-    if (expirationDate <= new Date()) {
-      errors.push({ row: i + 1, error: "Expiration date must be in the future" });
+    // Get today's date at midnight for comparison
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (expirationDate < today) {
+      errors.push({ row: i + 1, error: "Expiration date must be today or in the future" });
+      continue;
+    }
+
+    // Validate that license key expiration date is not before event start date
+    const eventStartDate = new Date(event.startDate);
+    eventStartDate.setHours(0, 0, 0, 0);
+    
+    const keyExpirationDate = new Date(expirationDate);
+    keyExpirationDate.setHours(0, 0, 0, 0);
+    
+    if (keyExpirationDate < eventStartDate) {
+      errors.push({ row: i + 1, error: `License key expiration date cannot be before the event start date (${event.startDate.toISOString().split('T')[0]})` });
       continue;
     }
 

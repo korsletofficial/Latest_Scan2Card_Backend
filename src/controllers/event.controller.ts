@@ -28,10 +28,23 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
     // Validate dates
     const start = new Date(startDate);
     const end = new Date(endDate);
-    if (start >= end) {
+    
+    // Get today's date at midnight (in local timezone, treated as UTC for comparison)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Allow start and end date to be the same, but both must be today or in the future
+    if (start < today) {
       return res.status(400).json({
         success: false,
-        message: "End date must be after start date",
+        message: "Event start date cannot be in the past",
+      });
+    }
+    
+    if (end < start) {
+      return res.status(400).json({
+        success: false,
+        message: "End date must be after or equal to start date",
       });
     }
 
@@ -210,10 +223,14 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       });
     }
 
-    if (expirationDate <= new Date()) {
+    // Get today's date at midnight for comparison
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (expirationDate < today) {
       return res.status(400).json({
         success: false,
-        message: "Expiration date must be in the future",
+        message: "Expiration date must be today or in the future",
       });
     }
 

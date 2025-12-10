@@ -146,11 +146,11 @@ export const loginIPLimiter = rateLimit({
 /**
  * OTP Send Rate Limiter - Per Email/Phone
  * Prevents SMS/Email spam bombing to specific number/email
- * Limit: 5 OTP sends per email/phone per hour
+ * Limit: 10 OTP sends per email/phone per hour (raised from 5)
  */
 export const otpSendResourceLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: Number(process.env.RATE_LIMIT_AUTH_OTP_SEND_PER_RESOURCE) || 5,
+  max: Number(process.env.RATE_LIMIT_AUTH_OTP_SEND_PER_RESOURCE) || 20,
   keyGenerator: generateEmailKey,
   standardHeaders: true,
   legacyHeaders: false,

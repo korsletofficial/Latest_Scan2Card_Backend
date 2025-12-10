@@ -35,6 +35,7 @@ export interface IEvent extends Document {
   isTrialEvent?: boolean;
   isActive: boolean;
   isDeleted: boolean;
+  isExpired: boolean;
 }
 
 // Event Schema
@@ -71,6 +72,7 @@ const EventSchema = new Schema<IEvent>(
     isTrialEvent: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
+    isExpired: { type: Boolean, default: false },
   },
   {
     timestamps: true,

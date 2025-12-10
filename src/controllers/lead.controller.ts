@@ -159,6 +159,7 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       minimal,
       period, // New: "today" | "weekly" | "earlier"
       timeZone = "Asia/Kolkata", // New: user's timezone
+      licenseKey, // New: filter by license key/stall
     } = req.query;
 
     const result = await leadService.getLeads({
@@ -173,6 +174,7 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       minimal: minimal === 'true',
       period: period as "today" | "weekly" | "earlier" | undefined,
       timeZone: timeZone as string,
+      licenseKey: licenseKey as string,
     });
 
     return res.status(200).json({
@@ -415,7 +417,7 @@ export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
 // Export Leads to CSV
 export const exportLeads = async (req: AuthRequest, res: Response) => {
   try {
-    const { type, eventId, search, rating } = req.query;
+    const { type, eventId, search, rating, licenseKey } = req.query;
     const userId = req.user?.userId;
     const userRole = req.user?.role;
 
@@ -426,14 +428,14 @@ export const exportLeads = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Build query parameters for the getLeads function
+    // Build query parameters for the export function
     const queryParams: any = {
       userId,
       userRole,
-      limit: "1000", // Export all records
+      limit: 1000, // Export all records
     };
 
-    if (eventId && eventId !== "all") {
+    if (eventId) {
       queryParams.eventId = eventId;
     }
 
@@ -442,18 +444,39 @@ export const exportLeads = async (req: AuthRequest, res: Response) => {
     }
 
     if (rating) {
-      queryParams.rating = rating.toString();
+      queryParams.rating = rating;
     }
 
-    // Get leads data
-    const result = await leadService.getLeads(queryParams);
-    const leads = result.leads;
+    if (licenseKey) {
+      queryParams.licenseKey = licenseKey;
+    }
+
+    // Get leads data with all fields for export
+    const leads = await leadService.getLeadsForExport(queryParams);
+
+    // Fetch event details for all leads that have eventId
+    const eventIds = leads
+      .filter((lead: any) => lead.eventId)
+      .map((lead: any) => lead.eventId);
+
+    const events = await leadService.getEventsByIds(eventIds);
+
+    // Create a map of eventId -> eventName for quick lookup
+    const eventMap = new Map(
+      events.map((event: any) => [event._id.toString(), event.eventName])
+    );
+
+    // Add event names to leads (leads are already plain objects from lean())
+    const leadsWithEventNames = leads.map((lead: any) => ({
+      ...lead,
+      eventName: lead.eventId ? eventMap.get(lead.eventId.toString()) : null,
+    }));
 
     // Filter leads based on export type
-    let filteredLeads = leads;
+    let filteredLeads = leadsWithEventNames;
     if (type === "entryOnly") {
       // Only include leads that have entry codes
-      filteredLeads = leads.filter(
+      filteredLeads = leadsWithEventNames.filter(
         (lead: any) => lead.entryCode && lead.entryCode.trim() !== ""
       );
     }
@@ -526,27 +549,38 @@ const generateFullDataCSV = (leads: any[]): string => {
     "Created Date",
   ];
 
-  const rows = leads.map((lead) => [
-    lead.entryCode || "",
-    lead.details?.firstName || "",
-    lead.details?.lastName || "",
-    lead.details?.company || "",
-    lead.details?.position || "",
-    lead.details?.email || "",
-    lead.details?.phoneNumber || "",
-    lead.details?.website || "",
-    lead.details?.city || "",
-    lead.details?.country || "",
-    lead.details?.notes || "",
-    lead.eventId && typeof lead.eventId === "object"
-      ? lead.eventId.eventName
-      : lead.isIndependentLead
-      ? "Independent"
-      : "",
-    lead.leadType || "",
-    lead.rating || "",
-    new Date(lead.createdAt).toLocaleDateString(),
-  ]);
+  const rows = leads.map((lead) => {
+    // Format date properly
+    let formattedDate = "";
+    if (lead.createdAt) {
+      try {
+        const date = new Date(lead.createdAt);
+        if (!isNaN(date.getTime())) {
+          formattedDate = date.toLocaleDateString();
+        }
+      } catch (e) {
+        console.error("Error formatting date:", e);
+      }
+    }
+
+    return [
+      lead.entryCode || "",
+      lead.details?.firstName || "",
+      lead.details?.lastName || "",
+      lead.details?.company || "",
+      lead.details?.position || "",
+      lead.details?.email || "",
+      lead.details?.phoneNumber || "",
+      lead.details?.website || "",
+      lead.details?.city || "",
+      lead.details?.country || "",
+      lead.details?.notes || "",
+      lead.eventName || (lead.isIndependentLead ? "Independent" : ""),
+      lead.leadType || "",
+      lead.rating || "",
+      formattedDate,
+    ];
+  });
 
   return generateCSV(headers, rows);
 };

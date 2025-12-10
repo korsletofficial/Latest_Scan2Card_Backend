@@ -1,6 +1,7 @@
 import LeadModel from "../models/leads.model";
 import EventModel from "../models/event.model";
 import UserModel from "../models/user.model";
+import RsvpModel from "../models/rsvp.model";
 import mongoose from "mongoose";
 import { fillMissingDates, fillMissingMonths, fillMissingYears } from "../helpers/dateStats.helper";
 import { getDateRangesByPeriod } from "../utils/dateRange.util";
@@ -30,6 +31,7 @@ interface GetLeadsFilter {
   minimal?: boolean;
   period?: "today" | "weekly" | "earlier"; // New: time-based filter
   timeZone?: string; // New: user's timezone (e.g., "Asia/Kolkata")
+  licenseKey?: string; // New: filter by license key/stall
 }
 
 interface UpdateLeadData {
@@ -127,6 +129,7 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     minimal = false,
     period,
     timeZone = "Asia/Kolkata", // Default to Indian timezone
+    licenseKey,
   } = filter;
 
   // Build filter query based on role
@@ -158,7 +161,25 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     query.rating = parseInt(rating);
   }
 
-  
+  // License key (stall) filtering
+  if (licenseKey) {
+    // Find all RSVPs with this license key
+    const rsvps = await RsvpModel.find({
+      eventLicenseKey: licenseKey,
+      isDeleted: false,
+    }).select("userId");
+
+    // Get all user IDs from these RSVPs
+    const userIds = rsvps.map((rsvp) => rsvp.userId);
+
+    // Filter leads to only show those from users who used this license key
+    if (userIds.length > 0) {
+      query.userId = { $in: userIds };
+    } else {
+      // No users found for this license key, return empty results
+      query.userId = null; // This will match no documents
+    }
+  }
 
   // Time-based filtering
   if (period) {
@@ -241,12 +262,28 @@ export const updateLead = async (
 
   const lead = await LeadModel.findOne({
     _id: id,
-    userId,
     isDeleted: false,
   });
 
   if (!lead) {
     throw new Error("Lead not found");
+  }
+
+  // Check authorization: either the original user or a team manager of the event
+  let isAuthorized = lead.userId.toString() === userId;
+
+  if (!isAuthorized && lead.eventId) {
+    // Check if user is a team manager of this event
+    const event = await EventModel.findOne({
+      _id: lead.eventId,
+      "licenseKeys.teamManagerId": userId,
+      isDeleted: false,
+    });
+    isAuthorized = !!event;
+  }
+
+  if (!isAuthorized) {
+    throw new Error("Unauthorized: You do not have permission to edit this lead");
   }
 
   // Update fields
@@ -267,6 +304,7 @@ export const updateLead = async (
   await lead.save();
 
   return lead;
+
 };
 
 // Delete Lead (Soft Delete)
@@ -602,4 +640,95 @@ export const getUserTrialStatus = async (userId: string) => {
       description: trialEvent.description
     } : null,
   };
+};
+
+// Get Events by IDs
+export const getEventsByIds = async (eventIds: string[]) => {
+  if (!eventIds || eventIds.length === 0) {
+    return [];
+  }
+
+  const events = await EventModel.find({
+    _id: { $in: eventIds },
+    isDeleted: false,
+  }).select('_id eventName');
+
+  return events;
+};
+
+// Get Leads for Export (returns all fields needed for CSV)
+export const getLeadsForExport = async (filter: GetLeadsFilter) => {
+  const {
+    userId,
+    userRole,
+    limit = 1000,
+    eventId,
+    rating,
+    search,
+    licenseKey,
+  } = filter;
+
+  // Build filter query based on role
+  let query: any = { isDeleted: false };
+
+  if (userRole === "EXHIBITOR") {
+    // For exhibitors, get leads from their events
+    const exhibitorEvents = await EventModel.find({
+      exhibitorId: userId,
+      isDeleted: false,
+    }).select("_id");
+
+    const eventIds = exhibitorEvents.map((event) => event._id);
+    query.eventId = { $in: eventIds };
+  } else {
+    // For end users, only show their own leads
+    query.userId = userId;
+  }
+
+  if (eventId && eventId !== "all") {
+    query.eventId = eventId;
+  }
+
+  if (rating) {
+    query.rating = parseInt(rating);
+  }
+
+  // License key (stall) filtering
+  if (licenseKey) {
+    // Find all RSVPs with this license key
+    const rsvps = await RsvpModel.find({
+      eventLicenseKey: licenseKey,
+      isDeleted: false,
+    }).select("userId");
+
+    // Get all user IDs from these RSVPs
+    const userIds = rsvps.map((rsvp) => rsvp.userId);
+
+    // Filter leads to only show those from users who used this license key
+    if (userIds.length > 0) {
+      query.userId = { $in: userIds };
+    } else {
+      // No users found for this license key, return empty results
+      query.userId = null; // This will match no documents
+    }
+  }
+
+  // Search in details
+  if (search) {
+    query.$or = [
+      { "details.firstName": { $regex: search, $options: "i" } },
+      { "details.lastName": { $regex: search, $options: "i" } },
+      { "details.company": { $regex: search, $options: "i" } },
+      { "details.email": { $regex: search, $options: "i" } },
+      { "details.phoneNumber": { $regex: search, $options: "i" } },
+    ];
+  }
+
+  // Get all leads with all fields (no field selection)
+  const leads = await LeadModel.find(query)
+    .sort({ createdAt: -1 })
+    .limit(parseInt(limit.toString()))
+    .lean(); // Use lean() to get plain JavaScript objects
+
+  return leads;
 };

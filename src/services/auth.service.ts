@@ -16,7 +16,8 @@ export interface RegisterUserDTO {
 }
 
 interface LoginData {
-  email: string;
+  email?: string;
+  phoneNumber?: string;
   password: string;
   skipPasswordCheck?: boolean;
 }
@@ -95,13 +96,23 @@ export const registerUser = async (data: RegisterUserDTO) => {
 export const loginUser = async (data: LoginData) => {
   await connectToMongooseDatabase();
 
+  // Build query - find by email or phoneNumber
+  const query: any = { isDeleted: false };
+  if (data.email) {
+    query.email = data.email;
+  } else if (data.phoneNumber) {
+    query.phoneNumber = data.phoneNumber;
+  } else {
+    throw new Error("Email or phone number must be provided");
+  }
+
   // Find user with password
-  const user = await UserModel.findOne({ email: data.email, isDeleted: false })
+  const user = await UserModel.findOne(query)
     .select("+password")
     .populate("role");
 
   if (!user) {
-    throw new Error("Invalid email or password");
+    throw new Error("Invalid credentials");
   }
 
   // Check if user is active
@@ -113,7 +124,7 @@ export const loginUser = async (data: LoginData) => {
   if (!data.skipPasswordCheck) {
     const isPasswordValid = await bcrypt.compare(data.password, user.password);
     if (!isPasswordValid) {
-      throw new Error("Invalid email or password");
+      throw new Error("Invalid credentials");
     }
   }
 

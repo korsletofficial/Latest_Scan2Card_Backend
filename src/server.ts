@@ -19,6 +19,7 @@ import teamManagerRoutes from "./routes/teamManager.routes";
 import notificationRoutes from "./routes/notification.routes";
 import keepServerActive from "./cron/serverActive";
 import startMeetingReminderCron from "./cron/meetingReminders";
+import startEventExpiryCron from "./cron/eventExpiry";
 import packageJson from "../package.json";
 import { initializeFirebase } from "./services/firebase.service";
 
@@ -122,5 +123,6 @@ const startServer = async () => {
 startServer();
 keepServerActive();
 startMeetingReminderCron();
+startEventExpiryCron();
 
 export default app;

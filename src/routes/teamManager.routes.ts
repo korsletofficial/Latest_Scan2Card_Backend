@@ -24,7 +24,7 @@ router.get("/dashboard/stats", authenticateToken, authorizeRoles("TEAMMANAGER"),
 router.get("/leads/graph", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getLeadsGraph);
 
 // Other routes - Admin limit (300/min per user)
-router.get("/leads/all", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLeadsForManager);
+router.get("/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLeadsForManager);
 router.get("/team/members", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getTeamMembers);
 router.get("/team/member/:memberId/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMemberLeads);
 router.get("/events", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMyEvents);

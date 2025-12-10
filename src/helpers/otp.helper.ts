@@ -452,11 +452,19 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
   const expiresAt = new Date(Date.now() + config.OTP_VALIDITY_MINUTES * 60 * 1000);
 
   // Create OTP record
-  await OTPModel.create({
+  const otpRecord = await OTPModel.create({
     userId: user._id,
     otp,
     purpose: "forgot_password",
     expiresAt,
+    isUsed: false,
+  });
+
+  console.log(`✅ Forgot Password OTP created in database:`, {
+    otpId: otpRecord._id,
+    userId: user._id.toString(),
+    purpose: "forgot_password",
+    expiresAt: expiresAt.toISOString(),
     isUsed: false,
   });
 
@@ -485,6 +493,13 @@ export const handleVerifyForgotPasswordOTP = async (userId: string, code: string
     };
   }
 
+  console.log(`🔍 Searching for forgot password OTP:`, {
+    userId,
+    purpose: "forgot_password",
+    isUsed: false,
+    providedCode: normalizedCode,
+  });
+
   // Find the latest forgot password OTP
   const otpRecord = await OTPModel.findOne({
     userId,
@@ -492,7 +507,25 @@ export const handleVerifyForgotPasswordOTP = async (userId: string, code: string
     isUsed: false,
   }).sort({ createdAt: -1 });
 
+  console.log(`📝 OTP search result:`, otpRecord ? {
+    found: true,
+    otpId: otpRecord._id,
+    userId: otpRecord.userId,
+    purpose: otpRecord.purpose,
+    isUsed: otpRecord.isUsed,
+    expiresAt: otpRecord.expiresAt,
+    storedOtp: otpRecord.otp,
+  } : { found: false });
+
   if (!otpRecord) {
+    // Check if there are ANY OTPs for this user
+    const anyOtps = await OTPModel.find({ userId }).sort({ createdAt: -1 }).limit(3);
+    console.log(`🔍 All OTPs for user ${userId}:`, anyOtps.map(o => ({
+      purpose: o.purpose,
+      isUsed: o.isUsed,
+      expiresAt: o.expiresAt,
+      createdAt: (o as any).createdAt,
+    })));
     throw new Error("No OTP found. Please request a new OTP.");
   }
 

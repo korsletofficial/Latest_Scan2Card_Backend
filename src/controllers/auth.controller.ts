@@ -72,17 +72,17 @@ export const register = async (req: Request, res: Response) => {
 // Login user
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, phoneNumber, password } = req.body;
 
-    // Validation
-    if (!email || !password) {
+    // Validation - at least one of email or phoneNumber must be provided
+    if ((!email && !phoneNumber) || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required",
+        message: "Email or phone number and password are required",
       });
     }
 
-    const result = await authService.loginUser({ email, password });
+    const result = await authService.loginUser({ email, phoneNumber, password });
 
     res.status(200).json({
       success: true,
@@ -258,6 +258,12 @@ export const forgotPassword = async (req: Request, res: Response) => {
 export const resetPasswordWithOTP = async (req: Request, res: Response) => {
   try {
     const { userId, otp, newPassword } = req.body;
+
+    console.log("Reset password request received:", {
+      userId,
+      otpLength: otp?.length,
+      hasNewPassword: !!newPassword
+    });
 
     // Validation
     if (!userId || !otp || !newPassword) {

@@ -23,15 +23,22 @@ export const getTeamMeetings = async (req: AuthRequest, res: Response) => {
 export const getAllLeadsForManager = async (req: AuthRequest, res: Response) => {
   try {
     const teamManagerId = req.user?.userId;
-    const { eventId, memberId } = req.query;
+    const { eventId, memberId, page = 1, limit = 10, search = "" } = req.query;
 
-    const leads = await teamManagerService.getAllLeadsForManager(
+    const result = await teamManagerService.getAllLeadsForManager(
       teamManagerId!,
       eventId as string,
-      memberId as string
+      memberId as string,
+      Number(page),
+      Number(limit),
+      search as string
     );
 
-    res.status(200).json({ success: true, data: leads });
+    res.status(200).json({
+      success: true,
+      data: result.leads,
+      pagination: result.pagination,
+    });
   } catch (error: any) {
     console.error("❌ Get all manager leads error:", error);
     res.status(500).json({

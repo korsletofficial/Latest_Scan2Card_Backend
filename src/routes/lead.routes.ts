@@ -24,9 +24,9 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication and ENDUSER or EXHIBITOR role
+// All routes require authentication and ENDUSER, EXHIBITOR or TEAMMANAGER role
 router.use(authenticateToken);
-router.use(authorizeRoles("ENDUSER", "EXHIBITOR"));
+router.use(authorizeRoles("ENDUSER", "EXHIBITOR", "TEAMMANAGER"));
 
 // Business card scanning routes - High limit for rapid scanning (150/min per user)
 router.post("/scan-card", scanLimiter, scanCard);
