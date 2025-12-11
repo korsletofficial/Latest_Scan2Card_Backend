@@ -1,16 +1,8 @@
-import OpenAI from "openai";
-
-// Lazy initialization of OpenAI client
-let openaiClient: OpenAI | null = null;
-
-const getOpenAIClient = (): OpenAI => {
-  if (!openaiClient) {
-    openaiClient = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-  }
-  return openaiClient;
-};
+import { extractBusinessCardWithFallback } from "./ocrWithFallback.service";
+import fs from "fs";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
+import axios from "axios";
 
 // Interface for extracted business card data
 export interface BusinessCardData {
@@ -34,6 +26,7 @@ export interface ScanResult {
     ocrText: string;
     details: BusinessCardData;
     confidence: number;
+    processingMethod: "image_vision_api" | "ocr_text_analysis";
   };
   error?: string;
 }
@@ -42,7 +35,6 @@ export interface ScanResult {
  * Validates if the image is in base64 format
  */
 export const isValidBase64Image = (imageData: string): boolean => {
-  // Check if it's a data URL or just base64
   const base64Regex = /^data:image\/(jpeg|jpg|png|webp);base64,/;
   return base64Regex.test(imageData) || /^[A-Za-z0-9+/=]+$/.test(imageData);
 };
@@ -51,12 +43,9 @@ export const isValidBase64Image = (imageData: string): boolean => {
  * Ensures the image has the proper data URL prefix
  */
 export const formatImageDataUrl = (imageData: string): string => {
-  // If it already has the data URL prefix, return as is
   if (imageData.startsWith("data:image/")) {
     return imageData;
   }
-
-  // Otherwise, assume it's JPEG and add the prefix
   return `data:image/jpeg;base64,${imageData}`;
 };
 
@@ -72,210 +61,312 @@ const isValidEmail = (email: string): boolean => {
  * Cleans and formats phone number
  */
 const formatPhoneNumber = (phone: string): string => {
-  // Remove all non-numeric characters except + at the start
   let cleaned = phone.replace(/[^\d+]/g, "");
-
-  // Ensure + is only at the start
   if (cleaned.includes("+")) {
     cleaned = "+" + cleaned.replace(/\+/g, "");
   }
-
   return cleaned;
 };
 
 /**
- * Validates and cleans extracted data
+ * Validates and cleans extracted data; always returns all keys with empty strings when missing.
  */
 const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
-  const cleaned: BusinessCardData = {};
+  const cleaned: BusinessCardData = {
+    firstName: "",
+    lastName: "",
+    company: "",
+    position: "",
+    email: "",
+    phoneNumber: "",
+    website: "",
+    address: "",
+    city: "",
+    country: "",
+    notes: "",
+  };
 
-  // Clean and validate each field
-  if (data.firstName) cleaned.firstName = data.firstName.trim();
-  if (data.lastName) cleaned.lastName = data.lastName.trim();
-  if (data.company) cleaned.company = data.company.trim();
-  if (data.position) cleaned.position = data.position.trim();
+  if (data.firstName && data.firstName.trim()) cleaned.firstName = data.firstName.trim();
+  if (data.lastName && data.lastName.trim()) cleaned.lastName = data.lastName.trim();
+  if (data.company && data.company.trim()) cleaned.company = data.company.trim();
+  if (data.position && data.position.trim()) cleaned.position = data.position.trim();
 
-  // Validate email
-  if (data.email && isValidEmail(data.email.trim())) {
+  if (data.email && data.email.trim() && isValidEmail(data.email.trim())) {
     cleaned.email = data.email.trim().toLowerCase();
   }
 
-  // Format phone number
-  if (data.phoneNumber) {
+  if (data.phoneNumber && data.phoneNumber.trim()) {
     cleaned.phoneNumber = formatPhoneNumber(data.phoneNumber);
   }
 
-  // Clean website URL
-  if (data.website) {
+  if (data.website && data.website.trim()) {
     let website = data.website.trim().toLowerCase();
-    // Add https:// if no protocol specified
     if (!website.startsWith("http://") && !website.startsWith("https://")) {
       website = "https://" + website;
     }
     cleaned.website = website;
   }
 
-  if (data.address) cleaned.address = data.address.trim();
-  if (data.city) cleaned.city = data.city.trim();
-  if (data.country) cleaned.country = data.country.trim();
-  if (data.notes) cleaned.notes = data.notes.trim();
+  if (data.address && data.address.trim()) cleaned.address = data.address.trim();
+  if (data.city && data.city.trim()) cleaned.city = data.city.trim();
+  if (data.country && data.country.trim()) cleaned.country = data.country.trim();
+  if (data.notes && data.notes.trim()) cleaned.notes = data.notes.trim();
 
   return cleaned;
 };
 
 /**
- * Scans a business card image using OpenAI Vision API
- * @param imageBase64 - Base64 encoded image string (with or without data URL prefix)
- * @returns Scan result with extracted data
+ * Prompt for analyzing OCR-extracted text
  */
-export const scanBusinessCard = async (imageBase64: string): Promise<ScanResult> => {
-  try {
-    // Validate API key
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("❌ OPENAI_API_KEY not configured");
-      return {
-        success: false,
-        error: "OpenAI API key not configured. Please set OPENAI_API_KEY in environment variables.",
-      };
-    }
+const getOCRTextAnalysisPrompt = (): string => {
+  return `You are an expert at parsing OCR-extracted text from business cards and converting it into structured JSON format.
 
-    // Validate image format
-    if (!isValidBase64Image(imageBase64)) {
-      return {
-        success: false,
-        error: "Invalid image format. Please provide a valid base64 encoded image.",
-      };
-    }
+CRITICAL INSTRUCTIONS:
+1. The text below is raw OCR output which may contain:
+   - Mixed languages (English + Hindi/Chinese/Arabic/etc)
+   - OCR artifacts and errors
+   - Scattered formatting
 
-    // Format image data URL
-    const imageDataUrl = formatImageDataUrl(imageBase64);
+2. ALWAYS translate ALL non-English text to English before putting in JSON:
+   - Hindi text like "मशीनरी स्टोर" → "Machinery Store"
+   - Chinese text should be transliterated/translated to English
+   - Arabic text should be translated to English
 
-    console.log("🔍 Scanning business card with OpenAI Vision API...");
+3. Extract and clean the following fields (remove extra spaces/artifacts):
+   - firstName: First name (translate if in other language)
+   - lastName: Last name (translate if in other language)
+   - company: Company/business name (MUST translate to English)
+   - position: Job title/role (translate if in other language)
+   - email: Email address (usually contains @)
+   - phoneNumber: Phone number (keep digits and country codes like +91)
+   - website: Website URL (usually starts with http/www)
+   - address: Street address (translate if in other language)
+   - city: City name (translate if in other language)
+   - country: Country name (translate to English)
 
-    // Get OpenAI client and call Vision API
-    const openai = getOpenAIClient();
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
+4. OCR Quality Tips:
+   - If you see repeated characters or garbled text, try to interpret the intended word
+   - Phone numbers might be separated by spaces/dashes - remove them and keep digits
+   - Addresses often span multiple lines - combine them into single string
+   - Company names are usually prominent - look for capitalized words
+
+5. Output Format:
+   - ONLY valid JSON, no markdown, no extra text
+   - All empty fields must be empty strings ""
+   - All text must be in English (translated)
+
+OCR Text to Parse:
+`;
+};
+
+/**
+ * Analyzes OCR-extracted text using Gemini/OpenAI with fallback
+ */
+const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+  if (!GEMINI_API_KEY && !OPENAI_API_KEY) {
+    throw new Error("Neither GEMINI_API_KEY nor OPENAI_API_KEY configured");
+  }
+
+  const prompt = getOCRTextAnalysisPrompt();
+
+  // Try Gemini first
+  if (GEMINI_API_KEY) {
+    try {
+      console.log("🔍 Analyzing OCR text with Gemini...");
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+      const res = await axios.post(
+        url,
         {
-          role: "user",
-          content: [
+          contents: [
             {
-              type: "text",
-              text: `Analyze this business card image and extract all visible information.
-
-Please extract the following fields if they are present on the card:
-- firstName: First name of the person
-- lastName: Last name of the person
-- company: Company/organization name
-- position: Job title or position
-- email: Email address
-- phoneNumber: Phone number (with country code if visible)
-- website: Website URL
-- address: Street address
-- city: City name
-- country: Country name
-
-Return the data in valid JSON format with only the fields that are found on the card. Use null for missing fields. Do not make assumptions or add data that is not visible on the card.
-
-Example format:
-{
-  "firstName": "John",
-  "lastName": "Doe",
-  "company": "Tech Corp",
-  "position": "CEO",
-  "email": "john@techcorp.com",
-  "phoneNumber": "+1234567890",
-  "website": "www.techcorp.com",
-  "address": "123 Tech Street",
-  "city": "San Francisco",
-  "country": "USA"
-}
-
-Return ONLY the JSON object, no additional text.`,
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: imageDataUrl,
-              },
+              parts: [
+                {
+                  text: prompt + ocrText,
+                },
+              ],
             },
           ],
+          generationConfig: { temperature: 0.0, maxOutputTokens: 2048 },
         },
-      ],
-      max_tokens: 1000,
-      temperature: 0.1, // Low temperature for more consistent extraction
-    });
+        {
+          headers: { "Content-Type": "application/json" },
+          timeout: 30000,
+        }
+      );
 
-    // Extract the response
-    const messageContent = response.choices[0]?.message?.content;
-
-    if (!messageContent) {
-      return {
-        success: false,
-        error: "No response from OpenAI API",
-      };
-    }
-
-    console.log("✅ OpenAI API response received");
-
-    // Parse the JSON response
-    let extractedData: BusinessCardData;
-    try {
-      // Try to extract JSON from the response (in case there's extra text)
-      const jsonMatch = messageContent.match(/\{[\s\S]*\}/);
+      const text = res?.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        extractedData = JSON.parse(jsonMatch[0]);
-      } else {
-        extractedData = JSON.parse(messageContent);
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log("✅ Gemini OCR analysis succeeded");
+        return parsed;
       }
-    } catch (parseError) {
-      console.error("❌ Failed to parse OpenAI response:", messageContent);
+    } catch (err) {
+      console.warn("⚠️ Gemini OCR analysis failed:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Fallback to OpenAI
+  if (OPENAI_API_KEY) {
+    try {
+      console.log("🔍 Analyzing OCR text with OpenAI (fallback)...");
+      const url = "https://api.openai.com/v1/chat/completions";
+
+      const res = await axios.post(
+        url,
+        {
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: prompt,
+            },
+            {
+              role: "user",
+              content: ocrText,
+            },
+          ],
+          temperature: 0.0,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+          },
+          timeout: 30000,
+        }
+      );
+
+      const text = res?.data?.choices?.[0]?.message?.content ?? "";
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log("✅ OpenAI OCR analysis succeeded");
+        return parsed;
+      }
+    } catch (err) {
+      console.warn("⚠️ OpenAI OCR analysis failed:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  console.warn("⚠️ OCR analysis returned no data");
+  return {};
+};
+
+/**
+ * Saves base64 encoded image to a temporary file
+ */
+const saveBase64ToTempFile = (imageBase64: string): string => {
+  let base64Data = imageBase64;
+  if (imageBase64.startsWith("data:image/")) {
+    base64Data = imageBase64.split(",")[1];
+  }
+
+  const tempDir = path.join(process.cwd(), "temp");
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+
+  const filename = `${uuidv4()}.jpg`;
+  const filepath = path.join(tempDir, filename);
+  fs.writeFileSync(filepath, base64Data, "base64");
+
+  return filepath;
+};
+
+/**
+ * Scans a business card - can accept either image (base64) or OCR text
+ * @param imageBase64OrOCRText - Either base64 encoded image OR OCR text string
+ * @param isOCRText - Set to true if input is OCR text, false/undefined for image
+ * @returns Scan result with extracted data
+ */
+export const scanBusinessCard = async (
+  imageBase64OrOCRText: string,
+  isOCRText: boolean = false
+): Promise<ScanResult> => {
+  let tempFilePath: string | null = null;
+
+  try {
+    if (!process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) {
+      console.error("❌ Neither GEMINI_API_KEY nor OPENAI_API_KEY configured");
       return {
         success: false,
-        error: "Failed to parse extracted data from business card",
+        error: "Vision API keys not configured. Please set GEMINI_API_KEY or OPENAI_API_KEY in environment variables.",
       };
     }
 
-    // Validate and clean the extracted data
+    let extractedData: BusinessCardData;
+    let processingMethod: "image_vision_api" | "ocr_text_analysis";
+
+    if (isOCRText) {
+      console.log("🔍 Processing business card from OCR text...");
+      extractedData = await analyzeOCRText(imageBase64OrOCRText);
+      processingMethod = "ocr_text_analysis";
+      console.log(`✅ OCR text analyzed successfully. Extracted ${Object.keys(extractedData).length} fields.`);
+    } else {
+      if (!isValidBase64Image(imageBase64OrOCRText)) {
+        return {
+          success: false,
+          error: "Invalid image format. Please provide a valid base64 encoded image.",
+        };
+      }
+
+      console.log("🔍 Scanning business card from image using Vision API...");
+      tempFilePath = saveBase64ToTempFile(imageBase64OrOCRText);
+      extractedData = await extractBusinessCardWithFallback(tempFilePath);
+      processingMethod = "image_vision_api";
+
+      const totalFields = Object.keys(extractedData).filter(
+        (key) => extractedData[key as keyof BusinessCardData] &&
+                 extractedData[key as keyof BusinessCardData]!.toString().trim() !== ""
+      ).length;
+      console.log(`✅ Business card scanned successfully. Extracted ${totalFields} fields.`);
+    }
+
     const cleanedData = validateAndCleanData(extractedData);
 
-    // Calculate confidence based on number of fields extracted
-    const totalFields = Object.keys(cleanedData).length;
-    const confidence = Math.min(totalFields / 6, 1); // Normalize to 0-1 (6 key fields expected)
-
-    console.log(`✅ Business card scanned successfully. Extracted ${totalFields} fields.`);
+    const totalFields = Object.keys(cleanedData).filter(
+      (key) => cleanedData[key as keyof BusinessCardData] &&
+               cleanedData[key as keyof BusinessCardData]!.toString().trim() !== ""
+    ).length;
+    const confidence = Math.min(totalFields / 6, 1);
 
     return {
       success: true,
       data: {
-        ocrText: messageContent, // Store raw response for reference
+        ocrText: isOCRText ? imageBase64OrOCRText : JSON.stringify(extractedData),
         details: cleanedData,
         confidence: parseFloat(confidence.toFixed(2)),
+        processingMethod,
       },
     };
   } catch (error: any) {
     console.error("❌ Error scanning business card:", error);
 
-    // Handle specific OpenAI API errors
     if (error.code === "invalid_api_key") {
       return {
         success: false,
-        error: "Invalid OpenAI API key",
+        error: "Invalid API key",
       };
     }
 
     if (error.code === "rate_limit_exceeded") {
       return {
         success: false,
-        error: "OpenAI API rate limit exceeded. Please try again later.",
+        error: "API rate limit exceeded. Please try again later.",
       };
     }
 
     if (error.code === "insufficient_quota") {
       return {
         success: false,
-        error: "OpenAI API quota exceeded. Please check your billing.",
+        error: "API quota exceeded. Please check your billing.",
       };
     }
 
@@ -283,6 +374,15 @@ Return ONLY the JSON object, no additional text.`,
       success: false,
       error: error.message || "Failed to scan business card",
     };
+  } finally {
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+        console.log("🗑️ Cleaned up temporary file");
+      } catch (cleanupError) {
+        console.warn("⚠️ Failed to clean up temporary file:", cleanupError);
+      }
+    }
   }
 };
 

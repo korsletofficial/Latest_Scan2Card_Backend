@@ -1,9 +1,9 @@
 {
 	"info": {
 		"name": "Scan2Card API Collection",
-		"description": "Complete API collection for Scan2Card backend application with Firebase Cloud Messaging support and unified OTP verification",
+		"description": "Complete API collection for Scan2Card backend application with Firebase Cloud Messaging support",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"version": "2.0.0"
+		"version": "2.2.0"
 	},
 	"variable": [
 		{
@@ -134,7 +134,7 @@
 					}
 				},
 				{
-					"name": "Verify OTP Unified (NEW)",
+					"name": "Verify OTP",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -145,36 +145,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\",\n  \"type\": \"login\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/auth/verify-otp-unified",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "verify-otp-unified"]
-						},
-						"description": "**NEW UNIFIED OTP VERIFICATION ENDPOINT**\n\nSingle endpoint that handles all OTP verification types. Replaces separate /verify-otp, /verify-user, and forgot password OTP verification.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID to verify\n- `otp` (required, string): 6-digit OTP code\n- `type` (required, string): Verification type - \"login\" | \"verification\" | \"forgot_password\"\n\n**Type: login (2FA)**\nFor users with 2FA enabled after password authentication.\n\n**Example Request:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"login\"\n}\n```\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"2FA verification successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1...\",\n    \"expiresIn\": \"24h\",\n    \"user\": { ... }\n  }\n}\n```\n\n**Type: verification**\nFor verifying newly registered users.\n\n**Example Request:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"verification\"\n}\n```\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"User verified successfully\",\n  \"data\": {\n    \"userId\": \"507f1f77bcf86cd799439011\",\n    \"isVerified\": true\n  }\n}\n```\n\n**Type: forgot_password**\nStep 2 of password reset flow. Returns verification token for password update.\n\n**Example Request:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"forgot_password\"\n}\n```\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"OTP verified. You may now reset your password\",\n  \"data\": {\n    \"userId\": \"507f1f77bcf86cd799439011\",\n    \"verificationToken\": \"eyJhbGciOiJIUzI1...\"\n  }\n}\n```\n\n**Rate Limiting (Type-Aware):**\n- login/verification: 10 attempts per 15 minutes\n- forgot_password: 3 attempts per hour\n- Separate counters per type per email/userId\n\n**Development Mode:**\n- Test OTP: 000000 (when USE_DUMMY_OTP=true)\n- Master OTP works for all types\n\n**Security Features:**\n- OTP expires after 10 minutes\n- Single-use only (marked as used after verification)\n- Type-specific rate limiting\n- Verification token (for forgot_password) expires in 10 minutes\n\n**Error Responses:**\n- 400: Missing required fields or invalid type\n- 400: Invalid/expired/used OTP\n- 429: Rate limit exceeded\n\n**Next Steps:**\n- login: Use returned tokens for authenticated requests\n- verification: User account is now verified\n- forgot_password: Use verificationToken in /reset-password-new endpoint"
-					}
-				},
-				{
-					"name": "Verify OTP (Legacy - Deprecated)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\"\n}"
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\",\n  \"type\": \"verification\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/verify-otp",
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "verify-otp"]
 						},
-						"description": "⚠️ DEPRECATED: Use /verify-otp-unified with type=\"login\" instead.\n\nVerify OTP for 2FA enabled accounts (Test OTP: 000000)\n\nThis endpoint remains for backward compatibility but will be removed in a future version. Please migrate to the new unified endpoint."
+						"description": "**Unified OTP Verification Endpoint**\n\nSingle endpoint for all OTP verification types. Supports optional `type` parameter.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID to verify\n- `otp` (required, string): 6-digit OTP code\n- `type` (optional, string): Verification type - \"login\" | \"verification\" | \"forgot_password\"\n  - Defaults to \"login\" if not provided (backward compatible)\n\n**Usage Examples:**\n\n**1. User Verification (after registration):**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"verification\"\n}\n```\n**Response:** Returns JWT tokens (token, refreshToken) and user data - user is now logged in automatically after verification\n```json\n{\n  \"success\": true,\n  \"message\": \"User verified successfully\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"expiresIn\": \"24h\",\n    \"user\": { \"_id\": \"...\", \"email\": \"...\", \"role\": \"...\", \"isVerified\": true }\n  }\n}\n```\n\n**2. Login 2FA:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"login\"\n}\n```\n**Response:** Returns JWT tokens (token, refreshToken) and user data for authentication\n\n**3. Forgot Password (Step 2 of password reset flow):**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"forgot_password\"\n}\n```\n**Response:** Returns `verificationToken` (valid 10 minutes) to be used in Step 3\n```json\n{\n  \"success\": true,\n  \"message\": \"OTP verified. You may now reset your password\",\n  \"data\": {\n    \"userId\": \"507f1f77bcf86cd799439011\",\n    \"verificationToken\": \"eyJhbGciOiJIUzI1NiIs...\"\n  }\n}\n```\n**Next Step:** Use this `verificationToken` in `/reset-password` endpoint\n\n**4. Backward Compatible (defaults to login):**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\"\n}\n```\n**Response:** Same as type=\"login\"\n\n**Development Mode:**\n- Test OTP: 000000 (when USE_DUMMY_OTP=true)\n- Master OTP works for all types\n\n**Security Features:**\n- OTP expires after 10 minutes\n- Single-use only\n- Type-specific rate limiting\n- Verification token (for forgot_password) expires in 10 minutes\n\n**Rate Limiting:**\n- login/verification: 10 attempts per 15 minutes\n- forgot_password: 3 attempts per hour\n\n**Error Responses:**\n- 400: Missing required fields or invalid type\n- 400: Invalid/expired/used OTP\n- 429: Rate limit exceeded"
 					}
 				},
 				{
@@ -200,7 +178,7 @@
 					}
 				},
 				{
-					"name": "Verify User (Legacy - Deprecated)",
+					"name": "Verify User",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -218,7 +196,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "verify-user"]
 						},
-						"description": "⚠️ DEPRECATED: Use /verify-otp-unified with type=\"verification\" instead.\n\nVerify user with OTP. Sets isVerified to true. (Test OTP: 000000)\n\nThis endpoint remains for backward compatibility but will be removed in a future version. Please migrate to the new unified endpoint."
+						"description": "Verify user with OTP. Sets isVerified to true. (Test OTP: 000000)"
 					}
 				},
 				{
@@ -240,11 +218,11 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "forgot-password"]
 						},
-						"description": "Initiate password reset process for users who forgot their password.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `email` (required, string): User's registered email address\n\n**Process Flow:**\n1. System verifies email exists in database\n2. Generates OTP and sends via SMS to user's registered phone\n3. Returns userId needed for reset-password step\n4. OTP expires after 10 minutes\n\n**Rate Limiting:**\n- 5 requests per hour per email (otpSendResourceLimiter)\n- 500 requests per hour per IP (otpSendIPLimiter)\n\n**Response:**\n- Success: Returns userId and confirmation message\n- Error 400: Invalid email format\n- Error 404: Email not found in system\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- No actual SMS sent in development mode\n\n**Next Step:** Use returned userId with OTP in reset-password endpoint"
+						"description": "**Step 1 of Forgot Password Flow** - Initiate password reset and send OTP.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `email` (required, string): User's registered email address\n\n**Process Flow:**\n1. System verifies email exists in database\n2. Generates 6-digit OTP and sends via SMS to user's registered phone\n3. Returns userId needed for subsequent steps\n4. OTP expires after 10 minutes\n\n**Rate Limiting:**\n- 5 requests per hour per email (otpSendResourceLimiter)\n- 500 requests per hour per IP (otpSendIPLimiter)\n\n**Response:**\n- Success: Returns `userId` and confirmation message\n- Error 400: Invalid email format\n- Error 404: Email not found in system\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- No actual SMS sent in development mode\n\n**Next Steps:**\n1. **Step 2:** Call `/verify-otp` with `{ userId, otp, type: \"forgot_password\" }` to get `verificationToken`\n2. **Step 3:** Call `/reset-password` with `{ userId, verificationToken, newPassword }` to complete reset"
 					}
 				},
 				{
-					"name": "Reset Password (NEW - 2 Step Flow)",
+					"name": "Reset Password (Step 3 - Final)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -255,36 +233,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"verificationToken\": \"VERIFICATION_TOKEN_FROM_OTP_UNIFIED\",\n  \"newPassword\": \"NewPassword123\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/auth/reset-password-new",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "reset-password-new"]
-						},
-						"description": "**NEW PASSWORD RESET ENDPOINT - 2-Step Flow**\n\nStep 3 of the forgot password flow. Updates password using verification token (NO OTP required).\n\n**Authentication Required:** None (Public endpoint)\n\n**Prerequisites:**\n1. User requested password reset via /forgot-password (Step 1)\n2. User verified OTP via /verify-otp-unified with type=\"forgot_password\" (Step 2)\n3. User received verificationToken from Step 2\n\n**Request Body:**\n- `userId` (required, string): User ID from previous steps\n- `verificationToken` (required, string): JWT token from /verify-otp-unified response\n- `newPassword` (required, string): New password to set (minimum 6 characters)\n\n**Complete Flow Example:**\n\n**Step 1: Request OTP**\n```bash\nPOST /auth/forgot-password\n{\n  \"email\": \"user@example.com\"\n}\n# Response: { userId: \"...\" }\n```\n\n**Step 2: Verify OTP**\n```bash\nPOST /auth/verify-otp-unified\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"forgot_password\"\n}\n# Response: { userId: \"...\", verificationToken: \"eyJhbGc...\" }\n```\n\n**Step 3: Reset Password (THIS ENDPOINT)**\n```bash\nPOST /auth/reset-password-new\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"verificationToken\": \"eyJhbGc...\",\n  \"newPassword\": \"NewPassword123\"\n}\n# Response: { email: \"user@example.com\" }\n```\n\n**Password Requirements:**\n- Minimum 6 characters\n- Should contain mix of characters for security\n\n**Security Features:**\n- Verification token expires in 10 minutes\n- Single-use only (token invalidated after password reset)\n- Separate JWT secret for verification tokens\n- Token must match the userId\n- OTP must have been verified before token was issued\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"Password reset successfully\",\n  \"data\": {\n    \"email\": \"user@example.com\"\n  }\n}\n```\n\n**Error Responses:**\n- 400: Missing required fields\n- 400: Invalid or expired verification token (retry from Step 1)\n- 400: Verification token doesn't match user\n- 400: Password too short (minimum 6 characters)\n- 404: User not found\n- 429: Rate limit exceeded\n\n**Why This Design?**\nThis 2-step approach provides better security:\n1. OTP verification is separate from password update\n2. Short-lived verification token (10 min) prevents replay attacks\n3. User has limited time window to reset password after OTP verification\n4. Clear separation of concerns between verification and password update"
-					}
-				},
-				{
-					"name": "Reset Password (Legacy - Deprecated)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"otp\": \"000000\",\n  \"newPassword\": \"NewPassword123\"\n}"
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"verificationToken\": \"VERIFICATION_TOKEN_FROM_STEP_2\",\n  \"newPassword\": \"NewPassword123\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/reset-password",
 							"host": ["{{baseUrl}}"],
 							"path": ["auth", "reset-password"]
 						},
-						"description": "⚠️ DEPRECATED: Use the new 2-step flow instead:\n1. /forgot-password\n2. /verify-otp-unified (type=\"forgot_password\")\n3. /reset-password-new\n\nComplete password reset process with OTP verification.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID returned from forgot-password endpoint\n- `otp` (required, string): 6-digit OTP received via SMS\n- `newPassword` (required, string): New password to set for the account\n\n**Process Flow:**\n1. Verifies OTP matches and hasn't expired (10-minute validity)\n2. Validates new password meets security requirements\n3. Updates user password in database\n4. Invalidates used OTP\n5. Returns success confirmation\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n- Cannot be same as previous password\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n- Success: Returns success message confirming password reset\n- Error 400: Invalid or expired OTP, or password requirements not met\n- Error 404: User not found\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- Useful for testing without SMS integration\n\n**Security Notes:**\n- OTP can only be used once\n- Each OTP expires after 10 minutes\n- Failed attempts count towards rate limiting\n\nThis endpoint remains for backward compatibility but will be removed in a future version. Please migrate to the new 2-step flow for better security."
+						"description": "**Step 3 of Forgot Password Flow** - Complete password reset with verification token.\n\n**Authentication Required:** None (Public endpoint)\n\n**Complete Forgot Password Flow:**\n1. **Step 1:** POST `/forgot-password` with `{ email }` → Sends OTP, returns `userId`\n2. **Step 2:** POST `/verify-otp` with `{ userId, otp, type: \"forgot_password\" }` → Returns `verificationToken` (10-min validity)\n3. **Step 3:** POST `/reset-password` with `{ userId, verificationToken, newPassword }` → Resets password ✅\n\n**Request Body:**\n- `userId` (required, string): User ID from Step 1\n- `verificationToken` (required, string): Verification token received from Step 2 after OTP verification\n- `newPassword` (required, string): New password to set (minimum 6 characters)\n\n**Process:**\n1. Validates verification token (JWT with 10-minute expiry)\n2. Ensures token hasn't been used for password reset already\n3. Validates new password meets security requirements\n4. Updates user password in database\n5. Expires the verification token (one-time use)\n6. Returns success confirmation\n\n**Password Requirements:**\n- Minimum 6 characters\n- Should contain a mix of characters for security\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n- Success: `{ success: true, message: \"Password reset successfully\", data: { email } }`\n- Error 400: Invalid/expired verification token, or password requirements not met\n- Error 404: User not found\n- Error 429: Rate limit exceeded\n\n**Security Notes:**\n- Verification token expires after 10 minutes\n- Token can only be used once\n- Separate from OTP - provides additional security layer\n- Failed attempts count towards rate limiting"
 					}
 				},
 				{
@@ -1123,15 +1079,89 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRg...\"\n}"
+							"raw": "{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRg...\",\n  \"isOCRText\": false\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/scan-card",
 							"host": ["{{baseUrl}}"],
 							"path": ["leads", "scan-card"]
 						},
-						"description": "Scan a business card image using OpenAI Vision API to extract contact information. Returns structured data that can be used to create a lead.\n\n**Request Body:**\n- `image` (required, string): Base64-encoded image data with data URI prefix\n  - Format: `data:image/jpeg;base64,<base64_string>`\n  - Supported formats: JPEG, PNG, WebP\n  - Max size: 20MB\n\n**Response:**\nReturns extracted contact information:\n- firstName, lastName\n- company, position, department\n- email, phoneNumber, mobile\n- website, address, streetName, city, country\n- title, uniqueCode\n\n**Note:** The following fields are NOT supported and will not be returned:\n- fax\n- zipCode\n- notes"
-					}
+						"description": "Scan a business card using either image or OCR text to extract contact information. Supports both image-based vision API processing and direct OCR text analysis.\n\n**Request Body Options:**\n\n1. **Image Processing (default):**\n   - `image` (required, string): Base64-encoded image data with data URI prefix\n     - Format: `data:image/jpeg;base64,<base64_string>`\n     - Supported formats: JPEG, PNG, WebP\n     - Max size: 20MB\n   - `isOCRText` (optional, boolean): Set to `false` or omit for image processing\n\n2. **OCR Text Processing:**\n   - `ocrText` (required, string): Raw OCR-extracted text from business card\n   - `isOCRText` (required, boolean): Set to `true` for OCR text processing\n\n**Processing Flow:**\n- **Image Mode:** Uses Gemini 2.5 Flash or OpenAI GPT-4o Mini Vision API to analyze image and extract structured data\n- **OCR Mode:** Uses Gemini or OpenAI GPT-4o Mini to parse raw OCR text and convert to structured JSON\n\n**Response:**\nReturns extracted contact information with ALL fields present (empty strings for missing data):\n- firstName, lastName\n- company, position\n- email, phoneNumber\n- website, address, city, country\n- notes\n\n**Note:** The following fields are NOT supported and will not be returned:\n- fax\n- zipCode\n- department\n- mobile\n- streetName\n- title\n- uniqueCode"
+					},
+					"response": [
+						{
+							"name": "Image Scan Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRg...\",\n  \"isOCRText\": false\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/leads/scan-card",
+									"host": ["{{baseUrl}}"],
+									"path": ["leads", "scan-card"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"ocrText\": \"{\\\"firstName\\\":\\\"John\\\",\\\"lastName\\\":\\\"Doe\\\",\\\"company\\\":\\\"Tech Corp\\\",\\\"position\\\":\\\"CEO\\\",\\\"email\\\":\\\"john.doe@example.com\\\",\\\"phoneNumber\\\":\\\"+1234567890\\\",\\\"website\\\":\\\"https://techcorp.com\\\",\\\"address\\\":\\\"123 Business St\\\",\\\"city\\\":\\\"New York\\\",\\\"country\\\":\\\"USA\\\",\\\"notes\\\":\\\"\\\"}\",\n        \"details\": {\n            \"firstName\": \"John\",\n            \"lastName\": \"Doe\",\n            \"company\": \"Tech Corp\",\n            \"position\": \"CEO\",\n            \"email\": \"john.doe@example.com\",\n            \"phoneNumber\": \"+1234567890\",\n            \"website\": \"https://techcorp.com\",\n            \"address\": \"123 Business St\",\n            \"city\": \"New York\",\n            \"country\": \"USA\",\n            \"notes\": \"\"\n        },\n        \"confidence\": 0.83,\n        \"processingMethod\": \"image_vision_api\"\n    }\n}"
+						},
+						{
+							"name": "OCR Text Scan Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{authToken}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"ocrText\": \"John Doe\\nCEO\\nTech Corp\\njohn.doe@example.com\\n+1234567890\\nhttps://techcorp.com\\n123 Business St, New York, USA\",\n  \"isOCRText\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/leads/scan-card",
+									"host": ["{{baseUrl}}"],
+									"path": ["leads", "scan-card"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"ocrText\": \"John Doe\\nCEO\\nTech Corp\\njohn.doe@example.com\\n+1234567890\\nhttps://techcorp.com\\n123 Business St, New York, USA\",\n        \"details\": {\n            \"firstName\": \"John\",\n            \"lastName\": \"Doe\",\n            \"company\": \"Tech Corp\",\n            \"position\": \"CEO\",\n            \"email\": \"john.doe@example.com\",\n            \"phoneNumber\": \"+1234567890\",\n            \"website\": \"https://techcorp.com\",\n            \"address\": \"123 Business St\",\n            \"city\": \"New York\",\n            \"country\": \"USA\",\n            \"notes\": \"\"\n        },\n        \"confidence\": 0.83,\n        \"processingMethod\": \"ocr_text_analysis\"\n    }\n}"
+						}
+					]
 				},
 				{
 					"name": "Scan QR Code",

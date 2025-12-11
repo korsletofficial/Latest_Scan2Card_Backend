@@ -20,6 +20,8 @@ interface GetMeetingsFilter {
   meetingMode?: string;
   page?: number;
   limit?: number;
+  sortBy?: "startAt" | "createdAt";
+  sortOrder?: "asc" | "desc";
 }
 
 interface UpdateMeetingData {
@@ -78,6 +80,8 @@ export const getMeetings = async (filter: GetMeetingsFilter) => {
     meetingMode,
     page = 1,
     limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
   } = filter;
 
   // Build filter query
@@ -95,10 +99,14 @@ export const getMeetings = async (filter: GetMeetingsFilter) => {
     query.meetingMode = meetingMode;
   }
 
+  // Build sort object
+  const sortField = sortBy === "startAt" ? "startAt" : "createdAt";
+  const sortDirection = sortOrder === "asc" ? 1 : -1;
+
   const options = {
     page: Number(page),
     limit: Number(limit),
-    sort: { startAt: 1 }, // Ascending order (earliest first)
+    sort: { [sortField]: sortDirection },
     populate: [
       {
         path: "leadId",

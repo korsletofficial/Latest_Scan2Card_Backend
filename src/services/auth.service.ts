@@ -3,6 +3,17 @@ import jwt from "jsonwebtoken";
 import { connectToMongooseDatabase } from "../config/db.config";
 import UserModel, { IUser } from "../models/user.model";
 import RoleModel from "../models/role.model";
+// OTP-related services
+import OTPModel from "../models/otp.model";
+import {
+  handleSendLoginOTP,
+  handleVerifyLoginOTP,
+  handleSendVerificationCode,
+  handleCheckVerificationCode,
+  handleSendForgotPasswordOTP,
+  handleVerifyForgotPasswordOTP,
+  handleUnifiedOTPVerification,
+} from "../helpers/otp.helper";
 
 export interface RegisterUserDTO {
   firstName: string;
@@ -240,17 +251,6 @@ export const getUserById = async (userId: string) => {
   };
 };
 
-// OTP-related services
-import OTPModel from "../models/otp.model";
-import {
-  handleSendLoginOTP,
-  handleVerifyLoginOTP,
-  handleSendVerificationCode,
-  handleCheckVerificationCode,
-  handleSendForgotPasswordOTP,
-  handleVerifyForgotPasswordOTP,
-  handleUnifiedOTPVerification,
-} from "../helpers/otp.helper";
 
 // Verify Login OTP
 export const verifyLoginOTP = async (userId: string, otp: string) => {
@@ -550,11 +550,72 @@ export const verifyOTPUnified = async (
       };
     }
 
-    case "verification":
+    case "verification": {
+      // Generate JWT tokens for verification (same as login)
+      const user = await UserModel.findById(userId).populate("role");
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const jwtSecret = process.env.JWT_SECRET;
+      const refreshSecret = process.env.JWT_REFRESH_SECRET || "scan2card_refresh_secret";
+      if (!jwtSecret) {
+        throw new Error("JWT_SECRET not configured");
+      }
+
+      // Generate access token
+      const token = jwt.sign(
+        {
+          userId: user._id.toString(),
+          email: user.email,
+          role: (user.role as any).name,
+        },
+        jwtSecret,
+        {
+          expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h") as any,
+        }
+      );
+
+      // Generate refresh token
+      const refreshToken = jwt.sign(
+        {
+          userId: user._id.toString(),
+          type: 'refresh',
+        },
+        refreshSecret,
+        {
+          expiresIn: (process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || "7d") as any,
+        }
+      );
+
+      // Calculate refresh token expiry date
+      const refreshTokenExpiry = new Date();
+      const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace('d', '') || '7');
+      refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + expiryDays);
+
+      // Store refresh token in database
+      user.refreshToken = refreshToken;
+      user.refreshTokenExpiry = refreshTokenExpiry;
+      await user.save();
+
       return {
-        userId: verification.userId,
-        isVerified: verification.isVerified,
+        token,
+        refreshToken,
+        expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h",
+        user: {
+          _id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: (user.role as any).name,
+          companyName: user.companyName,
+          twoFactorEnabled: user.twoFactorEnabled,
+          isVerified: user.isVerified,
+          profileImage: user.profileImage || null,
+        },
       };
+    }
 
     case "forgot_password":
       return {

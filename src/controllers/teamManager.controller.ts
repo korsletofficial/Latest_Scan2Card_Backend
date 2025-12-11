@@ -6,10 +6,26 @@ import * as teamManagerService from "../services/teamManager.service";
 export const getTeamMeetings = async (req: AuthRequest, res: Response) => {
   try {
     const teamManagerId = req.user?.userId;
+    const {
+      page = 1,
+      limit = 10,
+      sortBy,
+      sortOrder,
+    } = req.query;
 
-    const meetings = await teamManagerService.getTeamMeetings(teamManagerId!);
+    const result = await teamManagerService.getTeamMeetings(
+      teamManagerId!,
+      Number(page),
+      Number(limit),
+      sortBy as 'startAt' | 'createdAt' | undefined,
+      sortOrder as 'asc' | 'desc' | undefined
+    );
 
-    res.status(200).json({ success: true, data: meetings });
+    res.status(200).json({
+      success: true,
+      data: result.meetings,
+      pagination: result.pagination,
+    });
   } catch (error: any) {
     console.error("❌ Get team meetings error:", error);
     res.status(500).json({

@@ -9,28 +9,38 @@ import { sanitizeEmptyStrings } from '../utils/sanitize.util';
 // Scan Business Card
 export const scanCard = async (req: AuthRequest, res: Response) => {
   try {
-    const { image } = req.body;
+    const { image, ocrText } = req.body;
 
-    // Validation
-    if (!image) {
+    // Validation - require either image or ocrText
+    if (!image && !ocrText) {
       return res.status(400).json({
         success: false,
-        message: "Image is required. Please provide a base64 encoded business card image.",
+        message: "Either 'image' (base64) or 'ocrText' (string) is required for business card scanning.",
       });
     }
 
-    // Validate image is not empty
-    if (typeof image !== "string" || image.length === 0) {
+    if (image && typeof image !== "string") {
       return res.status(400).json({
         success: false,
-        message: "Invalid image data",
+        message: "Invalid image data - must be a base64 encoded string",
       });
     }
 
-    console.log("📸 Scanning business card for user:", req.user?.userId);
+    if (ocrText && typeof ocrText !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OCR text - must be a string",
+      });
+    }
 
-    // Scan the business card using OpenAI
-    const scanResult = await scanBusinessCard(image);
+    console.log(`📸 Scanning business card for user: ${req.user?.userId} (${ocrText ? "OCR text" : "image"})`);
+
+    // Determine processing method
+    const isProcessingOCR = Boolean(ocrText);
+    const inputData = ocrText || image;
+
+    // Scan the business card
+    const scanResult = await scanBusinessCard(inputData, isProcessingOCR);
 
     if (!scanResult.success) {
       return res.status(400).json({
@@ -39,17 +49,18 @@ export const scanCard = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    console.log("✅ Business card scanned successfully");
+    console.log(`✅ Business card scanned successfully (${scanResult.data?.processingMethod})`);
 
     // Return the extracted data
     return res.status(200).json({
       success: true,
       message: "Business card scanned successfully",
       data: {
-        scannedCardImage: image,
+        scannedCardImage: image || null,
         ocrText: scanResult.data?.ocrText,
         details: scanResult.data?.details,
         confidence: scanResult.data?.confidence,
+        processingMethod: scanResult.data?.processingMethod,
       },
     });
   } catch (error: any) {

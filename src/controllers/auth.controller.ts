@@ -114,10 +114,10 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// Verify OTP for 2FA login
+// Unified OTP Verification (supports type parameter for all verification types)
 export const verifyLoginOTP = async (req: Request, res: Response) => {
   try {
-    const { userId, otp } = req.body;
+    const { userId, otp, type } = req.body;
 
     if (!userId || !otp) {
       return res.status(400).json({
@@ -126,11 +126,31 @@ export const verifyLoginOTP = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.verifyLoginOTP(userId, otp);
+    // Default to "login" for backward compatibility, or use provided type
+    const verificationType = type || "login";
+
+    // Validate type if provided
+    const validTypes = ["login", "verification", "forgot_password"];
+    if (type && !validTypes.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid type. Must be one of: ${validTypes.join(", ")}`,
+      });
+    }
+
+    // Use the unified verification
+    const result = await authService.verifyOTPUnified(userId, otp, verificationType);
+
+    // Type-specific response messages
+    const messages: { [key: string]: string } = {
+      login: "2FA verification successful",
+      verification: "User verified successfully",
+      forgot_password: "OTP verified. You may now reset your password",
+    };
 
     res.status(200).json({
       success: true,
-      message: "2FA verification successful",
+      message: messages[verificationType] || "OTP verification successful",
       data: result,
     });
   } catch (error: any) {
@@ -195,7 +215,7 @@ export const sendVerificationOTP = async (req: Request, res: Response) => {
   }
 };
 
-// Verify user with OTP
+// Verify user with OTP (Legacy - Uses unified verification internally)
 export const verifyUserOTP = async (req: Request, res: Response) => {
   try {
     const { userId, otp } = req.body;
@@ -207,7 +227,8 @@ export const verifyUserOTP = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.verifyUserOTP(userId, otp);
+    // Use the new unified verification with type="verification"
+    const result = await authService.verifyOTPUnified(userId, otp, "verification");
 
     res.status(200).json({
       success: true,
@@ -254,12 +275,12 @@ export const forgotPassword = async (req: Request, res: Response) => {
   }
 };
 
-// Reset password with OTP (for forgot password flow)
+// Reset password with OTP (Legacy - Uses unified verification + new reset internally)
 export const resetPasswordWithOTP = async (req: Request, res: Response) => {
   try {
     const { userId, otp, newPassword } = req.body;
 
-    console.log("Reset password request received:", {
+    console.log("Reset password request received (legacy endpoint):", {
       userId,
       otpLength: otp?.length,
       hasNewPassword: !!newPassword
@@ -273,7 +294,19 @@ export const resetPasswordWithOTP = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.resetPasswordWithOTP(userId, otp, newPassword);
+    // Step 1: Verify OTP using unified verification to get verification token
+    const otpVerification = await authService.verifyOTPUnified(userId, otp, "forgot_password");
+
+    if (!otpVerification.verificationToken) {
+      throw new Error("Failed to generate verification token");
+    }
+
+    // Step 2: Reset password using the verification token
+    const result = await authService.resetPasswordWithVerificationToken(
+      userId,
+      otpVerification.verificationToken,
+      newPassword
+    );
 
     res.status(200).json({
       success: true,

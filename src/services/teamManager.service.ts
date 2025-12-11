@@ -7,7 +7,13 @@ import RsvpModel from "../models/rsvp.model";
 import mongoose from "mongoose";
 
 // Get all meetings for team manager's team members
-export const getTeamMeetings = async (teamManagerId: string) => {
+export const getTeamMeetings = async (
+  teamManagerId: string,
+  page: number = 1,
+  limit: number = 10,
+  sortBy: 'startAt' | 'createdAt' = 'createdAt',
+  sortOrder: 'asc' | 'desc' = 'desc'
+) => {
   // Find all events managed by this team manager
   const managedEvents = await EventModel.find({
     "licenseKeys.teamManagerId": teamManagerId,
@@ -16,7 +22,17 @@ export const getTeamMeetings = async (teamManagerId: string) => {
   const managedEventIds = managedEvents.map((e) => e._id.toString());
 
   if (managedEventIds.length === 0) {
-    return [];
+    return {
+      meetings: [],
+      pagination: {
+        total: 0,
+        page: 1,
+        limit: limit,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      }
+    };
   }
 
   // Find the ObjectId for the ENDUSER role
@@ -43,13 +59,31 @@ export const getTeamMeetings = async (teamManagerId: string) => {
   });
   const leadIds = leads.map((l) => l._id.toString());
 
-  // Find all meetings for these leads and team members
+  // Build sort object
+  const sortField = sortBy === 'startAt' ? 'startAt' : 'createdAt';
+  const sortDirection = sortOrder === 'asc' ? 1 : -1;
+
+  // Count total meetings
+  const total = await MeetingModel.countDocuments({
+    leadId: { $in: leadIds },
+    userId: { $in: teamMemberIds },
+    isDeleted: false,
+  });
+
+  // Calculate pagination values
+  const totalPages = Math.ceil(total / limit);
+  const skip = (page - 1) * limit;
+
+  // Find all meetings for these leads and team members with pagination and sorting
   const meetings = await MeetingModel.find({
     leadId: { $in: leadIds },
     userId: { $in: teamMemberIds },
     isDeleted: false,
   })
-    .select("_id userId leadId title meetingMode meetingStatus startAt endAt")
+    .select("_id userId leadId title meetingMode meetingStatus startAt endAt createdAt")
+    .sort({ [sortField]: sortDirection })
+    .skip(skip)
+    .limit(limit)
     .populate({
       path: "leadId",
       select: "details.firstName details.lastName details.email details.company eventId",
@@ -90,7 +124,17 @@ export const getTeamMeetings = async (teamManagerId: string) => {
     endAt: meeting.endAt,
   }));
 
-  return formattedMeetings;
+  return {
+    meetings: formattedMeetings,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    }
+  };
 };
 
 // Get all leads for manager

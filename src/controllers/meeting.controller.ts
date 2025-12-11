@@ -75,6 +75,8 @@ export const getMeetings = async (req: AuthRequest, res: Response) => {
       leadId,
       meetingStatus,
       meetingMode,
+      sortBy,
+      sortOrder,
     } = req.query;
 
     const result = await meetingService.getMeetings({
@@ -84,6 +86,8 @@ export const getMeetings = async (req: AuthRequest, res: Response) => {
       meetingMode: meetingMode as string,
       page: Number(page),
       limit: Number(limit),
+      sortBy: sortBy as "startAt" | "createdAt" | undefined,
+      sortOrder: sortOrder as "asc" | "desc" | undefined,
     });
 
     return res.status(200).json({
