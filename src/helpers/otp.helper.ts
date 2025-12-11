@@ -37,66 +37,106 @@ const formatPhoneNumber = (phoneNumber: string): string => {
 };
 
 /**
- * Send OTP via TextPe SMS API
+ * Send OTP via TextPe SMS API with retry logic
  */
-const sendOTPViaSMS = async (phoneNumber: string, otp: string): Promise<boolean> => {
-  try {
-    const apiKey = config.SMARTPING_API;
+const sendOTPViaSMS = async (phoneNumber: string, otp: string, retries = 3): Promise<boolean> => {
+  const apiKey = config.SMARTPING_API;
 
-    // Check if API key is configured
-    if (!apiKey || apiKey === "your_smartping_api_key_here") {
-      console.error("❌ SMS API key not configured. Please set SMARTPING_APIKEY in .env file");
-      console.log(`💡 TIP: Set USE_DUMMY_OTP=true in .env to test without SMS`);
-      return false;
-    }
-
-    // Format phone number with country code
-    const formattedNumber = formatPhoneNumber(phoneNumber);
-
-    const senderId = config.SMS_SENDER_ID;
-    const channel = config.SMS_CHANNEL;
-    const dcs = config.SMS_DCS;
-    const flashSms = config.SMS_FLASH;
-    const route = config.SMS_ROUTE;
-    // Use the exact template registered with TRAI DLT
-    const text = `Your OTP for verification with Colourstop Solutions is ${otp}. Do not share this code. It is valid for 10 minutes only.`;
-
-    const url = `http://sms.textpe.in/api/mt/SendSMS?APIKey=${apiKey}&senderid=${senderId}&channel=${channel}&DCS=${dcs}&flashsms=${flashSms}&number=${formattedNumber}&text=${encodeURIComponent(text)}&route=${route}`;
-
-    console.log(`📤 Sending SMS to ${phoneNumber} (formatted: ${formattedNumber})...`);
-    const response = await axios.get(url);
-
-    console.log(`📨 SMS API Response:`, {
-      status: response.status,
-      data: response.data
-    });
-
-    return response.status >= 200 && response.status < 300;
-  } catch (error: any) {
-    console.error("❌ Error sending OTP via SMS:", error.message);
-    if (error.response) {
-      console.error("SMS API Error Response:", {
-        status: error.response.status,
-        data: error.response.data
-      });
-    }
+  // Check if API key is configured
+  if (!apiKey || apiKey === "your_smartping_api_key_here") {
+    console.error("❌ SMS API key not configured. Please set SMARTPING_APIKEY in .env file");
+    console.log(`💡 TIP: Set USE_DUMMY_OTP=true in .env to test without SMS`);
     return false;
   }
+
+  // Format phone number with country code
+  const formattedNumber = formatPhoneNumber(phoneNumber);
+
+  const senderId = config.SMS_SENDER_ID;
+  const channel = config.SMS_CHANNEL;
+  const dcs = config.SMS_DCS;
+  const flashSms = config.SMS_FLASH;
+  const route = config.SMS_ROUTE;
+  // Use the exact template registered with TRAI DLT
+  const text = `Your OTP for verification with Colourstop Solutions is ${otp}. Do not share this code. It is valid for 10 minutes only.`;
+
+  const url = `http://sms.textpe.in/api/mt/SendSMS?APIKey=${apiKey}&senderid=${senderId}&channel=${channel}&DCS=${dcs}&flashsms=${flashSms}&number=${formattedNumber}&text=${encodeURIComponent(text)}&route=${route}`;
+
+  let lastError: any;
+
+  // Retry logic with exponential backoff
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`📤 Sending SMS to ${phoneNumber} (formatted: ${formattedNumber}) - Attempt ${attempt}/${retries}...`);
+      const response = await axios.get(url, {
+        timeout: 10000, // 10s timeout per request
+      });
+
+      console.log(`📨 SMS API Response (attempt ${attempt}/${retries}):`, {
+        status: response.status,
+        data: response.data
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        console.log(`✅ SMS sent successfully on attempt ${attempt}/${retries}`);
+        return true;
+      }
+
+      lastError = new Error(`SMS API returned status ${response.status}`);
+    } catch (error: any) {
+      lastError = error;
+      console.error(`❌ Error sending OTP via SMS (attempt ${attempt}/${retries}):`, error.message);
+      if (error.response) {
+        console.error("SMS API Error Response:", {
+          status: error.response.status,
+          data: error.response.data
+        });
+      }
+
+      // If not the last attempt, wait before retrying (exponential backoff)
+      if (attempt < retries) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5s delay
+        console.log(`⏳ Retrying SMS in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  console.error(`❌ SMS sending failed after ${retries} attempts:`, lastError?.message);
+  return false;
 };
 
 /**
- * Send OTP via Email (placeholder - implement your email service)
+ * Send OTP via Email with retry logic
  */
-const sendOTPViaEmail = async (email: string, otp: string): Promise<boolean> => {
-  try {
-    // TODO: Implement your email service (e.g., SendGrid, Nodemailer, etc.)
-    console.log(`📧 EMAIL OTP for ${email}: ${otp}`);
-    // For now, just log it
-    return true;
-  } catch (error: any) {
-    console.error("Error sending OTP via email:", error.message);
-    return false;
+const sendOTPViaEmail = async (email: string, otp: string, retries = 3): Promise<boolean> => {
+  let lastError: any;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`📧 Sending OTP email to ${email} - Attempt ${attempt}/${retries}`);
+
+      // TODO: Integrate with email.service.ts for proper email sending
+      // For now, just log it (email service integration would happen here)
+      console.log(`📧 EMAIL OTP for ${email}: ${otp}`);
+
+      // Simulate success (replace with actual email sending)
+      return true;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`❌ Error sending OTP via email (attempt ${attempt}/${retries}):`, error.message);
+
+      // If not the last attempt, wait before retrying (exponential backoff)
+      if (attempt < retries) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5s delay
+        console.log(`⏳ Retrying email in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
   }
+
+  console.error(`❌ Email sending failed after ${retries} attempts:`, lastError?.message);
+  return false;
 };
 
 /**

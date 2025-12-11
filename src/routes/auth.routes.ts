@@ -11,7 +11,8 @@ import {
   changePassword,
   refreshToken,
   verifyOTPUnified,
-  resetPassword
+  resetPassword,
+  logout
 } from "../controllers/auth.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import {
@@ -66,5 +67,6 @@ router.post("/reset-password", passwordResetEmailLimiter, passwordResetIPLimiter
 // Protected routes - Authenticated endpoints with user-based rate limiting
 router.get("/profile", authenticateToken, readLimiter, getProfile);
 router.post("/change-password", authenticateToken, profileWriteLimiter, changePassword);
+router.post("/logout", authenticateToken, profileWriteLimiter, logout);
 
 export default router;

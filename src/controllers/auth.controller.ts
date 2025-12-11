@@ -471,3 +471,28 @@ export const resetPassword = async (req: Request, res: Response) => {
     });
   }
 };
+
+// Logout Controller
+export const logout = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    await authService.logoutUser(req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Logged out successfully",
+    });
+  } catch (error: any) {
+    console.error("❌ Logout error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Logout failed",
+    });
+  }
+};

@@ -20,8 +20,17 @@ interface LicenseKeyEmailData {
   qrContent?: string;
 }
 
-// Create reusable transporter
-const createTransporter = () => {
+// Singleton transporter instance (reused across all email sends)
+let transporterInstance: nodemailer.Transporter | null = null;
+let transporterInitialized = false;
+
+// Create reusable transporter (singleton pattern)
+const getTransporter = (): nodemailer.Transporter | null => {
+  // Return cached instance if already created
+  if (transporterInitialized) {
+    return transporterInstance;
+  }
+
   const config = {
     host: process.env.EMAIL_HOST || "smtp.gmail.com",
     port: parseInt(process.env.EMAIL_PORT || "587"),
@@ -30,6 +39,9 @@ const createTransporter = () => {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD,
     },
+    pool: true, // Enable connection pooling for better performance
+    maxConnections: 5, // Max simultaneous connections
+    maxMessages: 100, // Max messages per connection
   };
 
   // Validate email configuration
@@ -37,45 +49,65 @@ const createTransporter = () => {
     console.warn("⚠️  Email configuration is incomplete. Emails will not be sent.");
     console.warn("EMAIL_USER:", process.env.EMAIL_USER ? "Set" : "Not set");
     console.warn("EMAIL_PASSWORD:", process.env.EMAIL_PASSWORD ? "Set (hidden)" : "Not set");
+    transporterInitialized = true;
+    transporterInstance = null;
     return null;
   }
 
-  console.log("📧 Email config loaded:", {
+  console.log("📧 Email transporter initialized (singleton):", {
     host: config.host,
     port: config.port,
     secure: config.secure,
     user: config.auth.user,
+    pooled: true,
   });
 
-  return nodemailer.createTransport(config);
+  transporterInstance = nodemailer.createTransport(config);
+  transporterInitialized = true;
+
+  return transporterInstance;
 };
 
-// Send generic email
-export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
-  try {
-    const transporter = createTransporter();
+// Send generic email with retry logic
+export const sendEmail = async (options: EmailOptions, retries = 3): Promise<boolean> => {
+  let lastError: any;
 
-    if (!transporter) {
-      console.log("📧 Email sending skipped: No transporter configured");
-      return false;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const transporter = getTransporter();
+
+      if (!transporter) {
+        console.log("📧 Email sending skipped: No transporter configured");
+        return false;
+      }
+
+      const mailOptions = {
+        from: process.env.EMAIL_FROM || "Scan2Card <noreply@scan2card.com>",
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        attachments: options.attachments,
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✅ Email sent successfully (attempt ${attempt}/${retries}):`, info.messageId);
+      return true;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`❌ Email sending failed (attempt ${attempt}/${retries}):`, error.message);
+
+      // If not the last attempt, wait before retrying (exponential backoff)
+      if (attempt < retries) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5s delay
+        console.log(`⏳ Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
     }
-
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || "Scan2Card <noreply@scan2card.com>",
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      attachments: options.attachments,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ Email sent successfully:", info.messageId);
-    return true;
-  } catch (error: any) {
-    console.error("❌ Email sending failed:", error.message);
-    return false;
   }
+
+  console.error(`❌ Email sending failed after ${retries} attempts:`, lastError?.message);
+  return false;
 };
 
 // Format license key with dashes for better readability (XXX-XXX-XXX)

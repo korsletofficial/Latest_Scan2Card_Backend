@@ -74,19 +74,22 @@ export const registerUser = async (data: RegisterUserDTO) => {
   // Populate role to get role name
   await newUser.populate("role");
 
-  // Send verification OTP automatically after registration
+  // Send verification OTP automatically after registration (NON-BLOCKING)
+  // Fire-and-forget pattern: don't wait for OTP to send before returning response
   const source = newUser.phoneNumber ? "phoneNumber" : "email";
 
-  try {
-    await handleSendVerificationCode({
-      userId: newUser._id.toString(),
-      source,
+  // Send OTP asynchronously without blocking registration response
+  handleSendVerificationCode({
+    userId: newUser._id.toString(),
+    source,
+  })
+    .then(() => {
+      console.log(`✅ Verification OTP sent to new user ${newUser.email || newUser.phoneNumber}`);
+    })
+    .catch((error: any) => {
+      console.error(`❌ Failed to send verification OTP to ${newUser.email || newUser.phoneNumber}:`, error.message);
+      // OTP sending failure is logged but doesn't block registration
     });
-    console.log(`📱 Verification OTP sent to new user ${newUser.email}`);
-  } catch (error: any) {
-    console.error("Failed to send verification OTP:", error.message);
-    // Don't fail registration if OTP sending fails
-  }
 
   return {
     user: {
@@ -695,5 +698,25 @@ export const resetPasswordWithVerificationToken = async (
 
   return {
     email: user.email,
+  };
+};
+
+// Logout user
+export const logoutUser = async (userId: string) => {
+  await connectToMongooseDatabase();
+
+  // Find user
+  const user = await UserModel.findById(userId).select('+refreshToken +refreshTokenExpiry');
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  // Clear refresh token and expiry
+  user.refreshToken = undefined;
+  user.refreshTokenExpiry = undefined;
+  await user.save();
+
+  return {
+    message: "Logged out successfully",
   };
 };
