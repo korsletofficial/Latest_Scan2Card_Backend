@@ -540,6 +540,21 @@ const generateEntryCodeCSV = (leads: any[]): string => {
   return generateCSV(headers, rows);
 };
 
+// Helper: Convert rating number to text label
+const getRatingLabel = (rating: number | string | undefined): string => {
+  if (!rating) return "";
+
+  const numRating = typeof rating === "string" ? parseInt(rating, 10) : rating;
+
+  if (isNaN(numRating)) return "";
+
+  if (numRating === 1 || numRating === 2) return "cold";
+  if (numRating === 3 || numRating === 4) return "warm";
+  if (numRating === 5) return "hot";
+
+  return "";
+};
+
 // Helper: Generate Full Data CSV
 const generateFullDataCSV = (leads: any[]): string => {
   const headers = [
@@ -588,7 +603,7 @@ const generateFullDataCSV = (leads: any[]): string => {
       lead.details?.notes || "",
       lead.eventName || (lead.isIndependentLead ? "Independent" : ""),
       lead.leadType || "",
-      lead.rating || "",
+      getRatingLabel(lead.rating),
       formattedDate,
     ];
   });
