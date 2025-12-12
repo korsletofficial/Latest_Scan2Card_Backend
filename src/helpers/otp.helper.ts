@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { config } from "../config/config";
 import OTPModel from "../models/otp.model";
 import UserModel from "../models/user.model";
+import { sendEmail } from "../services/email.service";
 
 /**
  * Generate a random numeric OTP
@@ -110,33 +111,139 @@ const sendOTPViaSMS = async (phoneNumber: string, otp: string, retries = 3): Pro
  * Send OTP via Email with retry logic
  */
 const sendOTPViaEmail = async (email: string, otp: string, retries = 3): Promise<boolean> => {
-  let lastError: any;
+  console.log(`📧 Attempting to send OTP email to ${email}`);
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`📧 Sending OTP email to ${email} - Attempt ${attempt}/${retries}`);
+  // Create HTML email template
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+        }
+        .container {
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+          background-color: #f9f9f9;
+        }
+        .header {
+          background: linear-gradient(135deg, #854AE6 0%, #9D6BF0 100%);
+          padding: 30px;
+          text-align: center;
+          border-radius: 10px 10px 0 0;
+        }
+        .header h1 {
+          color: white;
+          margin: 0;
+          font-size: 28px;
+        }
+        .content {
+          background-color: white;
+          padding: 40px 30px;
+          border-radius: 0 0 10px 10px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .otp-box {
+          background-color: #f0f0f0;
+          border: 2px dashed #854AE6;
+          border-radius: 8px;
+          padding: 20px;
+          text-align: center;
+          margin: 30px 0;
+        }
+        .otp-code {
+          font-size: 32px;
+          font-weight: bold;
+          color: #854AE6;
+          letter-spacing: 8px;
+          margin: 10px 0;
+        }
+        .footer {
+          text-align: center;
+          margin-top: 20px;
+          font-size: 12px;
+          color: #666;
+        }
+        .warning {
+          background-color: #fff3cd;
+          border-left: 4px solid #ffc107;
+          padding: 12px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🔐 Scan2Card Verification</h1>
+        </div>
+        <div class="content">
+          <h2>Your One-Time Password (OTP)</h2>
+          <p>Hello,</p>
+          <p>You have requested to reset your password. Please use the following OTP code to verify your identity:</p>
 
-      // TODO: Integrate with email.service.ts for proper email sending
-      // For now, just log it (email service integration would happen here)
-      console.log(`📧 EMAIL OTP for ${email}: ${otp}`);
+          <div class="otp-box">
+            <div style="font-size: 14px; color: #666; margin-bottom: 10px;">YOUR OTP CODE</div>
+            <div class="otp-code">${otp}</div>
+            <div style="font-size: 12px; color: #666; margin-top: 10px;">Valid for 10 minutes</div>
+          </div>
 
-      // Simulate success (replace with actual email sending)
+          <div class="warning">
+            <strong>⚠️ Security Notice:</strong> Do not share this code with anyone. Scan2Card will never ask for your OTP via phone call or text message.
+          </div>
+
+          <p>If you didn't request this code, please ignore this email or contact support if you have concerns about your account security.</p>
+
+          <p>Best regards,<br><strong>Scan2Card Team</strong></p>
+        </div>
+        <div class="footer">
+          <p>This is an automated message. Please do not reply to this email.</p>
+          <p>&copy; ${new Date().getFullYear()} Scan2Card. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Plain text version for email clients that don't support HTML
+  const textContent = `
+Scan2Card - Password Reset OTP
+
+Your One-Time Password (OTP): ${otp}
+
+This code is valid for 10 minutes.
+
+Do not share this code with anyone. If you didn't request this code, please ignore this email.
+
+Best regards,
+Scan2Card Team
+  `;
+
+  try {
+    // Use the email service with built-in retry logic
+    const success = await sendEmail({
+      to: email,
+      subject: "🔐 Scan2Card - Password Reset OTP",
+      html: htmlContent,
+      text: textContent,
+    }, retries);
+
+    if (success) {
+      console.log(`✅ OTP email sent successfully to ${email}`);
       return true;
-    } catch (error: any) {
-      lastError = error;
-      console.error(`❌ Error sending OTP via email (attempt ${attempt}/${retries}):`, error.message);
-
-      // If not the last attempt, wait before retrying (exponential backoff)
-      if (attempt < retries) {
-        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5s delay
-        console.log(`⏳ Retrying email in ${delayMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
+    } else {
+      console.error(`❌ Failed to send OTP email to ${email}`);
+      return false;
     }
+  } catch (error: any) {
+    console.error(`❌ Error sending OTP via email to ${email}:`, error.message);
+    return false;
   }
-
-  console.error(`❌ Email sending failed after ${retries} attempts:`, lastError?.message);
-  return false;
 };
 
 /**
