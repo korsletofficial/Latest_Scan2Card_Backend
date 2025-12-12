@@ -20,6 +20,7 @@ import notificationRoutes from "./routes/notification.routes";
 import keepServerActive from "./cron/serverActive";
 import startMeetingReminderCron from "./cron/meetingReminders";
 import startEventExpiryCron from "./cron/eventExpiry";
+import startRsvpExpiryCron from "./cron/rsvpExpiry";
 import packageJson from "../package.json";
 import { initializeFirebase } from "./services/firebase.service";
 
@@ -124,5 +125,6 @@ startServer();
 keepServerActive();
 startMeetingReminderCron();
 startEventExpiryCron();
+startRsvpExpiryCron();
 
 export default app;

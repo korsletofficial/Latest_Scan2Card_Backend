@@ -1004,11 +1004,33 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/rsvp/my-rsvps",
+							"raw": "{{baseUrl}}/rsvp/my-rsvps?page=1&limit=10&search=&activeOnly=false",
 							"host": ["{{baseUrl}}"],
-							"path": ["rsvp", "my-rsvps"]
+							"path": ["rsvp", "my-rsvps"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number for pagination (default: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Number of items per page (default: 10)"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search by event name, type, venue, or city"
+								},
+								{
+									"key": "activeOnly",
+									"value": "false",
+									"description": "Filter to show only active RSVPs/registrations (true/false, default: false)"
+								}
+							]
 						},
-						"description": "Get all RSVPs for authenticated user.\n\n**Trial Event Auto-Join:**\nWhen a new end user calls this endpoint for the first time (with no existing RSVPs), they are automatically joined to a trial event. This allows them to create up to 5 leads without a license key. The trial event will appear in the response with `isTrialEvent: true`."
+						"description": "Get all RSVPs for authenticated user.\n\n**Query Parameters:**\n- `page` (optional): Page number for pagination (default: 1)\n- `limit` (optional): Number of items per page (default: 10)\n- `search` (optional): Search by event name, type, venue, or city\n- `activeOnly` (optional): Filter to show only active RSVPs/registrations where user hasn't cancelled (true/false, default: false)\n\n**Trial Event Auto-Join:**\nWhen a new end user calls this endpoint for the first time (with no existing RSVPs), they are automatically joined to a trial event. This allows them to create up to 5 leads without a license key. The trial event will appear in the response with `isTrialEvent: true`."
 					}
 				},
 				{

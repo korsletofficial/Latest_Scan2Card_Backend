@@ -100,7 +100,8 @@ export const getUserRsvps = async (
   userId: string,
   page: number = 1,
   limit: number = 10,
-  search: string = ''
+  search: string = '',
+  activeOnly: boolean = false
 ) => {
   const normalizedSearch = search?.trim() || "";
 
@@ -155,6 +156,11 @@ export const getUserRsvps = async (
       { expiresAt: { $gte: now } }, // Not expired yet
     ],
   };
+
+  // Add RSVP active filter if requested
+  if (activeOnly) {
+    rsvpQuery.isActive = true;
+  }
 
   // If search is provided, find matching event IDs first
   if (normalizedSearch) {

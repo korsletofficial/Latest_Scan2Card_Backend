@@ -68,11 +68,16 @@ export const createLead = async (data: CreateLeadData) => {
   }
   // Images are now optional for all lead types including full_scan
 
-  // CHECK TRIAL EVENT LIMIT
-  if (data.eventId) {
+  // VALIDATE EVENT ACCESS & LICENSE KEY
+  if (data.eventId && !data.isIndependentLead) {
     const event = await EventModel.findById(data.eventId);
 
-    if (event && event.isTrialEvent) {
+    if (!event || event.isDeleted) {
+      throw new Error("Event not found");
+    }
+
+    // CHECK TRIAL EVENT LIMIT
+    if (event.isTrialEvent) {
       // Check user's trial lead count
       const user = await UserModel.findById(data.userId);
 
@@ -82,6 +87,32 @@ export const createLead = async (data: CreateLeadData) => {
           "Please join a regular event with a license key to continue creating leads."
         );
       }
+    } else {
+      // NON-TRIAL EVENT: Validate RSVP and license key
+      const rsvp = await RsvpModel.findOne({
+        userId: data.userId,
+        eventId: data.eventId,
+        isDeleted: false,
+        isActive: true, // RSVP must be active
+      });
+
+      if (!rsvp) {
+        throw new Error(
+          "You don't have a valid registration for this event. " +
+          "Please register with a license key first."
+        );
+      }
+
+      // Validate license key expiration (allow scanning even if event is inactive)
+      const now = new Date();
+      if (rsvp.expiresAt && new Date(rsvp.expiresAt) < now) {
+        throw new Error(
+          "Your license key has expired. " +
+          `It was valid until ${new Date(rsvp.expiresAt).toLocaleDateString()}.`
+        );
+      }
+
+      console.log(`✅ License key validated for user ${data.userId} in event ${data.eventId}`);
     }
   }
 
@@ -234,7 +265,7 @@ export const getLeadById = async (id: string, userId: string) => {
     userId,
     isDeleted: false,
   })
-    .populate("eventId", "eventName type startDate endDate")
+    .populate("eventId", "_id eventName")
     .populate("userId", "firstName lastName email");
 
   if (!lead) {

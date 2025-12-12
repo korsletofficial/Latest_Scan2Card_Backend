@@ -210,9 +210,20 @@ export const getLeadById = async (req: AuthRequest, res: Response) => {
 
     const lead = await leadService.getLeadById(id, userId!);
 
+    // Transform response to rename eventId to event and filter fields
+    const leadData = lead.toJSON();
+    const responseData = {
+      ...leadData,
+      event: leadData.eventId ? {
+        _id: (leadData.eventId as any)._id,
+        eventName: (leadData.eventId as any).eventName,
+      } : null,
+    };
+    delete (responseData as any).eventId;
+
     return res.status(200).json({
       success: true,
-      data: lead,
+      data: responseData,
     });
   } catch (error: any) {
     console.error("Error fetching lead:", error);
