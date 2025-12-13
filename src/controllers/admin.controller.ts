@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { registerUser } from "../services/auth.service";
 import * as adminService from "../services/admin.service";
 import { sanitizeEmptyStrings } from "../utils/sanitize.util";
+import { sendExhibitorWelcomeEmail } from "../services/email.service";
 
 type CreateExhibitorBody = {
   firstName: string;
@@ -93,17 +94,26 @@ export const createExhibitor = async (
 
     const exhibitor = await registerUser(sanitizedData as any);
 
-    const responsePayload: Record<string, unknown> = {
-      success: true,
-      message: "Exhibitor created successfully",
-      data: sanitizeUser(exhibitor),
-    };
-
-    if (!password) {
-      responsePayload.temporaryPassword = finalPassword;
+    // Send welcome email with credentials (non-blocking)
+    if (normalizedEmail) {
+      sendExhibitorWelcomeEmail({
+        email: normalizedEmail,
+        password: finalPassword,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        companyName: companyName?.trim(),
+      })
+        .then(() => console.log(`✅ Exhibitor welcome email sent to ${normalizedEmail}`))
+        .catch((emailError: any) =>
+          console.error(`❌ Failed to send welcome email to ${normalizedEmail}:`, emailError.message)
+        );
     }
 
-    return res.status(201).json(responsePayload);
+    return res.status(201).json({
+      success: true,
+      message: "Exhibitor created successfully. Login credentials have been sent to their email.",
+      data: sanitizeUser(exhibitor),
+    });
   } catch (error: any) {
     console.error("❌ Create exhibitor error:", error);
     return res.status(500).json({

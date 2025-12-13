@@ -50,8 +50,7 @@ export const getExhibitors = async (
 
   const skip = (page - 1) * limit;
   const exhibitors = await UserModel.find(searchQuery)
-    .select("-password")
-    .populate("role", "name")
+    .select("-password -role") // Exclude password and role (we already know they're exhibitors)
     .skip(skip)
     .limit(limit)
     .sort({ createdAt: -1 });
@@ -111,8 +110,7 @@ export const getExhibitors = async (
 // Get single exhibitor by ID
 export const getExhibitorById = async (id: string) => {
   const exhibitor = await UserModel.findById(id)
-    .select("-password")
-    .populate("role", "name");
+    .select("-password -role"); // Exclude password and role (we already know they're exhibitors)
 
   if (!exhibitor || exhibitor.isDeleted) {
     throw new Error("Exhibitor not found");

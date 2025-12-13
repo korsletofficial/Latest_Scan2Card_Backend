@@ -20,6 +20,14 @@ interface LicenseKeyEmailData {
   qrContent?: string;
 }
 
+interface ExhibitorWelcomeEmailData {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  companyName?: string;
+}
+
 // Singleton transporter instance (reused across all email sends)
 let transporterInstance: nodemailer.Transporter | null = null;
 let transporterInitialized = false;
@@ -386,6 +394,262 @@ export const sendLicenseKeyEmail = async (data: LicenseKeyEmailData): Promise<bo
     html: generateLicenseKeyEmailHTML({ ...data, qrCodeDataUrl, qrContent }),
     text: generateLicenseKeyEmailText({ ...data, qrCodeDataUrl, qrContent }),
     attachments: attachments.length > 0 ? attachments : undefined,
+  };
+
+  return await sendEmail(emailOptions);
+};
+
+// Generate HTML email template for exhibitor welcome email
+const generateExhibitorWelcomeEmailHTML = (data: ExhibitorWelcomeEmailData): string => {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Scan2Card</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #854AE6 0%, #6A38B8 100%);
+      color: #ffffff;
+      padding: 40px 30px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .content {
+      padding: 30px;
+    }
+    .credentials-box {
+      background-color: #f8f9fa;
+      border-left: 4px solid #854AE6;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .credential-item {
+      margin: 12px 0;
+    }
+    .credential-label {
+      font-weight: 600;
+      color: #555;
+      display: inline-block;
+      min-width: 100px;
+    }
+    .credential-value {
+      font-family: 'Courier New', monospace;
+      background-color: #ffffff;
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: 1px solid #dee2e6;
+      display: inline-block;
+      font-size: 14px;
+      color: #000;
+    }
+    .important-note {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .important-note strong {
+      color: #856404;
+    }
+    .security-note {
+      background-color: #f8d7da;
+      border-left: 4px solid #dc3545;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .security-note strong {
+      color: #721c24;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6c757d;
+      border-top: 1px solid #dee2e6;
+    }
+    .button {
+      display: inline-block;
+      padding: 14px 28px;
+      background: #854AE6;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      margin: 20px 0;
+      font-size: 16px;
+    }
+    .button:hover {
+      background: #6A38B8;
+    }
+    .steps-list {
+      background-color: #e7f3ff;
+      border-left: 4px solid #0066cc;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .steps-list ol {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .steps-list li {
+      margin: 8px 0;
+      color: #333;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        margin: 0;
+        border-radius: 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .credential-label {
+        display: block;
+        margin-bottom: 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>🎉 Welcome to Scan2Card!</h1>
+      <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.95;">Your Exhibitor Account is Ready</p>
+    </div>
+
+    <div class="content">
+      <p>Hello <strong>${data.firstName} ${data.lastName}</strong>,</p>
+
+      <p>Your exhibitor account has been successfully created! You can now access the Scan2Card platform to manage events, generate license keys, and track your leads.</p>
+
+      ${data.companyName ? `<p><strong>Company:</strong> ${data.companyName}</p>` : ''}
+
+      <div class="credentials-box">
+        <h3 style="margin-top: 0; color: #854AE6;">🔑 Your Login Credentials</h3>
+
+        <div class="credential-item">
+          <span class="credential-label">Email:</span>
+          <span class="credential-value">${data.email}</span>
+        </div>
+
+        <div class="credential-item">
+          <span class="credential-label">Password:</span>
+          <span class="credential-value">${data.password}</span>
+        </div>
+      </div>
+
+      <div class="security-note">
+        <strong>🔒 IMPORTANT - Security Notice:</strong><br>
+        For your account security, please change your password immediately after your first login.
+      </div>
+
+      <div class="steps-list">
+        <h4 style="margin-top: 0; color: #0066cc;">📝 How to Change Your Password:</h4>
+        <ol>
+          <li>Log in to your account using the credentials above</li>
+          <li>Navigate to the <strong>Profile</strong> page</li>
+          <li>Click on the <strong>Change Password</strong> tab</li>
+          <li>Enter your current password and set a new secure password</li>
+        </ol>
+      </div>
+
+      <div style="text-align: center;">
+        <a href="https://stag-dashboard.scan2card.com/login" class="button">Login to Dashboard</a>
+      </div>
+
+      <div class="important-note">
+        <strong>💡 Getting Started:</strong><br>
+        Once logged in, you can create events, generate license keys for team managers, and monitor lead collection activities in real-time.
+      </div>
+
+      <p style="margin-top: 30px; color: #6c757d; font-size: 14px;">
+        If you have any questions or need assistance, please contact our support team.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p style="margin: 5px 0;">© ${new Date().getFullYear()} Scan2Card. All rights reserved.</p>
+      <p style="margin: 5px 0;">This is an automated email. Please do not reply.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+};
+
+// Generate plain text version of exhibitor welcome email
+const generateExhibitorWelcomeEmailText = (data: ExhibitorWelcomeEmailData): string => {
+  return `
+Welcome to Scan2Card!
+
+Hello ${data.firstName} ${data.lastName},
+
+Your exhibitor account has been successfully created! You can now access the Scan2Card platform to manage events, generate license keys, and track your leads.
+
+${data.companyName ? `Company: ${data.companyName}` : ''}
+
+Your Login Credentials:
+-----------------------
+Email: ${data.email}
+Password: ${data.password}
+
+IMPORTANT - SECURITY NOTICE:
+For your account security, please change your password immediately after your first login.
+
+How to Change Your Password:
+1. Log in to your account using the credentials above
+2. Navigate to the Profile page
+3. Click on the Change Password tab
+4. Enter your current password and set a new secure password
+
+Login URL: https://stag-dashboard.scan2card.com/login
+
+Getting Started:
+Once logged in, you can create events, generate license keys for team managers, and monitor lead collection activities in real-time.
+
+If you have any questions or need assistance, please contact our support team.
+
+© ${new Date().getFullYear()} Scan2Card. All rights reserved.
+This is an automated email. Please do not reply.
+  `.trim();
+};
+
+// Send exhibitor welcome email
+export const sendExhibitorWelcomeEmail = async (data: ExhibitorWelcomeEmailData): Promise<boolean> => {
+  const subject = `Welcome to Scan2Card - Your Exhibitor Account is Ready`;
+
+  const emailOptions: EmailOptions = {
+    to: data.email,
+    subject,
+    html: generateExhibitorWelcomeEmailHTML(data),
+    text: generateExhibitorWelcomeEmailText(data),
   };
 
   return await sendEmail(emailOptions);
