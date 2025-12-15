@@ -223,6 +223,10 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       });
     }
 
+    // Set expiration to end of day in IST (23:59:59.999 IST = 18:29:59.999 UTC)
+    // IST is UTC+5:30, so we set UTC hours to 18:29:59.999 to get 23:59:59.999 IST
+    expirationDate.setUTCHours(18, 29, 59, 999);
+
     // Get today's date at midnight for comparison
     const today = new Date();
     today.setHours(0, 0, 0, 0);

@@ -49,16 +49,26 @@ const createTeamManagerForLicense = async (
   lastName?: string
 ) => {
   try {
-    // Check if user already exists
-    const existingUser = await UserModel.findOne({ email, isDeleted: false });
-    if (existingUser) {
-      return existingUser._id;
-    }
-
-    // Get TEAMMANAGER role
+    // Get TEAMMANAGER role first (needed for validation)
     const teamManagerRole = await RoleModel.findOne({ name: "TEAMMANAGER" });
     if (!teamManagerRole) {
       throw new Error("TEAMMANAGER role not found");
+    }
+
+    // Check if user already exists
+    const existingUser = await UserModel.findOne({ email, isDeleted: false }).populate('role');
+    if (existingUser) {
+      // If user exists and is already a TEAMMANAGER, return their ID
+      if (existingUser.role && (existingUser.role as any).name === "TEAMMANAGER") {
+        console.log(`ℹ️  TeamManager already exists: ${email}`);
+        return existingUser._id;
+      }
+
+      // If user exists with a different role (ENDUSER, EXHIBITOR, SUPERADMIN), throw error
+      const roleName = existingUser.role ? (existingUser.role as any).name : "Unknown";
+      throw new Error(
+        `Email already exists with role ${roleName}. Cannot create license key for this email. Please use a different email address.`
+      );
     }
 
     // Extract name from email if not provided
@@ -382,6 +392,10 @@ export const bulkGenerateLicenseKeys = async (
       errors.push({ row: i + 1, error: "Invalid date format", expiresAt });
       continue;
     }
+
+    // Set expiration to end of day in IST (23:59:59.999 IST = 18:29:59.999 UTC)
+    // IST is UTC+5:30, so we set UTC hours to 18:29:59.999 to get 23:59:59.999 IST
+    expirationDate.setUTCHours(18, 29, 59, 999);
 
     // Get today's date at midnight for comparison
     const today = new Date();
