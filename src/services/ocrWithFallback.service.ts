@@ -3,9 +3,9 @@ import axios from "axios";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.5-flash"; // Primary vision model
+const GEMINI_MODEL = "gemini-2.5-flash"; // Fallback vision model
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = "gpt-4o-mini"; // Fallback vision model
+const OPENAI_MODEL = "gpt-4o-mini"; // Primary vision model
 
 const DEFAULT_RESPONSE = {
   firstName: "",
@@ -296,7 +296,7 @@ async function callGemini(imagePath: string): Promise<typeof DEFAULT_RESPONSE | 
 }
 
 /**
- * Top-level function: Tries Gemini first, falls back to OpenAI GPT-4o Mini if needed
+ * Top-level function: Tries OpenAI first, falls back to Gemini if needed
  * @param imagePath - Path to the image file on disk
  * @returns Extracted business card data with all required fields
  */
@@ -312,42 +312,42 @@ export async function extractBusinessCardWithFallback(imagePath: string): Promis
   const stats = fs.statSync(imagePath);
   console.log(`📊 Image file size: ${Math.round(stats.size / 1024)} KB`);
 
-  // 1) try Gemini (Primary)
-  try {
-    console.log("🎯 Attempting Gemini extraction...");
-    const gm = await callGemini(imagePath);
-    console.log("🔍 Gemini result:", JSON.stringify(gm, null, 2));
-
-    if (gm && hasAnyValue(gm)) {
-      console.log("✅ Used Gemini for extraction - SUCCESS");
-      return gm;
-    } else {
-      console.warn("⚠️ Gemini returned data but hasAnyValue=false");
-    }
-  } catch (err) {
-    // ignore and fallback
-    console.warn("⚠️ Gemini extraction failed, trying fallback:", err);
-  }
-
-  // 2) fallback to OpenAI GPT-4o Mini
+  // 1) try OpenAI GPT-4o Mini (Primary)
   try {
     console.log("🎯 Attempting OpenAI extraction...");
     const openai = await callOpenAIVision(imagePath);
     console.log("🔍 OpenAI result:", JSON.stringify(openai, null, 2));
 
     if (openai && hasAnyValue(openai)) {
-      console.log("✅ Used OpenAI GPT-4o Mini for extraction (fallback) - SUCCESS");
+      console.log("✅ Used OpenAI GPT-4o Mini for extraction - SUCCESS");
       return openai;
     } else {
       console.warn("⚠️ OpenAI returned data but hasAnyValue=false");
     }
   } catch (err) {
+    // ignore and fallback
+    console.warn("⚠️ OpenAI extraction failed, trying fallback:", err);
+  }
+
+  // 2) fallback to Gemini
+  try {
+    console.log("🎯 Attempting Gemini extraction...");
+    const gm = await callGemini(imagePath);
+    console.log("🔍 Gemini result:", JSON.stringify(gm, null, 2));
+
+    if (gm && hasAnyValue(gm)) {
+      console.log("✅ Used Gemini for extraction (fallback) - SUCCESS");
+      return gm;
+    } else {
+      console.warn("⚠️ Gemini returned data but hasAnyValue=false");
+    }
+  } catch (err) {
     // ignore
-    console.warn("⚠️ OpenAI extraction failed:", err);
+    console.warn("⚠️ Gemini extraction failed:", err);
   }
 
   // 3) return empty default
   console.error("❌ All extraction methods failed - returning empty data");
-  console.error("❌ This means both Gemini and OpenAI either failed or returned no valid data");
+  console.error("❌ This means both OpenAI and Gemini either failed or returned no valid data");
   return { ...DEFAULT_RESPONSE };
 }

@@ -160,7 +160,7 @@ OCR Text to Parse:
 };
 
 /**
- * Analyzes OCR-extracted text using Gemini/OpenAI with fallback
+ * Analyzes OCR-extracted text using OpenAI/Gemini with fallback
  */
 const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -172,49 +172,10 @@ const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
 
   const prompt = getOCRTextAnalysisPrompt();
 
-  // Try Gemini first
-  if (GEMINI_API_KEY) {
-    try {
-      console.log("🔍 Analyzing OCR text with Gemini...");
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-
-      const res = await axios.post(
-        url,
-        {
-          contents: [
-            {
-              parts: [
-                {
-                  text: prompt + ocrText,
-                },
-              ],
-            },
-          ],
-          generationConfig: { temperature: 0.0, maxOutputTokens: 2048 },
-        },
-        {
-          headers: { "Content-Type": "application/json" },
-          timeout: 30000,
-        }
-      );
-
-      const text = res?.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        console.log("✅ Gemini OCR analysis succeeded");
-        return parsed;
-      }
-    } catch (err) {
-      console.warn("⚠️ Gemini OCR analysis failed:", err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  // Fallback to OpenAI
+  // Try OpenAI first (Primary)
   if (OPENAI_API_KEY) {
     try {
-      console.log("🔍 Analyzing OCR text with OpenAI (fallback)...");
+      console.log("🔍 Analyzing OCR text with OpenAI...");
       const url = "https://api.openai.com/v1/chat/completions";
 
       const res = await axios.post(
@@ -252,6 +213,45 @@ const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
       }
     } catch (err) {
       console.warn("⚠️ OpenAI OCR analysis failed:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Fallback to Gemini
+  if (GEMINI_API_KEY) {
+    try {
+      console.log("🔍 Analyzing OCR text with Gemini (fallback)...");
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+      const res = await axios.post(
+        url,
+        {
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt + ocrText,
+                },
+              ],
+            },
+          ],
+          generationConfig: { temperature: 0.0, maxOutputTokens: 2048 },
+        },
+        {
+          headers: { "Content-Type": "application/json" },
+          timeout: 30000,
+        }
+      );
+
+      const text = res?.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log("✅ Gemini OCR analysis succeeded (fallback)");
+        return parsed;
+      }
+    } catch (err) {
+      console.warn("⚠️ Gemini OCR analysis failed:", err instanceof Error ? err.message : String(err));
     }
   }
 

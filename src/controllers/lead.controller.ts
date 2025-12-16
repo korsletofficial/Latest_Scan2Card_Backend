@@ -9,13 +9,13 @@ import { sanitizeEmptyStrings } from '../utils/sanitize.util';
 // Scan Business Card
 export const scanCard = async (req: AuthRequest, res: Response) => {
   try {
-    const { image, ocrText } = req.body;
+    const { image, frontOcrText, backOcrText, isOCRText } = req.body;
 
-    // Validation - require either image or ocrText
-    if (!image && !ocrText) {
+    // Validation - require either image or frontOcrText
+    if (!image && !frontOcrText) {
       return res.status(400).json({
         success: false,
-        message: "Either 'image' (base64) or 'ocrText' (string) is required for business card scanning.",
+        message: "Either 'image' (base64) or 'frontOcrText' (string) is required for business card scanning.",
       });
     }
 
@@ -26,18 +26,36 @@ export const scanCard = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (ocrText && typeof ocrText !== "string") {
+    if (frontOcrText && typeof frontOcrText !== "string") {
       return res.status(400).json({
         success: false,
-        message: "Invalid OCR text - must be a string",
+        message: "Invalid frontOcrText - must be a string",
       });
     }
 
-    console.log(`📸 Scanning business card for user: ${req.user?.userId} (${ocrText ? "OCR text" : "image"})`);
+    if (backOcrText && typeof backOcrText !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid backOcrText - must be a string",
+      });
+    }
 
-    // Determine processing method
-    const isProcessingOCR = Boolean(ocrText);
-    const inputData = ocrText || image;
+    console.log(`📸 Scanning business card for user: ${req.user?.userId} (${frontOcrText ? "OCR text" : "image"})`);
+
+    // Determine processing method and combine OCR texts if both front and back exist
+    const isProcessingOCR = Boolean(frontOcrText) || Boolean(isOCRText);
+    let combinedOcrText = '';
+
+    if (frontOcrText) {
+      combinedOcrText = frontOcrText;
+      if (backOcrText && backOcrText.trim()) {
+        // Combine front and back text with a separator for better analysis
+        combinedOcrText = `${frontOcrText}\n\n--- BACK SIDE ---\n\n${backOcrText}`;
+        console.log('📋 Combined front and back OCR text for analysis');
+      }
+    }
+
+    const inputData = combinedOcrText || image;
 
     // Scan the business card
     const scanResult = await scanBusinessCard(inputData, isProcessingOCR);
@@ -57,7 +75,8 @@ export const scanCard = async (req: AuthRequest, res: Response) => {
       message: "Business card scanned successfully",
       data: {
         scannedCardImage: image || null,
-        ocrText: scanResult.data?.ocrText,
+        frontOcrText: frontOcrText || null,
+        backOcrText: backOcrText || null,
         details: scanResult.data?.details,
         confidence: scanResult.data?.confidence,
         processingMethod: scanResult.data?.processingMethod,

@@ -1127,14 +1127,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRg...\",\n  \"isOCRText\": false\n}"
+							"raw": "{\n  \"frontOcrText\": \"Olivia Wilson\\nReal Estate Agent\\n+123-456-7890\\nwww.reallygreatsite.com\\nhello@reallygreatsite.com\\n123 Anywhere St., Any City, ST 12345\",\n  \"backOcrText\": \"Additional information on back side\",\n  \"isOCRText\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/scan-card",
 							"host": ["{{baseUrl}}"],
 							"path": ["leads", "scan-card"]
 						},
-						"description": "Scan a business card using either image or OCR text to extract contact information. Supports both image-based vision API processing and direct OCR text analysis.\n\n**Request Body Options:**\n\n1. **Image Processing (default):**\n   - `image` (required, string): Base64-encoded image data with data URI prefix\n     - Format: `data:image/jpeg;base64,<base64_string>`\n     - Supported formats: JPEG, PNG, WebP\n     - Max size: 20MB\n   - `isOCRText` (optional, boolean): Set to `false` or omit for image processing\n\n2. **OCR Text Processing:**\n   - `ocrText` (required, string): Raw OCR-extracted text from business card\n   - `isOCRText` (required, boolean): Set to `true` for OCR text processing\n\n**Processing Flow:**\n- **Image Mode:** Uses Gemini 2.5 Flash or OpenAI GPT-4o Mini Vision API to analyze image and extract structured data\n- **OCR Mode:** Uses Gemini or OpenAI GPT-4o Mini to parse raw OCR text and convert to structured JSON\n\n**Response:**\nReturns extracted contact information with ALL fields present (empty strings for missing data):\n- firstName, lastName\n- company, position\n- email, phoneNumber\n- website, address, city, country\n- notes\n\n**Note:** The following fields are NOT supported and will not be returned:\n- fax\n- zipCode\n- department\n- mobile\n- streetName\n- title\n- uniqueCode"
+						"description": "Scan a business card using either image or OCR text to extract contact information. Supports both image-based vision API processing and direct OCR text analysis with front and back card support.\n\n**Request Body Options:**\n\n1. **Image Processing:**\n   - `image` (required, string): Base64-encoded image data with data URI prefix\n     - Format: `data:image/jpeg;base64,<base64_string>`\n     - Supported formats: JPEG, PNG, WebP\n     - Max size: 20MB\n\n2. **OCR Text Processing (Front & Back):**\n   - `frontOcrText` (required, string): Raw OCR-extracted text from front of business card\n   - `backOcrText` (optional, string): Raw OCR-extracted text from back of business card\n   - `isOCRText` (optional, boolean): Set to `true` for OCR text processing\n\n**Processing Flow:**\n- **Image Mode:** Uses OpenAI GPT-4o Mini (primary) with Gemini 2.5 Flash fallback to analyze image and extract structured data\n- **OCR Mode:** Combines front and back text, then uses Gemini 2.5 Flash (primary) with OpenAI GPT-4o Mini fallback to parse and convert to structured JSON\n\n**Response:**\nReturns extracted contact information with ALL fields present (empty strings for missing data):\n- firstName, lastName\n- company, position\n- email, phoneNumber\n- website, address, city, country\n- notes\n- frontOcrText, backOcrText (for OCR mode)\n\n**Note:** The following fields are NOT supported and will not be returned:\n- fax\n- zipCode\n- department\n- mobile\n- streetName\n- title\n- uniqueCode"
 					},
 					"response": [
 						{
@@ -1171,7 +1171,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"ocrText\": \"{\\\"firstName\\\":\\\"John\\\",\\\"lastName\\\":\\\"Doe\\\",\\\"company\\\":\\\"Tech Corp\\\",\\\"position\\\":\\\"CEO\\\",\\\"email\\\":\\\"john.doe@example.com\\\",\\\"phoneNumber\\\":\\\"+1234567890\\\",\\\"website\\\":\\\"https://techcorp.com\\\",\\\"address\\\":\\\"123 Business St\\\",\\\"city\\\":\\\"New York\\\",\\\"country\\\":\\\"USA\\\",\\\"notes\\\":\\\"\\\"}\",\n        \"details\": {\n            \"firstName\": \"John\",\n            \"lastName\": \"Doe\",\n            \"company\": \"Tech Corp\",\n            \"position\": \"CEO\",\n            \"email\": \"john.doe@example.com\",\n            \"phoneNumber\": \"+1234567890\",\n            \"website\": \"https://techcorp.com\",\n            \"address\": \"123 Business St\",\n            \"city\": \"New York\",\n            \"country\": \"USA\",\n            \"notes\": \"\"\n        },\n        \"confidence\": 0.83,\n        \"processingMethod\": \"image_vision_api\"\n    }\n}"
+							"body": "{\n    \"success\": true,\n    \"message\": \"Business card scanned successfully\",\n    \"data\": {\n        \"scannedCardImage\": \"data:image/jpeg;base64,/9j/4AAQSkZJRg...\",\n        \"frontOcrText\": null,\n        \"backOcrText\": null,\n        \"details\": {\n            \"firstName\": \"John\",\n            \"lastName\": \"Doe\",\n            \"company\": \"Tech Corp\",\n            \"position\": \"CEO\",\n            \"email\": \"john.doe@example.com\",\n            \"phoneNumber\": \"+1234567890\",\n            \"website\": \"https://techcorp.com\",\n            \"address\": \"123 Business St\",\n            \"city\": \"New York\",\n            \"country\": \"USA\",\n            \"notes\": \"\"\n        },\n        \"confidence\": 0.83,\n        \"processingMethod\": \"image_vision_api\"\n    }\n}"
 						},
 						{
 							"name": "OCR Text Scan Success",
@@ -1189,7 +1189,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"ocrText\": \"John Doe\\nCEO\\nTech Corp\\njohn.doe@example.com\\n+1234567890\\nhttps://techcorp.com\\n123 Business St, New York, USA\",\n  \"isOCRText\": true\n}"
+									"raw": "{\n  \"frontOcrText\": \"John Doe\\nCEO\\nTech Corp\\njohn.doe@example.com\\n+1234567890\\nhttps://techcorp.com\",\n  \"backOcrText\": \"123 Business St, New York, USA\\nLinkedIn: linkedin.com/in/johndoe\",\n  \"isOCRText\": true\n}"
 								},
 								"url": {
 									"raw": "{{baseUrl}}/leads/scan-card",
@@ -1207,7 +1207,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"success\": true,\n    \"data\": {\n        \"ocrText\": \"John Doe\\nCEO\\nTech Corp\\njohn.doe@example.com\\n+1234567890\\nhttps://techcorp.com\\n123 Business St, New York, USA\",\n        \"details\": {\n            \"firstName\": \"John\",\n            \"lastName\": \"Doe\",\n            \"company\": \"Tech Corp\",\n            \"position\": \"CEO\",\n            \"email\": \"john.doe@example.com\",\n            \"phoneNumber\": \"+1234567890\",\n            \"website\": \"https://techcorp.com\",\n            \"address\": \"123 Business St\",\n            \"city\": \"New York\",\n            \"country\": \"USA\",\n            \"notes\": \"\"\n        },\n        \"confidence\": 0.83,\n        \"processingMethod\": \"ocr_text_analysis\"\n    }\n}"
+							"body": "{\n    \"success\": true,\n    \"message\": \"Business card scanned successfully\",\n    \"data\": {\n        \"scannedCardImage\": null,\n        \"frontOcrText\": \"John Doe\\nCEO\\nTech Corp\\njohn.doe@example.com\\n+1234567890\\nhttps://techcorp.com\",\n        \"backOcrText\": \"123 Business St, New York, USA\\nLinkedIn: linkedin.com/in/johndoe\",\n        \"details\": {\n            \"firstName\": \"John\",\n            \"lastName\": \"Doe\",\n            \"company\": \"Tech Corp\",\n            \"position\": \"CEO\",\n            \"email\": \"john.doe@example.com\",\n            \"phoneNumber\": \"+1234567890\",\n            \"website\": \"https://techcorp.com\",\n            \"address\": \"123 Business St\",\n            \"city\": \"New York\",\n            \"country\": \"USA\",\n            \"notes\": \"\"\n        },\n        \"confidence\": 0.83,\n        \"processingMethod\": \"ocr_text_analysis\"\n    }\n}"
 						}
 					]
 				},
