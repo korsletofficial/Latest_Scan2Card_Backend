@@ -1,6 +1,5 @@
 import fs from "fs";
 import axios from "axios";
-import FormData from "form-data";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -97,7 +96,7 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
     // Read image and convert to base64
     const imageBuffer = await fs.promises.readFile(imagePath);
     const base64Image = imageBuffer.toString("base64");
-    
+
     // Infer mime type from extension
     const ext = imagePath.split(".").pop()?.toLowerCase() ?? "jpg";
     const mediaType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
@@ -106,6 +105,7 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
     console.log("🔍 Attempting OpenAI GPT-4o Mini API call...");
     console.log(`📍 URL: ${url}`);
     console.log(`🔑 API Key (first 8 chars): ${OPENAI_API_KEY?.substring(0, 8)}...`);
+    console.log(`📊 Image size: ${Math.round(base64Image.length / 1024)} KB, type: ${mediaType}`);
 
     const body = {
       model: OPENAI_MODEL,
@@ -139,13 +139,17 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
     });
 
     console.log(`✅ OpenAI API response status: ${res.status}`);
+    console.log("📦 OpenAI raw response:", JSON.stringify(res.data, null, 2));
 
     // Extract text from response
     const text = res?.data?.choices?.[0]?.message?.content ?? "";
     if (!text || typeof text !== "string") {
       console.warn("⚠️ OpenAI: No text in response");
+      console.warn("📄 Full response:", JSON.stringify(res.data, null, 2));
       return null;
     }
+
+    console.log("📝 OpenAI extracted text:", text);
 
     // clean triple-backticks etc
     let cleaned = text.replace(/```json|```/g, "").trim();
@@ -162,8 +166,9 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
 
     try {
       const parsed = JSON.parse(jsonStr);
+      console.log("📋 OpenAI parsed JSON:", JSON.stringify(parsed, null, 2));
       const result = ensureKeys(parsed);
-      console.log("✅ OpenAI API succeeded");
+      console.log("✅ OpenAI API succeeded with data:", JSON.stringify(result, null, 2));
       return result;
     } catch (err) {
       console.warn("⚠️ OpenAI: JSON parse failed");
@@ -227,6 +232,7 @@ async function callGemini(imagePath: string): Promise<typeof DEFAULT_RESPONSE | 
 
   try {
     console.log("🔍 Attempting Gemini API call...");
+    console.log(`📊 Image size: ${Math.round(base64Image.length / 1024)} KB`);
     const res = await axios.post(url, body, {
       headers: { "Content-Type": "application/json" },
       timeout: 30000
@@ -238,9 +244,12 @@ async function callGemini(imagePath: string): Promise<typeof DEFAULT_RESPONSE | 
     }
 
     const jsonData = res.data;
+    console.log("📦 Gemini raw response:", JSON.stringify(jsonData, null, 2));
+
     const candidates = jsonData?.candidates;
     if (!Array.isArray(candidates) || candidates.length === 0) {
       console.warn("⚠️ Gemini: No candidates in response");
+      console.warn("📄 Full response data:", JSON.stringify(jsonData, null, 2));
       return null;
     }
 
@@ -250,29 +259,38 @@ async function callGemini(imagePath: string): Promise<typeof DEFAULT_RESPONSE | 
 
     if (!text || typeof text !== "string") {
       console.warn("⚠️ Gemini: No text in response");
+      console.warn("📄 Candidate content:", JSON.stringify(content, null, 2));
       return null;
     }
+
+    console.log("📝 Gemini extracted text:", text);
 
     let cleaned = text.replace(/```json|```/g, "").trim();
     const s = cleaned.indexOf("{");
     const e = cleaned.lastIndexOf("}");
     if (s === -1 || e === -1) {
       console.warn("⚠️ Gemini: No JSON found in response");
+      console.warn("📄 Cleaned text:", cleaned);
       return null;
     }
     const jsonStr = cleaned.substring(s, e + 1);
 
     try {
       const parsed = JSON.parse(jsonStr);
+      console.log("📋 Parsed JSON:", JSON.stringify(parsed, null, 2));
       const result = ensureKeys(parsed);
-      console.log("✅ Gemini API succeeded");
+      console.log("✅ Gemini API succeeded with data:", JSON.stringify(result, null, 2));
       return result;
     } catch (err) {
       console.warn("⚠️ Gemini: JSON parse failed");
+      console.warn("📄 JSON string:", jsonStr);
       return null;
     }
   } catch (err: any) {
     console.warn("⚠️ Gemini API failed:", err.message);
+    if (err.response) {
+      console.error("📄 Error response:", JSON.stringify(err.response.data, null, 2));
+    }
     return null;
   }
 }
@@ -283,31 +301,53 @@ async function callGemini(imagePath: string): Promise<typeof DEFAULT_RESPONSE | 
  * @returns Extracted business card data with all required fields
  */
 export async function extractBusinessCardWithFallback(imagePath: string): Promise<typeof DEFAULT_RESPONSE> {
+  console.log(`🔄 Starting extraction for image: ${imagePath}`);
+
+  // Check if file exists
+  if (!fs.existsSync(imagePath)) {
+    console.error(`❌ Image file not found: ${imagePath}`);
+    return { ...DEFAULT_RESPONSE };
+  }
+
+  const stats = fs.statSync(imagePath);
+  console.log(`📊 Image file size: ${Math.round(stats.size / 1024)} KB`);
+
   // 1) try Gemini (Primary)
   try {
+    console.log("🎯 Attempting Gemini extraction...");
     const gm = await callGemini(imagePath);
+    console.log("🔍 Gemini result:", JSON.stringify(gm, null, 2));
+
     if (gm && hasAnyValue(gm)) {
-      console.log("✅ Used Gemini for extraction");
+      console.log("✅ Used Gemini for extraction - SUCCESS");
       return gm;
+    } else {
+      console.warn("⚠️ Gemini returned data but hasAnyValue=false");
     }
   } catch (err) {
     // ignore and fallback
-    console.warn("⚠️ Gemini extraction failed, trying fallback");
+    console.warn("⚠️ Gemini extraction failed, trying fallback:", err);
   }
 
   // 2) fallback to OpenAI GPT-4o Mini
   try {
+    console.log("🎯 Attempting OpenAI extraction...");
     const openai = await callOpenAIVision(imagePath);
+    console.log("🔍 OpenAI result:", JSON.stringify(openai, null, 2));
+
     if (openai && hasAnyValue(openai)) {
-      console.log("✅ Used OpenAI GPT-4o Mini for extraction (fallback)");
+      console.log("✅ Used OpenAI GPT-4o Mini for extraction (fallback) - SUCCESS");
       return openai;
+    } else {
+      console.warn("⚠️ OpenAI returned data but hasAnyValue=false");
     }
   } catch (err) {
     // ignore
-    console.warn("⚠️ OpenAI extraction failed");
+    console.warn("⚠️ OpenAI extraction failed:", err);
   }
 
   // 3) return empty default
-  console.error("❌ All extraction methods failed");
+  console.error("❌ All extraction methods failed - returning empty data");
+  console.error("❌ This means both Gemini and OpenAI either failed or returned no valid data");
   return { ...DEFAULT_RESPONSE };
 }

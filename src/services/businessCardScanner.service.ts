@@ -268,14 +268,27 @@ const saveBase64ToTempFile = (imageBase64: string): string => {
     base64Data = imageBase64.split(",")[1];
   }
 
+  console.log(`📦 Base64 data length: ${base64Data.length} chars`);
+
   const tempDir = path.join(process.cwd(), "temp");
+  console.log(`📁 Temp directory: ${tempDir}`);
+
   if (!fs.existsSync(tempDir)) {
+    console.log("📁 Creating temp directory...");
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
   const filename = `${uuidv4()}.jpg`;
   const filepath = path.join(tempDir, filename);
-  fs.writeFileSync(filepath, base64Data, "base64");
+
+  try {
+    fs.writeFileSync(filepath, base64Data, "base64");
+    const stats = fs.statSync(filepath);
+    console.log(`✅ Saved temp file: ${filepath} (${Math.round(stats.size / 1024)} KB)`);
+  } catch (error) {
+    console.error(`❌ Failed to save temp file: ${filepath}`, error);
+    throw error;
+  }
 
   return filepath;
 };
