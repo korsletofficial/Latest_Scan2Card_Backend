@@ -126,13 +126,16 @@ CRITICAL INSTRUCTIONS:
    - Mixed languages (English + Hindi/Chinese/Arabic/etc)
    - OCR artifacts and errors
    - Scattered formatting
+   - MULTIPLE business cards (front and back sides)
 
-2. ALWAYS translate ALL non-English text to English before putting in JSON:
+2. If you find MULTIPLE contacts in the text (e.g., front and back of card), MERGE them into a SINGLE contact object, prioritizing the most complete information.
+
+3. ALWAYS translate ALL non-English text to English before putting in JSON:
    - Hindi text like "मशीनरी स्टोर" → "Machinery Store"
    - Chinese text should be transliterated/translated to English
    - Arabic text should be translated to English
 
-3. Extract and clean the following fields (remove extra spaces/artifacts):
+4. Extract and clean the following fields (remove extra spaces/artifacts):
    - firstName: First name (translate if in other language)
    - lastName: Last name (translate if in other language)
    - company: Company/business name (MUST translate to English)
@@ -144,16 +147,32 @@ CRITICAL INSTRUCTIONS:
    - city: City name (translate if in other language)
    - country: Country name (translate to English)
 
-4. OCR Quality Tips:
+5. OCR Quality Tips:
    - If you see repeated characters or garbled text, try to interpret the intended word
    - Phone numbers might be separated by spaces/dashes - remove them and keep digits
    - Addresses often span multiple lines - combine them into single string
    - Company names are usually prominent - look for capitalized words
 
-5. Output Format:
+6. Output Format:
    - ONLY valid JSON, no markdown, no extra text
+   - Return a SINGLE flat object, NOT an array
    - All empty fields must be empty strings ""
    - All text must be in English (translated)
+   - DO NOT wrap in a "contacts" array
+
+Example correct output:
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "company": "Tech Corp",
+  "position": "CEO",
+  "email": "john@example.com",
+  "phoneNumber": "+1234567890",
+  "website": "https://example.com",
+  "address": "123 Main St",
+  "city": "New York",
+  "country": "USA"
+}
 
 OCR Text to Parse:
 `;
@@ -204,12 +223,39 @@ const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
       );
 
       const text = res?.data?.choices?.[0]?.message?.content ?? "";
+      console.log("📝 OpenAI raw response text:", text);
       const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        let parsed = JSON.parse(jsonMatch[0]);
+        console.log("📋 OpenAI parsed data:", JSON.stringify(parsed, null, 2));
+
+        // Handle contacts array format (when OpenAI detects multiple cards)
+        if (parsed.contacts && Array.isArray(parsed.contacts) && parsed.contacts.length > 0) {
+          console.log("🔄 Detected contacts array, merging contact data...");
+          // Merge all contacts, prioritizing non-empty values from first contact
+          const merged: BusinessCardData = {};
+          for (const contact of parsed.contacts) {
+            for (const key of Object.keys(contact)) {
+              const currentValue = merged[key as keyof BusinessCardData];
+              const newValue = contact[key];
+
+              // Only set if we don't have a value yet, or current value is empty
+              if (!currentValue || (typeof currentValue === 'string' && currentValue.trim() === "")) {
+                if (newValue && typeof newValue === 'string' && newValue.trim()) {
+                  merged[key as keyof BusinessCardData] = newValue;
+                }
+              }
+            }
+          }
+          console.log("✅ Merged contact data:", JSON.stringify(merged, null, 2));
+          parsed = merged;
+        }
+
         console.log("✅ OpenAI OCR analysis succeeded");
         return parsed;
+      } else {
+        console.warn("⚠️ No JSON found in OpenAI response");
       }
     } catch (err) {
       console.warn("⚠️ OpenAI OCR analysis failed:", err instanceof Error ? err.message : String(err));
@@ -321,6 +367,7 @@ export const scanBusinessCard = async (
       console.log("🔍 Processing business card from OCR text...");
       extractedData = await analyzeOCRText(imageBase64OrOCRText);
       processingMethod = "ocr_text_analysis";
+      console.log("🔍 Raw extracted data before validation:", JSON.stringify(extractedData, null, 2));
       console.log(`✅ OCR text analyzed successfully. Extracted ${Object.keys(extractedData).length} fields.`);
     } else {
       if (!isValidBase64Image(imageBase64OrOCRText)) {
@@ -343,6 +390,7 @@ export const scanBusinessCard = async (
     }
 
     const cleanedData = validateAndCleanData(extractedData);
+    console.log("🧹 Cleaned data after validation:", JSON.stringify(cleanedData, null, 2));
 
     const totalFields = Object.keys(cleanedData).filter(
       (key) => cleanedData[key as keyof BusinessCardData] &&

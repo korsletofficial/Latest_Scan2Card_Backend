@@ -74,9 +74,9 @@ export const scanCard = async (req: AuthRequest, res: Response) => {
       success: true,
       message: "Business card scanned successfully",
       data: {
-        scannedCardImage: image || null,
-        frontOcrText: frontOcrText || null,
-        backOcrText: backOcrText || null,
+        scannedCardImage: image || "",
+        frontOcrText: frontOcrText || "",
+        backOcrText: backOcrText || "",
         details: scanResult.data?.details,
         confidence: scanResult.data?.confidence,
         processingMethod: scanResult.data?.processingMethod,
