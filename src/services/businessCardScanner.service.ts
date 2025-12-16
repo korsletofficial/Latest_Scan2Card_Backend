@@ -91,8 +91,15 @@ const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
   if (data.company && data.company.trim()) cleaned.company = data.company.trim();
   if (data.position && data.position.trim()) cleaned.position = data.position.trim();
 
-  if (data.email && data.email.trim() && isValidEmail(data.email.trim())) {
-    cleaned.email = data.email.trim().toLowerCase();
+  if (data.email && data.email.trim()) {
+    // Clean email by removing spaces before validation
+    const emailCleaned = data.email.trim().replace(/\s+/g, '').toLowerCase();
+    if (isValidEmail(emailCleaned)) {
+      cleaned.email = emailCleaned;
+      console.log(`✅ Email validated and cleaned: ${emailCleaned}`);
+    } else {
+      console.warn(`⚠️ Invalid email rejected: ${data.email}`);
+    }
   }
 
   if (data.phoneNumber && data.phoneNumber.trim()) {
@@ -126,9 +133,14 @@ CRITICAL INSTRUCTIONS:
    - Mixed languages (English + Hindi/Chinese/Arabic/etc)
    - OCR artifacts and errors
    - Scattered formatting
-   - MULTIPLE business cards (front and back sides)
+   - Text from BOTH FRONT and BACK sides of the SAME business card (separated by "--- BACK SIDE ---")
 
-2. If you find MULTIPLE contacts in the text (e.g., front and back of card), MERGE them into a SINGLE contact object, prioritizing the most complete information.
+2. IMPORTANT - Merging Front and Back:
+   - The text may contain information from BOTH sides of ONE business card
+   - ALWAYS merge ALL information from both sides into a SINGLE contact object
+   - Use the primary contact name from the front, but COMBINE all contact details (email, phone, address, website) from BOTH sides
+   - Even if you see different information on front vs back, treat it as ONE person's complete business card
+   - Prioritize the most complete and valid information for each field
 
 3. ALWAYS translate ALL non-English text to English before putting in JSON:
    - Hindi text like "मशीनरी स्टोर" → "Machinery Store"
@@ -136,16 +148,16 @@ CRITICAL INSTRUCTIONS:
    - Arabic text should be translated to English
 
 4. Extract and clean the following fields (remove extra spaces/artifacts):
-   - firstName: First name (translate if in other language)
-   - lastName: Last name (translate if in other language)
-   - company: Company/business name (MUST translate to English)
-   - position: Job title/role (translate if in other language)
-   - email: Email address (usually contains @)
-   - phoneNumber: Phone number (keep digits and country codes like +91)
-   - website: Website URL (usually starts with http/www)
-   - address: Street address (translate if in other language)
-   - city: City name (translate if in other language)
-   - country: Country name (translate to English)
+   - firstName: First name (translate if in other language) - use from front side
+   - lastName: Last name (translate if in other language) - use from front side
+   - company: Company/business name (MUST translate to English) - use from front side
+   - position: Job title/role (translate if in other language) - use from front side
+   - email: Email address (usually contains @) - check BOTH sides, REMOVE ALL SPACES from email
+   - phoneNumber: Phone number (keep digits and country codes like +91) - check BOTH sides, pick first valid one
+   - website: Website URL (usually starts with http/www) - check BOTH sides
+   - address: Street address (translate if in other language) - check BOTH sides
+   - city: City name (translate if in other language) - check BOTH sides
+   - country: Country name (translate to English) - check BOTH sides
 
 5. OCR Quality Tips:
    - If you see repeated characters or garbled text, try to interpret the intended word
@@ -159,6 +171,7 @@ CRITICAL INSTRUCTIONS:
    - All empty fields must be empty strings ""
    - All text must be in English (translated)
    - DO NOT wrap in a "contacts" array
+   - MERGE all information from front and back into ONE contact
 
 Example correct output:
 {
