@@ -1,8 +1,10 @@
 # Environment variables
 .env
 
-# Firebase service account key
-firebase-service-account.json
+# Firebase service account keys (all patterns)
+firebase-service-account*.json
+*firebase-adminsdk*.json
+scan2card-*.json
 
 # Node modules
 node_modules/

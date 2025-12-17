@@ -12,6 +12,24 @@ export interface NotificationPayload {
 // Initialize Firebase Admin
 let firebaseInitialized = false;
 
+// Helper function to load service account credentials
+const loadServiceAccountCredentials = (): any => {
+  // Strategy 1: Direct JSON string (for AWS App Runner / production)
+  if (process.env.FIREBASE_CONFIG_JSON) {
+    console.log("🔑 Loading Firebase credentials from FIREBASE_CONFIG_JSON env variable");
+    return JSON.parse(process.env.FIREBASE_CONFIG_JSON);
+  }
+
+  // Strategy 2: File path (for local development)
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+    console.log("🔑 Loading Firebase credentials from file:", process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+    const resolvedPath = path.resolve(process.cwd(), process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+    return require(resolvedPath);
+  }
+
+  throw new Error("No Firebase credentials configuration found. Set FIREBASE_CONFIG_JSON or FIREBASE_SERVICE_ACCOUNT_PATH");
+};
+
 export const initializeFirebase = () => {
   if (firebaseInitialized) {
     return;
@@ -25,17 +43,7 @@ export const initializeFirebase = () => {
   }
 
   try {
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-
-    if (!serviceAccountPath) {
-      console.warn("⚠️  FIREBASE_SERVICE_ACCOUNT_PATH not set. Firebase notifications disabled.");
-      return;
-    }
-
-    const resolvedPath = path.resolve(process.cwd(), serviceAccountPath);
-
-    // Check if service account file exists
-    const serviceAccount = require(resolvedPath);
+    const serviceAccount = loadServiceAccountCredentials();
 
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
