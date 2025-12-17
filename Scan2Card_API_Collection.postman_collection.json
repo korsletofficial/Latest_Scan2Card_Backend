@@ -1,9 +1,9 @@
 {
 	"info": {
 		"name": "Scan2Card API Collection",
-		"description": "Complete API collection for Scan2Card backend application with Firebase Cloud Messaging support",
+		"description": "Complete API collection for Scan2Card backend application with in-app notifications and Firebase Cloud Messaging support",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"version": "2.2.0"
+		"version": "2.3.0"
 	},
 	"variable": [
 		{
@@ -2275,9 +2275,145 @@
 						},
 						"description": "Send a test push notification to the authenticated user's registered devices. Useful for testing Firebase setup."
 					}
+				},
+				{
+					"name": "Get All Notifications",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/notifications?page=1&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (optional, default: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Items per page (optional, default: 20, max: 100)"
+								},
+								{
+									"key": "type",
+									"value": "meeting_reminder",
+									"description": "Filter by notification type (optional)",
+									"disabled": true
+								},
+								{
+									"key": "isRead",
+									"value": "false",
+									"description": "Filter by read status (optional)",
+									"disabled": true
+								},
+								{
+									"key": "priority",
+									"value": "high",
+									"description": "Filter by priority: low, medium, high (optional)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get a paginated list of notifications for the authenticated user. Supports filtering by type, read status, and priority."
+					}
+				},
+				{
+					"name": "Get Unread Count",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/notifications/unread-count",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications", "unread-count"]
+						},
+						"description": "Get the count of unread notifications for the authenticated user. Use this for the notification badge."
+					}
+				},
+				{
+					"name": "Mark Notifications as Read",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notificationIds\": [\n    \"675f1234567890abcdef1234\",\n    \"675f1234567890abcdef5678\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/notifications/mark-as-read",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications", "mark-as-read"]
+						},
+						"description": "Mark one or more specific notifications as read. Provide an array of notification IDs in the request body."
+					}
+				},
+				{
+					"name": "Mark All Notifications as Read",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/notifications/mark-all-as-read",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications", "mark-all-as-read"]
+						},
+						"description": "Mark all unread notifications as read for the authenticated user. Useful for 'mark all as read' functionality."
+					}
+				},
+				{
+					"name": "Delete Notifications",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notificationIds\": [\n    \"675f1234567890abcdef1234\",\n    \"675f1234567890abcdef5678\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/notifications",
+							"host": ["{{baseUrl}}"],
+							"path": ["notifications"]
+						},
+						"description": "Soft delete one or more notifications. Provide an array of notification IDs in the request body. Deleted notifications won't appear in future queries."
+					}
 				}
 			],
-			"description": "Firebase Cloud Messaging (FCM) endpoints for managing push notifications (Requires authentication)"
+			"description": "Notification endpoints for managing in-app notifications and Firebase Cloud Messaging push notifications. Includes notification CRUD operations, read/unread tracking, and FCM token management. (Requires authentication)"
 		},
 		{
 			"name": "Health Check",

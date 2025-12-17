@@ -4,6 +4,7 @@ import UserModel from "../models/user.model";
 import LeadsModel from "../models/leads.model";
 import { sendNotificationToDevice, sendNotificationToMultipleDevices } from "../services/firebase.service";
 import { sendMeetingReminderEmail } from "../services/email.service";
+import { createMeetingReminderNotification } from "../services/notification.service";
 
 /**
  * Meeting Reminder Cron Job
@@ -64,45 +65,23 @@ export const startMeetingReminderCron = () => {
           // Get lead name
           const leadName = lead?.details?.name || lead?.details?.firstName || "Unknown";
 
-          let pushNotificationSent = false;
+          // Create notification in database (this will also send push if user has FCM tokens)
+          const notificationCreated = await createMeetingReminderNotification(user._id.toString(), {
+            meetingId: meeting._id.toString(),
+            title: meeting.title,
+            leadName,
+            startAt: meeting.startAt,
+            minutesUntil,
+          });
 
-          // Send push notification if user has FCM tokens
-          if (user.fcmTokens && user.fcmTokens.length > 0) {
-            // Create notification payload
-            const notificationTitle = "📅 Meeting Reminder";
-            const notificationBody = `Your meeting "${meeting.title}" with ${leadName} starts in ${minutesUntil} minutes`;
-
-            const notification = {
-              title: notificationTitle,
-              body: notificationBody,
-              data: {
-                type: "meeting_reminder",
-                meetingId: meeting._id.toString(),
-                leadId: lead?._id?.toString() || "",
-                leadName,
-                meetingTitle: meeting.title,
-                startAt: meeting.startAt.toISOString(),
-                meetingMode: meeting.meetingMode,
-                location: meeting.location || "",
-                minutesUntil: minutesUntil.toString(),
-              },
-            };
-
-            // Send notification to all user's devices
-            const result = await sendNotificationToMultipleDevices(user.fcmTokens, notification);
-
-            if (result.successCount > 0) {
-              console.log(
-                `✅ Sent meeting reminder to ${user.firstName} ${user.lastName} (${result.successCount}/${user.fcmTokens.length} devices)`
-              );
-              pushNotificationSent = true;
-            } else {
-              console.error(
-                `❌ Failed to send push notification for meeting ${meeting._id} to user ${user._id}`
-              );
-            }
+          if (notificationCreated) {
+            console.log(
+              `✅ Created meeting reminder notification for ${user.firstName} ${user.lastName}`
+            );
           } else {
-            console.log(`⚠️  User ${user._id} has no FCM tokens registered - skipping push notification`);
+            console.error(
+              `❌ Failed to create meeting reminder notification for user ${user._id}`
+            );
           }
 
           // Send email reminder to lead if email exists (regardless of push notification status)
@@ -197,32 +176,16 @@ export const checkAndSendMeetingReminders = async () => {
       const minutesUntil = Math.round(timeUntilMeeting / (1000 * 60));
       const leadName = lead?.details?.name || lead?.details?.firstName || "Unknown";
 
-      let reminderAttempted = false;
+      // Create notification in database (this will also send push if user has FCM tokens)
+      const notificationCreated = await createMeetingReminderNotification(user._id.toString(), {
+        meetingId: meeting._id.toString(),
+        title: meeting.title,
+        leadName,
+        startAt: meeting.startAt,
+        minutesUntil,
+      });
 
-      // Send push notification if user has FCM tokens
-      if (user.fcmTokens && user.fcmTokens.length > 0) {
-        const notification = {
-          title: "📅 Meeting Reminder",
-          body: `Your meeting "${meeting.title}" with ${leadName} starts in ${minutesUntil} minutes`,
-          data: {
-            type: "meeting_reminder",
-            meetingId: meeting._id.toString(),
-            leadId: lead?._id?.toString() || "",
-            leadName,
-            meetingTitle: meeting.title,
-            startAt: meeting.startAt.toISOString(),
-            meetingMode: meeting.meetingMode,
-            location: meeting.location || "",
-            minutesUntil: minutesUntil.toString(),
-          },
-        };
-
-        const result = await sendNotificationToMultipleDevices(user.fcmTokens, notification);
-
-        if (result.successCount > 0) {
-          reminderAttempted = true;
-        }
-      }
+      let reminderAttempted = !!notificationCreated;
 
       // Send email reminder to lead if email exists (regardless of push notification status)
       if (lead?.details?.email) {

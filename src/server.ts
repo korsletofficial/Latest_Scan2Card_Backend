@@ -19,6 +19,7 @@ import teamManagerRoutes from "./routes/teamManager.routes";
 import notificationRoutes from "./routes/notification.routes";
 import keepServerActive from "./cron/serverActive";
 import startMeetingReminderCron from "./cron/meetingReminders";
+import startLicenseExpiryReminderCron from "./cron/licenseExpiryReminders";
 import startEventExpiryCron from "./cron/eventExpiry";
 import startRsvpExpiryCron from "./cron/rsvpExpiry";
 import packageJson from "../package.json";
@@ -124,6 +125,7 @@ const startServer = async () => {
 startServer();
 keepServerActive();
 startMeetingReminderCron();
+startLicenseExpiryReminderCron();
 startEventExpiryCron();
 startRsvpExpiryCron();
 

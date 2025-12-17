@@ -714,7 +714,13 @@ export const logoutUser = async (userId: string) => {
   // Clear refresh token and expiry
   user.refreshToken = undefined;
   user.refreshTokenExpiry = undefined;
+
+  // Clear all FCM tokens (remove push notification devices)
+  user.fcmTokens = [];
+
   await user.save();
+
+  console.log(`✅ User ${userId} logged out - cleared refresh token and FCM tokens`);
 
   return {
     message: "Logged out successfully",

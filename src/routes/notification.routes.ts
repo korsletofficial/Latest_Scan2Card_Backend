@@ -7,16 +7,19 @@ const router = Router();
 // All routes require authentication
 router.use(authenticateToken);
 
-// Register FCM token
+// FCM Token Management
 router.post("/register-token", notificationController.registerFCMToken);
-
-// Remove FCM token
 router.post("/remove-token", notificationController.removeFCMToken);
-
-// Get all FCM tokens for current user
 router.get("/tokens", notificationController.getFCMTokens);
 
-// Send test notification
+// Notification CRUD Operations
+router.get("/", notificationController.getNotifications);
+router.get("/unread-count", notificationController.getUnreadCount);
+router.patch("/mark-as-read", notificationController.markNotificationsAsRead);
+router.patch("/mark-all-as-read", notificationController.markAllNotificationsAsRead);
+router.delete("/", notificationController.deleteNotifications);
+
+// Test notification (for debugging)
 router.post("/test", notificationController.sendTestNotification);
 
 export default router;
