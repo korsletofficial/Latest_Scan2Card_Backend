@@ -55,6 +55,7 @@
     "nodemailer": "^7.0.11",
     "openai": "^6.9.1",
     "puppeteer": "^24.31.0",
+    "puppeteer-core": "^24.33.0",
     "qrcode": "^1.5.4",
     "uuid": "^13.0.0",
     "vcard-parser": "^1.0.0",

@@ -1,10 +1,12 @@
 import VCard from "vcard-parser";
-import axios from "axios";
+import puppeteer from "puppeteer-core";
 // Uncomment and configure if you want LLM fallback
 // import OpenAI from "openai";
 
-// Crawler service URL
-const CRAWLER_SERVICE_URL = 'https://scan2card-crawler.onrender.com';
+// Browserless API configuration
+// Uses WebSocket with Puppeteer (Option 2 from Browserless docs) - recommended by Browserless
+const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY || '';
+const BROWSERLESS_WS_ENDPOINT = `wss://production-sfo.browserless.io?token=${BROWSERLESS_API_KEY}`;
 
 // Interface for extracted contact data
 export interface QRContactData {
@@ -231,34 +233,415 @@ const parseTelLink = (telLink: string): QRContactData => {
 };
 
 /**
- * Scrapes contact information from a webpage using the crawler service
+ * Extracts email from text using regex
+ */
+const extractEmailFromText = (text: string): string | undefined => {
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+  const match = text.match(emailRegex);
+  return match ? match[0] : undefined;
+};
+
+/**
+ * Extracts phone number from text using regex
+ */
+const extractPhoneFromText = (text: string): string | undefined => {
+  const phonePatterns = [
+    /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,5}/,
+    /(\+?\d{1,3}[-.\s]?\d{2,4}[-.\s]?\d{2,4}[-.\s]?\d{2,4}[-.\s]?\d{0,4})/,
+    /\+?\d{10,15}/,
+    /(\(\d{3}\)\s?\d{3}[-.\s]\d{4})/,
+    /(\d{3}[-.\s]\d{3}[-.\s]\d{4})/,
+  ];
+
+  for (const pattern of phonePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const cleaned = match[0].replace(/[^\d+\-\s()]/g, '').trim();
+      const digitCount = cleaned.replace(/[^\d]/g, '').length;
+      if (digitCount >= 7 && digitCount <= 15) {
+        return cleaned;
+      }
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Validates if text is a valid name
+ */
+const isValidName = (text: string): boolean => {
+  if (!text || text.length < 2 || text.length > 100) return false;
+  const namePattern = /^[A-Za-z]+([\s\-'][A-Za-z]+)*$/;
+  if (!namePattern.test(text)) return false;
+  const invalidTerms = /(download|phone|email|address|website|contact|card|call|directions|mobile|office|home)/i;
+  return !invalidTerms.test(text);
+};
+
+/**
+ * Validates if text is a valid company name
+ */
+const isValidCompany = (text: string): boolean => {
+  if (!text || text.length < 2 || text.length > 100) return false;
+  if (text.includes('@') || /^\+?\d/.test(text)) return false;
+  const jobTitles = /(director|manager|ceo|cto|cfo|engineer|developer|designer|download|phone|email)/i;
+  return !jobTitles.test(text);
+};
+
+/**
+ * Validates if text is a valid position/job title
+ */
+const isValidPosition = (text: string): boolean => {
+  if (!text || text.length < 2 || text.length > 100) return false;
+  const positionKeywords = [
+    'manager', 'director', 'engineer', 'developer', 'designer', 'analyst',
+    'specialist', 'coordinator', 'officer', 'executive', 'president',
+    'vice', 'assistant', 'associate', 'senior', 'junior', 'lead',
+    'head', 'chief', 'ceo', 'cto', 'cfo', 'coo', 'consultant'
+  ];
+  const textLower = text.toLowerCase();
+  return positionKeywords.some(keyword => textLower.includes(keyword));
+};
+
+/**
+ * Parses QRCodeChimp embedded payload
+ */
+const parseQRCodeChimpPayload = (rawScript: string, fallbackUrl: string): QRContactData | null => {
+  if (!rawScript) return null;
+
+  try {
+    const payload = JSON.parse(rawScript);
+    const content = Array.isArray(payload?.content) ? payload.content : [];
+    const contactData: QRContactData = {};
+
+    const ensureWebsite = (): string | undefined => {
+      if (payload?.short_url) {
+        const shortUrl: string = payload.short_url;
+        if (shortUrl.startsWith('http')) return shortUrl;
+        return `https://linko.page/${shortUrl}`;
+      }
+      return fallbackUrl;
+    };
+
+    const setIfEmpty = (key: keyof QRContactData, value?: string): void => {
+      if (value && !contactData[key]) {
+        contactData[key] = value;
+      }
+    };
+
+    const profileComponent = content.find((item: any) => item?.component === 'profile');
+    if (profileComponent?.name) {
+      const nameParts = String(profileComponent.name).trim().split(/\s+/);
+      setIfEmpty('firstName', nameParts[0]);
+      if (nameParts.length > 1) {
+        setIfEmpty('lastName', nameParts.slice(1).join(' '));
+      }
+    }
+
+    setIfEmpty('company', profileComponent?.company);
+    setIfEmpty('position', profileComponent?.desc);
+
+    if (Array.isArray(profileComponent?.contact_shortcuts)) {
+      for (const shortcut of profileComponent.contact_shortcuts) {
+        if (shortcut?.type === 'mobile') setIfEmpty('phoneNumber', shortcut.value);
+        if (shortcut?.type === 'email') setIfEmpty('email', shortcut.value);
+      }
+    }
+
+    const contactComponent = content.find((item: any) => item?.component === 'contact');
+    if (Array.isArray(contactComponent?.contact_infos)) {
+      for (const info of contactComponent.contact_infos) {
+        if (info?.type === 'email') setIfEmpty('email', info.email);
+        if (info?.type === 'number' || info?.type === 'mobile') {
+          setIfEmpty('phoneNumber', info.number ?? info.value);
+        }
+        if (info?.type === 'address') {
+          setIfEmpty('address', info.street ?? info.address);
+          setIfEmpty('city', info.city ?? info.town);
+          setIfEmpty('country', info.country);
+        }
+      }
+    }
+
+    setIfEmpty('website', ensureWebsite());
+
+    const hasData = Object.values(contactData).some((value) => Boolean(value));
+    return hasData ? contactData : null;
+  } catch (error: any) {
+    console.error('Failed to parse embedded QR template payload:', error?.message || error);
+    return null;
+  }
+};
+
+/**
+ * Scrapes contact information from a webpage using Browserless API
+ * Uses WebSocket with Puppeteer (Option 2 from Browserless docs)
+ * Recommended by Browserless for better handling of dynamic/JS-heavy pages
  */
 const scrapeWebpage = async (url: string): Promise<QRContactData> => {
+  let browser;
+
   try {
-    console.log(`🌐 Calling crawler service for URL: ${url}`);
-
-    const response = await axios.post(
-      `${CRAWLER_SERVICE_URL}/api/crawl`,
-      { url },
-      {
-        timeout: 45000, // 45 second timeout
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (response.data.success && response.data.data) {
-      console.log("✅ Crawler service returned data:", response.data.data);
-      return response.data.data as QRContactData;
-    } else {
-      console.warn("⚠️ Crawler service returned unsuccessful response");
+    if (!BROWSERLESS_API_KEY) {
+      console.warn("⚠️ BROWSERLESS_API_KEY not configured, returning URL only");
       return { website: url };
     }
-  } catch (error: any) {
-    console.error("❌ Error calling crawler service:", error.message);
 
-    // Return at least the URL if crawler service fails
+    console.log(`🌐 Scraping webpage using Browserless WebSocket: ${url}`);
+
+    // Connect to Browserless via WebSocket
+    browser = await puppeteer.connect({
+      browserWSEndpoint: BROWSERLESS_WS_ENDPOINT,
+    });
+
+    const page = await browser.newPage();
+
+    // Navigate to the page
+    await page.goto(url, {
+      waitUntil: 'networkidle2',
+      timeout: 30000,
+    });
+
+    // Wait for dynamic content to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Extract all data from the page
+    const extractedData = await page.evaluate(() => {
+      const result: any = {};
+
+      // @ts-ignore - Code runs in browser context
+      result.bodyText = document.body.innerText;
+
+      // Try to find JSON-LD structured data
+      // @ts-ignore
+      const jsonLdScript = document.querySelector('script[type="application/ld+json"]');
+      if (jsonLdScript) {
+        result.jsonLd = jsonLdScript.textContent;
+      }
+
+      // Try to find QRCodeChimp embedded data
+      // @ts-ignore
+      const scripts = Array.from(document.scripts);
+      for (const script of scripts) {
+        // @ts-ignore
+        const text = script.textContent || '';
+        if (text.includes('__savedQrCodeParams')) {
+          const match = text.match(/__savedQrCodeParams\s*=\s*(\{[\s\S]*?\});?/);
+          if (match && match[1]) {
+            result.qrCodeChimpData = match[1];
+          }
+        }
+      }
+
+      // Extract mailto links
+      // @ts-ignore
+      const mailtoLinks = Array.from(document.querySelectorAll('a[href^="mailto:"]'));
+      result.emails = mailtoLinks.map((a: any) => a.href.replace('mailto:', '').split('?')[0]);
+
+      // Extract tel links
+      // @ts-ignore
+      const telLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
+      result.phones = telLinks.map((a: any) => a.href.replace('tel:', '').trim());
+
+      // Try common selectors for name
+      // @ts-ignore
+      result.h1 = document.querySelector('h1')?.textContent?.trim() || '';
+      // @ts-ignore
+      result.nameClass = document.querySelector('.name, .person-name, .full-name')?.textContent?.trim() || '';
+
+      // Try to get company
+      // @ts-ignore
+      result.company = document.querySelector('.company, .organization, [itemprop="worksFor"]')?.textContent?.trim() || '';
+
+      // Try to get position/title
+      // @ts-ignore
+      result.position = document.querySelector('.title, .job-title, .position, [itemprop="jobTitle"]')?.textContent?.trim() || '';
+
+      return result;
+    });
+
+    await browser.close();
+    browser = undefined;
+
+    console.log("✅ Browserless extracted data");
+
+    // Parse the extracted data
+    const contactData: QRContactData = { website: url };
+    const fullText = extractedData.bodyText || '';
+
+    // 1. Try QRCodeChimp embedded payload first (most reliable)
+    if (extractedData.qrCodeChimpData) {
+      console.log('🧩 Embedded QR template payload detected');
+      const parsedData = parseQRCodeChimpPayload(extractedData.qrCodeChimpData, url);
+      if (parsedData) {
+        Object.keys(parsedData).forEach((key) => {
+          const k = key as keyof QRContactData;
+          if (parsedData[k] && !contactData[k]) {
+            contactData[k] = parsedData[k];
+          }
+        });
+      }
+    }
+
+    // 2. Try JSON-LD structured data
+    if (extractedData.jsonLd && !contactData.firstName) {
+      try {
+        const jsonLd = JSON.parse(extractedData.jsonLd);
+        if (jsonLd['@type'] === 'Person') {
+          if (jsonLd.name) {
+            const nameParts = jsonLd.name.split(' ');
+            contactData.firstName = nameParts[0];
+            if (nameParts.length > 1) {
+              contactData.lastName = nameParts.slice(1).join(' ');
+            }
+          }
+          if (jsonLd.givenName) contactData.firstName = jsonLd.givenName;
+          if (jsonLd.familyName) contactData.lastName = jsonLd.familyName;
+          if (jsonLd.email) contactData.email = jsonLd.email;
+          if (jsonLd.telephone) contactData.phoneNumber = jsonLd.telephone;
+          if (jsonLd.jobTitle) contactData.position = jsonLd.jobTitle;
+          if (jsonLd.worksFor?.name) contactData.company = jsonLd.worksFor.name;
+          console.log("✅ Extracted data from JSON-LD");
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+
+    // 3. Extract emails (first valid one)
+    if (!contactData.email && extractedData.emails?.length > 0) {
+      for (const email of extractedData.emails) {
+        const validEmail = extractEmailFromText(email);
+        if (validEmail) {
+          contactData.email = validEmail;
+          break;
+        }
+      }
+    }
+
+    // 4. Extract phone numbers (first valid one)
+    if (!contactData.phoneNumber && extractedData.phones?.length > 0) {
+      for (const phone of extractedData.phones) {
+        const validPhone = extractPhoneFromText(phone);
+        if (validPhone) {
+          contactData.phoneNumber = validPhone;
+          break;
+        }
+      }
+    }
+
+    // 5. Extract name from h1 or name class
+    if (!contactData.firstName && extractedData.nameClass) {
+      const nameText = extractedData.nameClass;
+      if (isValidName(nameText)) {
+        const nameParts = nameText.split(' ');
+        if (nameParts.length >= 2) {
+          contactData.firstName = nameParts[0];
+          contactData.lastName = nameParts.slice(1).join(' ');
+        } else {
+          contactData.firstName = nameText;
+        }
+      }
+    }
+
+    if (!contactData.firstName && extractedData.h1) {
+      const h1Text = extractedData.h1;
+      if (h1Text.length < 100 && isValidName(h1Text)) {
+        const nameParts = h1Text.split(' ');
+        if (nameParts.length >= 2) {
+          contactData.firstName = nameParts[0];
+          contactData.lastName = nameParts.slice(1).join(' ');
+        } else {
+          contactData.firstName = h1Text;
+        }
+      }
+    }
+
+    // 6. Extract company and position from selectors
+    if (!contactData.company && extractedData.company) {
+      if (isValidCompany(extractedData.company)) {
+        contactData.company = extractedData.company;
+      }
+    }
+
+    if (!contactData.position && extractedData.position) {
+      if (isValidPosition(extractedData.position)) {
+        contactData.position = extractedData.position;
+      }
+    }
+
+    // 7. Fallback: Extract from plain text
+    if (!contactData.email && fullText) {
+      contactData.email = extractEmailFromText(fullText);
+    }
+
+    if (!contactData.phoneNumber && fullText) {
+      contactData.phoneNumber = extractPhoneFromText(fullText);
+    }
+
+    // 8. Try to extract name from the beginning of text
+    if (!contactData.firstName && fullText) {
+      const lines = fullText.split("\n").filter((line: string) => line.trim());
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (
+          trimmedLine.length >= 3 &&
+          trimmedLine.length < 50 &&
+          !trimmedLine.includes("@") &&
+          !trimmedLine.match(/\d{3}/) &&
+          isValidName(trimmedLine)
+        ) {
+          const nameParts = trimmedLine.split(" ");
+          if (nameParts.length >= 2) {
+            contactData.firstName = nameParts[0];
+            contactData.lastName = nameParts.slice(1).join(" ");
+          } else {
+            contactData.firstName = trimmedLine;
+          }
+          break;
+        }
+      }
+    }
+
+    // 9. Try to extract company from text
+    if (!contactData.company && fullText) {
+      const lines = fullText.split("\n").filter((line: string) => line.trim());
+      for (let i = 1; i < Math.min(lines.length, 5); i++) {
+        const line = lines[i].trim();
+        if (line.length > 2 && line.length < 100 && isValidCompany(line)) {
+          contactData.company = line;
+          break;
+        }
+      }
+    }
+
+    // 10. Try to extract position from text
+    if (!contactData.position && fullText) {
+      const lines = fullText.split("\n").filter((line: string) => line.trim());
+      for (let i = 1; i < Math.min(lines.length, 5); i++) {
+        const line = lines[i].trim();
+        if (line.length > 2 && line.length < 100 && isValidPosition(line)) {
+          contactData.position = line;
+          break;
+        }
+      }
+    }
+
+    console.log("✨ Final contact data:", JSON.stringify(contactData, null, 2));
+    return contactData;
+
+  } catch (error: any) {
+    console.error("❌ Error calling Browserless API:", error.message);
+
+    // Clean up browser if still open
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
+
+    // Return at least the URL if Browserless fails
     return { website: url };
   }
 };
