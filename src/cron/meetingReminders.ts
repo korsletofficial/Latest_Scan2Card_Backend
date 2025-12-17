@@ -18,7 +18,7 @@ const REMINDER_WINDOW_MINUTES = 60; // Send reminder 1 hour before meeting
 export const startMeetingReminderCron = () => {
   // Run every 15 minutes: */15 * * * *
   // For testing, use every minute: * * * * *
-  const cronSchedule = "*/15 * * * *"; // Every 15 minutes
+  const cronSchedule = "* * * * *"; // Every 15 minutes
 
   cron.schedule(cronSchedule, async () => {
     try {
