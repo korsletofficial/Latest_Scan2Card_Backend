@@ -28,6 +28,19 @@ interface ExhibitorWelcomeEmailData {
   companyName?: string;
 }
 
+interface MeetingReminderEmailData {
+  leadEmail: string;
+  leadName: string;
+  meetingTitle: string;
+  userFirstName: string;
+  userLastName: string;
+  startAt: Date;
+  endAt: Date;
+  meetingMode: "online" | "offline" | "phone";
+  location?: string;
+  minutesUntil: number;
+}
+
 // Singleton transporter instance (reused across all email sends)
 let transporterInstance: nodemailer.Transporter | null = null;
 let transporterInitialized = false;
@@ -330,6 +343,237 @@ const generateLicenseKeyEmailHTML = (data: LicenseKeyEmailData): string => {
   `.trim();
 };
 
+// Helper function to format meeting date and time
+const formatMeetingDateTime = (date: Date): string => {
+  return new Date(date).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short'
+  });
+};
+
+// Helper function to check if a string is a valid URL
+const isValidUrl = (str: string): boolean => {
+  try {
+    const url = new URL(str);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+// Generate HTML email template for meeting reminder
+const generateMeetingReminderEmailHTML = (data: MeetingReminderEmailData): string => {
+  const meetingModeLabel =
+    data.meetingMode === 'online' ? '💻 Online Meeting' :
+    data.meetingMode === 'offline' ? '📍 In-Person Meeting' :
+    '📞 Phone Call';
+
+  // Format location as clickable link if it's a URL
+  let locationDisplay = data.location || '';
+  if (data.location && isValidUrl(data.location)) {
+    locationDisplay = `<a href="${data.location}" style="color: #854AE6; text-decoration: none; font-weight: 600;" target="_blank">${data.location}</a>`;
+  }
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meeting Reminder</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: #854AE6;
+      color: #ffffff;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .content {
+      padding: 30px;
+    }
+    .meeting-box {
+      background-color: #f8f9fa;
+      border-left: 4px solid #854AE6;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .meeting-item {
+      margin: 12px 0;
+    }
+    .meeting-label {
+      font-weight: 600;
+      color: #555;
+      display: inline-block;
+      min-width: 120px;
+    }
+    .meeting-value {
+      color: #000;
+      font-size: 14px;
+    }
+    .time-highlight {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #856404;
+      text-align: center;
+    }
+    .important-note {
+      background-color: #d1ecf1;
+      border-left: 4px solid #0c5460;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .important-note strong {
+      color: #0c5460;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6c757d;
+      border-top: 1px solid #dee2e6;
+    }
+    a {
+      color: #854AE6;
+      text-decoration: underline;
+    }
+    a:hover {
+      color: #6A38B8;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        margin: 0;
+        border-radius: 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .meeting-label {
+        display: block;
+        margin-bottom: 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>📅 Meeting Reminder</h1>
+    </div>
+
+    <div class="content">
+      <p>Hello <strong>${data.leadName}</strong>,</p>
+
+      <p>This is a friendly reminder about your upcoming meeting with <strong>${data.userFirstName} ${data.userLastName}</strong>.</p>
+
+      <div class="time-highlight">
+        ⏰ Your meeting starts in ${data.minutesUntil} minutes
+      </div>
+
+      <div class="meeting-box">
+        <h3 style="margin-top: 0; color: #854AE6;">📋 Meeting Details</h3>
+
+        <div class="meeting-item">
+          <span class="meeting-label">Title:</span>
+          <span class="meeting-value"><strong>${data.meetingTitle}</strong></span>
+        </div>
+
+        <div class="meeting-item">
+          <span class="meeting-label">Type:</span>
+          <span class="meeting-value">${meetingModeLabel}</span>
+        </div>
+
+        <div class="meeting-item">
+          <span class="meeting-label">Start Time:</span>
+          <span class="meeting-value">${formatMeetingDateTime(data.startAt)}</span>
+        </div>
+
+        <div class="meeting-item">
+          <span class="meeting-label">End Time:</span>
+          <span class="meeting-value">${formatMeetingDateTime(data.endAt)}</span>
+        </div>
+
+        ${data.location ? `
+        <div class="meeting-item">
+          <span class="meeting-label">${data.meetingMode === 'online' ? 'Meeting Link:' : 'Location:'}</span>
+          <span class="meeting-value">${locationDisplay}</span>
+        </div>
+        ` : ''}
+
+        <div class="meeting-item">
+          <span class="meeting-label">With:</span>
+          <span class="meeting-value">${data.userFirstName} ${data.userLastName}</span>
+        </div>
+      </div>
+
+      ${data.meetingMode === 'online' && data.location && isValidUrl(data.location) ? `
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${data.location}"
+           style="display: inline-block;
+                  padding: 14px 28px;
+                  background: #854AE6;
+                  color: #ffffff !important;
+                  text-decoration: none;
+                  border-radius: 6px;
+                  font-weight: 600;
+                  font-size: 16px;">
+          🎥 Join Meeting
+        </a>
+      </div>
+      ` : ''}
+
+      <div class="important-note">
+        <strong>💡 Please be on time!</strong> ${data.userFirstName} ${data.userLastName} is looking forward to meeting with you.
+      </div>
+
+      <p style="margin-top: 30px; color: #6c757d; font-size: 14px;">
+        If you need to reschedule or have any questions, please contact ${data.userFirstName} ${data.userLastName} directly.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p style="margin: 5px 0;">© ${new Date().getFullYear()} Scan2Card. All rights reserved.</p>
+      <p style="margin: 5px 0;">This is an automated email. Please do not reply.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+};
+
 // Generate plain text version of the email
 const generateLicenseKeyEmailText = (data: LicenseKeyEmailData): string => {
   return `
@@ -354,6 +598,43 @@ QR Code (Original): ${data.qrContent || data.licenseKey}
 IMPORTANT: Please keep these credentials safe and secure. Change your password after your first login for better security.
 
 If you have any questions or need assistance, please contact our support team.
+
+© ${new Date().getFullYear()} Scan2Card. All rights reserved.
+This is an automated email. Please do not reply.
+  `.trim();
+};
+
+// Generate plain text version of meeting reminder email
+const generateMeetingReminderEmailText = (data: MeetingReminderEmailData): string => {
+  const meetingModeLabel =
+    data.meetingMode === 'online' ? 'Online Meeting' :
+    data.meetingMode === 'offline' ? 'In-Person Meeting' :
+    'Phone Call';
+
+  // Format location label based on meeting mode
+  const locationLabel = data.meetingMode === 'online' ? 'Meeting Link' : 'Location';
+
+  return `
+Meeting Reminder
+
+Hello ${data.leadName},
+
+This is a friendly reminder about your upcoming meeting with ${data.userFirstName} ${data.userLastName}.
+
+⏰ YOUR MEETING STARTS IN ${data.minutesUntil} MINUTES
+
+Meeting Details:
+-----------------
+Title: ${data.meetingTitle}
+Type: ${meetingModeLabel}
+Start Time: ${formatMeetingDateTime(data.startAt)}
+End Time: ${formatMeetingDateTime(data.endAt)}
+${data.location ? `${locationLabel}: ${data.location}` : ''}
+With: ${data.userFirstName} ${data.userLastName}
+
+💡 Please be on time! ${data.userFirstName} ${data.userLastName} is looking forward to meeting with you.
+
+If you need to reschedule or have any questions, please contact ${data.userFirstName} ${data.userLastName} directly.
 
 © ${new Date().getFullYear()} Scan2Card. All rights reserved.
 This is an automated email. Please do not reply.
@@ -650,6 +931,20 @@ export const sendExhibitorWelcomeEmail = async (data: ExhibitorWelcomeEmailData)
     subject,
     html: generateExhibitorWelcomeEmailHTML(data),
     text: generateExhibitorWelcomeEmailText(data),
+  };
+
+  return await sendEmail(emailOptions);
+};
+
+// Send meeting reminder email to lead
+export const sendMeetingReminderEmail = async (data: MeetingReminderEmailData): Promise<boolean> => {
+  const subject = `Meeting Reminder: ${data.meetingTitle}`;
+
+  const emailOptions: EmailOptions = {
+    to: data.leadEmail,
+    subject,
+    html: generateMeetingReminderEmailHTML(data),
+    text: generateMeetingReminderEmailText(data),
   };
 
   return await sendEmail(emailOptions);
