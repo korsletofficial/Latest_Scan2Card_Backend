@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import UserModel from "../models/user.model";
+import RsvpModel from "../models/rsvp.model";
 import { createLicenseExpiryNotification } from "../services/notification.service";
 
 /**
@@ -7,6 +7,8 @@ import { createLicenseExpiryNotification } from "../services/notification.servic
  *
  * Runs daily at 9 AM to check for expiring licenses and send reminders
  * Sends notifications at 30 days, 7 days, 3 days, and 1 day before expiry
+ *
+ * This checks RSVP records for expiring license keys and notifies users
  */
 
 const REMINDER_DAYS = [30, 7, 3, 1]; // Days before expiry to send reminders
@@ -32,69 +34,81 @@ export const startLicenseExpiryReminderCron = () => {
         const startOfTargetDay = new Date(targetDate);
         startOfTargetDay.setHours(0, 0, 0, 0);
 
-        // Find users whose license expires on the target date
-        const usersWithExpiringLicense = await UserModel.find({
-          licenseExpiryDate: {
+        // Find RSVPs with licenses expiring on the target date
+        const rsvpsWithExpiringLicense = await RsvpModel.find({
+          expiresAt: {
             $gte: startOfTargetDay,
             $lte: targetDate,
           },
           isDeleted: false,
-        }).select("_id firstName lastName email licenseExpiryDate role");
+          isActive: true,
+        })
+          .populate("userId", "firstName lastName email")
+          .populate("eventId", "eventName");
 
         console.log(
-          `📅 Found ${usersWithExpiringLicense.length} users with license expiring in ${days} days`
+          `📅 Found ${rsvpsWithExpiringLicense.length} RSVPs with license expiring in ${days} days`
         );
 
-        for (const user of usersWithExpiringLicense) {
+        for (const rsvp of rsvpsWithExpiringLicense) {
           try {
-            // Check if we already sent a notification for this expiry date and days count
-            // You could add a field to track this, but for now we'll create the notification
+            const user = rsvp.userId as any;
+            const event = rsvp.eventId as any;
+
+            if (!user || !rsvp.expiresAt) continue;
 
             const notification = await createLicenseExpiryNotification(user._id.toString(), {
               daysUntilExpiry: days,
-              expiryDate: user.licenseExpiryDate!,
+              expiryDate: rsvp.expiresAt,
             });
 
             if (notification) {
               console.log(
-                `✅ Sent license expiry reminder to ${user.firstName} ${user.lastName} (${days} days remaining)`
+                `✅ Sent license expiry reminder to ${user.firstName} ${user.lastName} for event "${event?.eventName}" (${days} days remaining)`
               );
             } else {
               console.error(
-                `❌ Failed to send license expiry reminder to user ${user._id}`
+                `❌ Failed to send license expiry reminder for RSVP ${rsvp._id}`
               );
             }
           } catch (error: any) {
-            console.error(`❌ Error processing user ${user._id}:`, error.message);
+            console.error(`❌ Error processing RSVP ${rsvp._id}:`, error.message);
           }
         }
       }
 
       // Also check for already expired licenses (day 0)
-      const expiredUsers = await UserModel.find({
-        licenseExpiryDate: {
+      const expiredRsvps = await RsvpModel.find({
+        expiresAt: {
           $lt: now,
         },
         isDeleted: false,
-        // You might want to add a flag to prevent sending this repeatedly
-      }).select("_id firstName lastName email licenseExpiryDate role");
+        isActive: true,
+      })
+        .populate("userId", "firstName lastName email")
+        .populate("eventId", "eventName");
 
-      console.log(`⚠️  Found ${expiredUsers.length} users with expired licenses`);
+      console.log(`⚠️  Found ${expiredRsvps.length} RSVPs with expired licenses`);
 
-      for (const user of expiredUsers) {
+      for (const rsvp of expiredRsvps) {
         try {
+          const user = rsvp.userId as any;
+          const event = rsvp.eventId as any;
+
+          if (!user || !rsvp.expiresAt) continue;
+
           const notification = await createLicenseExpiryNotification(user._id.toString(), {
             daysUntilExpiry: 0,
-            expiryDate: user.licenseExpiryDate!,
+            expiryDate: rsvp.expiresAt,
           });
 
           if (notification) {
             console.log(
-              `✅ Sent expired license notification to ${user.firstName} ${user.lastName}`
+              `✅ Sent expired license notification to ${user.firstName} ${user.lastName} for event "${event?.eventName}"`
             );
           }
         } catch (error: any) {
-          console.error(`❌ Error processing expired license for user ${user._id}:`, error.message);
+          console.error(`❌ Error processing expired license for RSVP ${rsvp._id}:`, error.message);
         }
       }
 
@@ -130,20 +144,28 @@ export const checkAndSendLicenseExpiryReminders = async () => {
       const startOfTargetDay = new Date(targetDate);
       startOfTargetDay.setHours(0, 0, 0, 0);
 
-      const usersWithExpiringLicense = await UserModel.find({
-        licenseExpiryDate: {
+      const rsvpsWithExpiringLicense = await RsvpModel.find({
+        expiresAt: {
           $gte: startOfTargetDay,
           $lte: targetDate,
         },
         isDeleted: false,
-      }).select("_id firstName lastName email licenseExpiryDate role");
+        isActive: true,
+      }).populate("userId", "firstName lastName email");
 
-      results.total += usersWithExpiringLicense.length;
+      results.total += rsvpsWithExpiringLicense.length;
 
-      for (const user of usersWithExpiringLicense) {
+      for (const rsvp of rsvpsWithExpiringLicense) {
+        const user = rsvp.userId as any;
+
+        if (!user || !rsvp.expiresAt) {
+          results.failed++;
+          continue;
+        }
+
         const notification = await createLicenseExpiryNotification(user._id.toString(), {
           daysUntilExpiry: days,
-          expiryDate: user.licenseExpiryDate!,
+          expiryDate: rsvp.expiresAt,
         });
 
         if (notification) {
