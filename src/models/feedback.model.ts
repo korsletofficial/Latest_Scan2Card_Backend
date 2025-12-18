@@ -16,7 +16,7 @@ export interface IFeedback extends Document {
 const FeedbackSchema = new Schema<IFeedback>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
-    message: { type: String, required: true, maxlength: 1000 },
+    message: { type: String, required: true, maxlength: 300 },
     rating: { type: Number, min: 1, max: 5 },
     category: { type: String, enum: ["bug", "feature_request", "improvement", "other"], default: "other" },
     status: { type: String, enum: ["pending", "reviewed", "resolved"], default: "pending" },
