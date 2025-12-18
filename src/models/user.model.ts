@@ -5,7 +5,7 @@ import mongoosePaginate from "mongoose-paginate-v2";
 export interface IUser extends Document {
   firstName: string;
   lastName: string;
-  email: string;
+  email?: string;
   phoneNumber?: string;
   password: string;
   role: mongoose.Types.ObjectId;
@@ -33,8 +33,8 @@ const UserSchema = new Schema<IUser>(
   {
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    phoneNumber: { type: String },
+    email: { type: String, unique: true, sparse: true },
+    phoneNumber: { type: String, unique: true, sparse: true },
     password: { type: String, required: true, select: false },
     role: { type: Schema.Types.ObjectId, ref: "Roles", required: true },
     companyName: { type: String },

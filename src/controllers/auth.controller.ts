@@ -9,20 +9,30 @@ export const register = async (req: Request, res: Response) => {
     const { firstName, lastName, email, phoneNumber, password, roleName, companyName, exhibitorId } = req.body;
 
     // Validation
-    if (!firstName || !lastName || !email || !password || !roleName) {
+    if (!firstName || !lastName || !password || !roleName) {
       return res.status(400).json({
         success: false,
-        message: "firstName, lastName, email, password, and roleName are required",
+        message: "firstName, lastName, password, and roleName are required",
       });
     }
 
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    // Validate at least one contact method
+    if (!email && !phoneNumber) {
       return res.status(400).json({
         success: false,
-        message: "Invalid email format",
+        message: "At least one of email or phoneNumber must be provided",
       });
+    }
+
+    // Email validation (only if provided)
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid email format",
+        });
+      }
     }
 
     // Password validation (minimum 6 characters)
