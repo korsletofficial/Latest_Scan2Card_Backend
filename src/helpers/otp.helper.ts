@@ -283,13 +283,19 @@ export const handleSendVerificationCode = async ({
 
     // Send OTP based on source
     if (source === "phoneNumber") {
-      otpSentStatus = await sendOTPViaSMS(user.phoneNumber!, otp);
+      if (!user.phoneNumber) {
+        throw new Error("User phone number not available");
+      }
+      otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
       if (otpSentStatus) {
         console.log(`✅ OTP sent successfully to phone ${user.phoneNumber}: ${otp}`);
       } else {
         console.error(`❌ Failed to send OTP to phone ${user.phoneNumber}`);
       }
     } else {
+      if (!user.email) {
+        throw new Error("User email not available");
+      }
       otpSentStatus = await sendOTPViaEmail(user.email, otp);
       if (otpSentStatus) {
         console.log(`✅ OTP sent successfully to email ${user.email}: ${otp}`);
@@ -419,7 +425,7 @@ export const handleSendLoginOTP = async (userId: string) => {
     otp = config.DUMMY_OTP;
     console.log(`🔐 TESTING MODE: Using dummy OTP for login: ${otp}`);
     otpSentStatus = true;
-    sentTo = user.phoneNumber || user.email;
+    sentTo = user.phoneNumber || user.email || "";
     sentVia = user.phoneNumber ? "phoneNumber" : "email";
   } else {
     otp = generateOTP(config.OTP_LENGTH);
@@ -434,7 +440,7 @@ export const handleSendLoginOTP = async (userId: string) => {
       }
       sentTo = user.phoneNumber;
       sentVia = "phoneNumber";
-    } else {
+    } else if (user.email) {
       otpSentStatus = await sendOTPViaEmail(user.email, otp);
       if (otpSentStatus) {
         console.log(`✅ 2FA OTP sent to email ${user.email}: ${otp}`);
@@ -443,6 +449,8 @@ export const handleSendLoginOTP = async (userId: string) => {
       }
       sentTo = user.email;
       sentVia = "email";
+    } else {
+      throw new Error("User has no email or phone number configured");
     }
   }
 
