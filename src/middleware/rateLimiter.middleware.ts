@@ -14,12 +14,50 @@ import { AuthRequest } from "./auth.middleware";
 // ============================================================================
 
 /**
- * Generates key based on email from request body
+ * Generates key based on email or phone number from request body
  * Used for authentication endpoints (register, login, OTP, password reset)
  */
 const generateEmailKey = (req: Request): string => {
   const email = req.body?.email?.toLowerCase()?.trim();
-  return email || 'no-email';
+  const phoneNumber = req.body?.phoneNumber?.trim();
+
+  // Use email if available, fallback to phone, then 'no-identifier'
+  if (email) return email;
+  if (phoneNumber) return `phone:${phoneNumber}`;
+  return 'no-identifier';
+};
+
+/**
+ * Whitelist check - Skip rate limiting for whitelisted emails/phones
+ * Add test/dev accounts here during development
+ */
+const skipWhitelisted = (req: Request): boolean => {
+  const email = req.body?.email?.toLowerCase()?.trim();
+  const phoneNumber = req.body?.phoneNumber?.trim();
+
+  // Whitelist array - Add your test accounts here
+  const whitelistedEmails: string[] = [
+    // Add emails here, e.g., 'test@example.com'
+  ];
+
+  const whitelistedPhones: string[] = [
+    '9623894765',
+    '9623678461',
+    '8454883226',
+  ];
+
+  // Check if email or phone is whitelisted
+  if (email && whitelistedEmails.includes(email)) {
+    console.log(`⚪ Rate limit bypassed for whitelisted email: ${email}`);
+    return true;
+  }
+
+  if (phoneNumber && whitelistedPhones.includes(phoneNumber)) {
+    console.log(`⚪ Rate limit bypassed for whitelisted phone: ${phoneNumber}`);
+    return true;
+  }
+
+  return false;
 };
 
 /**
@@ -59,21 +97,23 @@ const standardHandler = (req: Request, res: Response) => {
 // ============================================================================
 
 /**
- * Registration Rate Limiter - Per Email
- * Prevents spam registration to same email
- * Limit: 3 attempts per email per hour
+ * Registration Rate Limiter - Per Email/Phone
+ * Prevents spam registration to same email or phone number
+ * Limit: 10 attempts per email/phone per hour
+ * Supports whitelist for testing/dev accounts
  */
 export const registerEmailLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: Number(process.env.RATE_LIMIT_AUTH_REGISTER_PER_EMAIL) || 3,
+  max: Number(process.env.RATE_LIMIT_AUTH_REGISTER_PER_EMAIL) || 10,
   keyGenerator: generateEmailKey,
+  skip: skipWhitelisted,
   standardHeaders: true,
   legacyHeaders: false,
   validate: { ip: false },
   handler: (req, res) => {
     res.status(429).json({
       success: false,
-      message: "Too many registration attempts for this email. Please try again later.",
+      message: "Too many registration attempts for this account. Please try again later.",
       error: "Rate limit exceeded",
       retryAfter: res.getHeader("Retry-After"),
     });
