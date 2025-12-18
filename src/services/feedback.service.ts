@@ -88,6 +88,10 @@ export const submitFeedback = async (
     throw new Error("Feedback message is required");
   }
 
+  if (data.message.length > 1000) {
+    throw new Error("Feedback message cannot exceed 1000 characters");
+  }
+
   const feedback = await FeedbackModel.create({
     userId,
     message: data.message,

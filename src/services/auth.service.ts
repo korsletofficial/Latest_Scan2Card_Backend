@@ -42,10 +42,27 @@ export const registerUser = async (data: RegisterUserDTO) => {
     throw new Error("At least one of email or phoneNumber must be provided");
   }
 
-  // Check if user already exists
-  const existingUser = await UserModel.findOne({ email: data.email });
+  // Check if user already exists with the same email or phone number
+  const existingUserQuery: any[] = [];
+  if (data.email) {
+    existingUserQuery.push({ email: data.email });
+  }
+  if (data.phoneNumber) {
+    existingUserQuery.push({ phoneNumber: data.phoneNumber });
+  }
+
+  const existingUser = await UserModel.findOne({
+    $or: existingUserQuery,
+    isDeleted: false,
+  });
+
   if (existingUser) {
-    throw new Error("User with this email already exists");
+    if (data.email && existingUser.email === data.email) {
+      throw new Error("User with this email already exists");
+    }
+    if (data.phoneNumber && existingUser.phoneNumber === data.phoneNumber) {
+      throw new Error("User with this phone number already exists");
+    }
   }
 
   // Find role by name
