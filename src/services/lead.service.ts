@@ -116,6 +116,53 @@ export const createLead = async (data: CreateLeadData) => {
     }
   }
 
+  // CHECK FOR DUPLICATE LEADS (same email or phone in the same event)
+  if (data.eventId && (data.details?.email || data.details?.phoneNumber)) {
+    const duplicateQuery: any = {
+      eventId: data.eventId,
+      isDeleted: false,
+      $or: []
+    };
+
+    // Add email to duplicate check if provided
+    if (data.details.email && data.details.email.trim()) {
+      duplicateQuery.$or.push({
+        "details.email": { $regex: `^${data.details.email.trim()}$`, $options: "i" }
+      });
+    }
+
+    // Add phone number to duplicate check if provided
+    if (data.details.phoneNumber && data.details.phoneNumber.trim()) {
+      duplicateQuery.$or.push({
+        "details.phoneNumber": data.details.phoneNumber.trim()
+      });
+    }
+
+    // Only check if we have at least one condition
+    if (duplicateQuery.$or.length > 0) {
+      const existingLead = await LeadModel.findOne(duplicateQuery);
+
+      if (existingLead) {
+        // Determine which field matched
+        let matchedField = "";
+        if (data.details.email &&
+            existingLead.details?.email?.toLowerCase() === data.details.email.toLowerCase()) {
+          matchedField = `email (${data.details.email})`;
+        } else if (data.details.phoneNumber &&
+                   existingLead.details?.phoneNumber === data.details.phoneNumber) {
+          matchedField = `phone number (${data.details.phoneNumber})`;
+        }
+
+        throw new Error(
+          `Duplicate lead detected! A lead with the same ${matchedField} already exists for this event. ` +
+          `Please check your existing leads before creating a new one.`
+        );
+      }
+    }
+
+    console.log(`✅ No duplicate leads found for this event`);
+  }
+
   const lead = await LeadModel.create({
     userId: data.userId,
     eventId: data.eventId,

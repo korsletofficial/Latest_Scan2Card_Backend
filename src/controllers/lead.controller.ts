@@ -167,6 +167,28 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error creating lead:", error);
+
+    // Handle duplicate lead error (validation error)
+    if (error.message && error.message.includes("Duplicate lead detected")) {
+      return res.status(409).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    // Handle other validation errors
+    if (error.message && (
+      error.message.includes("RSVP not found") ||
+      error.message.includes("expired") ||
+      error.message.includes("Trial event") ||
+      error.message.includes("License key required")
+    )) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error",
