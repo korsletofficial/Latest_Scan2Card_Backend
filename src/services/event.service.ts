@@ -3,10 +3,12 @@ import LeadsModel from "../models/leads.model";
 import TeamModel from "../models/team.model";
 import UserModel from "../models/user.model";
 import RoleModel from "../models/role.model";
+import RsvpModel from "../models/rsvp.model";
 import mongoose from "mongoose";
 import { customAlphabet } from "nanoid";
 import bcrypt from "bcryptjs";
 import { sendLicenseKeyEmail } from "./email.service";
+
 
 interface CreateEventData {
   exhibitorId: string;
@@ -286,10 +288,10 @@ export const generateLicenseKeyForEvent = async (
   // Validate that license key expiration date is not before event start date
   const eventStartDate = new Date(event.startDate);
   eventStartDate.setHours(0, 0, 0, 0);
-  
+
   const keyExpirationDate = new Date(data.expiresAt);
   keyExpirationDate.setHours(0, 0, 0, 0);
-  
+
   if (keyExpirationDate < eventStartDate) {
     throw new Error(`License key expiration date cannot be before the event start date (${event.startDate.toISOString().split('T')[0]})`);
   }
@@ -400,7 +402,7 @@ export const bulkGenerateLicenseKeys = async (
     // Get today's date at midnight for comparison
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     if (expirationDate < today) {
       errors.push({ row: i + 1, error: "Expiration date must be today or in the future" });
       continue;
@@ -409,10 +411,10 @@ export const bulkGenerateLicenseKeys = async (
     // Validate that license key expiration date is not before event start date
     const eventStartDate = new Date(event.startDate);
     eventStartDate.setHours(0, 0, 0, 0);
-    
+
     const keyExpirationDate = new Date(expirationDate);
     keyExpirationDate.setHours(0, 0, 0, 0);
-    
+
     if (keyExpirationDate < eventStartDate) {
       errors.push({ row: i + 1, error: `License key expiration date cannot be before the event start date (${event.startDate.toISOString().split('T')[0]})` });
       continue;
@@ -671,4 +673,177 @@ export const getLeadsTrend = async (
   }));
 
   return { trends };
+};
+
+// Get event performance (top events by lead count with date filter)
+export const getEventPerformance = async (
+  exhibitorId: string,
+  limit: number = 10,
+  startDate?: Date,
+  endDate?: Date
+) => {
+  // Get exhibitor's events
+  const exhibitorEvents = await EventModel.find({
+    exhibitorId: new mongoose.Types.ObjectId(exhibitorId),
+    isDeleted: false,
+  }).select("_id eventName startDate endDate isActive");
+
+  const eventIds = exhibitorEvents.map((event) => event._id);
+
+  // Build date filter for leads
+  const matchStage: any = {
+    eventId: { $in: eventIds },
+    isDeleted: false,
+  };
+
+  if (startDate || endDate) {
+    matchStage.createdAt = {};
+    if (startDate) matchStage.createdAt.$gte = startDate;
+    if (endDate) matchStage.createdAt.$lte = endDate;
+  }
+
+  // Aggregate leads by event
+  const eventPerformance = await LeadsModel.aggregate([
+    { $match: matchStage },
+    {
+      $group: {
+        _id: "$eventId",
+        leadCount: { $sum: 1 },
+      },
+    },
+    { $sort: { leadCount: -1 } },
+    { $limit: limit },
+    {
+      $lookup: {
+        from: "events",
+        localField: "_id",
+        foreignField: "_id",
+        as: "event",
+      },
+    },
+    { $unwind: "$event" },
+    {
+      $project: {
+        _id: 1,
+        leadCount: 1,
+        eventName: "$event.eventName",
+        startDate: "$event.startDate",
+        endDate: "$event.endDate",
+        isActive: "$event.isActive",
+      },
+    },
+  ]);
+
+  // Add isExpired field
+  const now = new Date();
+  const eventsWithExpiry = eventPerformance.map((event) => ({
+    ...event,
+    isExpired: new Date(event.endDate) < now,
+  }));
+
+  return { events: eventsWithExpiry };
+};
+
+// Get stall performance (leads by license key/stall with event and date filter)
+export const getStallPerformance = async (
+  exhibitorId: string,
+  eventId?: string,
+  startDate?: Date,
+  endDate?: Date
+) => {
+  // Build event query
+  const eventQuery: any = {
+    exhibitorId: new mongoose.Types.ObjectId(exhibitorId),
+    isDeleted: false,
+  };
+
+  if (eventId) {
+    eventQuery._id = new mongoose.Types.ObjectId(eventId);
+  }
+
+  // Get events with license keys
+  const events = await EventModel.find(eventQuery).select("_id eventName licenseKeys");
+
+  if (events.length === 0) {
+    return { stalls: [] };
+  }
+
+  // Build license key info and collect all license keys
+  const allLicenseKeys: Array<{
+    key: string;
+    stallName: string;
+    email: string;
+    eventId: mongoose.Types.ObjectId;
+    eventName: string;
+  }> = [];
+
+  events.forEach((event) => {
+    event.licenseKeys.forEach((licenseKey) => {
+      allLicenseKeys.push({
+        key: licenseKey.key,
+        stallName: licenseKey.stallName || licenseKey.email,
+        email: licenseKey.email,
+        eventId: event._id as mongoose.Types.ObjectId,
+        eventName: event.eventName,
+      });
+    });
+  });
+
+  if (allLicenseKeys.length === 0) {
+    return { stalls: [] };
+  }
+
+  // For each license key, find users who RSVPed with it and count their leads
+  const stallsWithLeadCounts = await Promise.all(
+    allLicenseKeys.map(async (licenseKeyInfo) => {
+      // Find all RSVPs that used this license key
+      const rsvpsWithKey = await RsvpModel.find({
+        eventLicenseKey: licenseKeyInfo.key,
+        isDeleted: false,
+      }).select("userId");
+
+      const userIds = rsvpsWithKey.map((rsvp) => rsvp.userId);
+
+      if (userIds.length === 0) {
+        return {
+          key: licenseKeyInfo.key,
+          stallName: licenseKeyInfo.stallName,
+          email: licenseKeyInfo.email,
+          eventName: licenseKeyInfo.eventName,
+          leadCount: 0,
+        };
+      }
+
+      // Build date filter for leads
+      const matchQuery: any = {
+        eventId: licenseKeyInfo.eventId,
+        userId: { $in: userIds },
+        isDeleted: false,
+      };
+
+      if (startDate || endDate) {
+        matchQuery.createdAt = {};
+        if (startDate) matchQuery.createdAt.$gte = startDate;
+        if (endDate) matchQuery.createdAt.$lte = endDate;
+      }
+
+      // Count leads created by these users for this event
+      const leadCount = await LeadsModel.countDocuments(matchQuery);
+
+      return {
+        key: licenseKeyInfo.key,
+        stallName: licenseKeyInfo.stallName,
+        email: licenseKeyInfo.email,
+        eventName: licenseKeyInfo.eventName,
+        leadCount,
+      };
+    })
+  );
+
+  // Filter out stalls with 0 leads and sort by lead count
+  const stalls = stallsWithLeadCounts
+    .filter((stall) => stall.leadCount > 0)
+    .sort((a, b) => b.leadCount - a.leadCount);
+
+  return { stalls };
 };
