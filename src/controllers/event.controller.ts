@@ -28,11 +28,11 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
     // Validate dates
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     // Get today's date at midnight (in local timezone, treated as UTC for comparison)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     // Allow start and end date to be the same, but both must be today or in the future
     if (start < today) {
       return res.status(400).json({
@@ -40,7 +40,7 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
         message: "Event start date cannot be in the past",
       });
     }
-    
+
     if (end < start) {
       return res.status(400).json({
         success: false,
@@ -230,7 +230,7 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
     // Get today's date at midnight for comparison
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     if (expirationDate < today) {
       return res.status(400).json({
         success: false,
@@ -390,6 +390,72 @@ export const getLeadsTrend = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to retrieve leads trend",
+    });
+  }
+};
+
+// Get event performance (bar graph data)
+export const getEventPerformance = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId;
+    const limit = Number(req.query.limit) || 10;
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+
+    // Set end date to end of day if provided
+    if (endDate) {
+      endDate.setHours(23, 59, 59, 999);
+    }
+    // Set start date to beginning of day if provided
+    if (startDate) {
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    const result = await eventService.getEventPerformance(exhibitorId!, limit, startDate, endDate);
+
+    return res.status(200).json({
+      success: true,
+      message: "Event performance retrieved successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get event performance error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve event performance",
+    });
+  }
+};
+
+// Get stall performance (bar graph data)
+export const getStallPerformance = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId;
+    const eventId = req.query.eventId as string | undefined;
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+
+    // Set end date to end of day if provided
+    if (endDate) {
+      endDate.setHours(23, 59, 59, 999);
+    }
+    // Set start date to beginning of day if provided
+    if (startDate) {
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    const result = await eventService.getStallPerformance(exhibitorId!, eventId, startDate, endDate);
+
+    return res.status(200).json({
+      success: true,
+      message: "Stall performance retrieved successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get stall performance error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve stall performance",
     });
   }
 };
