@@ -11,7 +11,10 @@ import {
   getExhibitorDashboardStats,
   getTopEventsByLeads,
   getLeadsTrend,
+  getEventPerformance,
+  getStallPerformance,
 } from "../controllers/event.controller";
+
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 import {
   adminDashboardLimiter,
@@ -25,6 +28,9 @@ const router = Router();
 router.get("/dashboard/stats", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getExhibitorDashboardStats);
 router.get("/dashboard/top-events", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getTopEventsByLeads);
 router.get("/dashboard/leads-trend", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getLeadsTrend);
+router.get("/dashboard/event-performance", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getEventPerformance);
+router.get("/dashboard/stall-performance", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getStallPerformance);
+
 
 // Event CRUD routes - All require authentication and EXHIBITOR role
 // Write operations - Moderate limit (100/min per user)
