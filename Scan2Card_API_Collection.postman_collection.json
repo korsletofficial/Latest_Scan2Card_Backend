@@ -33,8 +33,12 @@
 						"header": [],
 						"url": {
 							"raw": "{{crawlerUrl}}/health",
-							"host": ["{{crawlerUrl}}"],
-							"path": ["health"]
+							"host": [
+								"{{crawlerUrl}}"
+							],
+							"path": [
+								"health"
+							]
 						},
 						"description": "Check crawler service health status"
 					}
@@ -55,8 +59,12 @@
 						},
 						"url": {
 							"raw": "{{crawlerUrl}}/crawl",
-							"host": ["{{crawlerUrl}}"],
-							"path": ["crawl"]
+							"host": [
+								"{{crawlerUrl}}"
+							],
+							"path": [
+								"crawl"
+							]
 						},
 						"description": "Crawl a URL to extract contact information from digital business cards. This service uses Puppeteer to scrape webpage content and extract structured contact data.\n\n**Request Body:**\n- `url` (required, string): The URL to crawl and extract data from\n\n**Response:**\nReturns extracted contact information including:\n- firstName, lastName\n- company, position, department\n- email, phoneNumber, mobile\n- website, address, streetName, city, country\n- title, uniqueCode\n\n**Rate Limiting:** 100 requests per 15 minutes per IP\n\n**Timeout:** 45 seconds (configurable)\n\n**Use Cases:**\n- Extract contact information from digital business card URLs in QR codes\n- Automated lead capture from web-based business cards\n- Integration with QR code scanning workflow"
 					}
@@ -83,8 +91,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/register",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "register"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
 						},
 						"description": "Register a new user (EXHIBITOR, ENDUSER, TEAMMANAGER)"
 					}
@@ -105,8 +118,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/login",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "login"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
 						},
 						"description": "Login with email and password. Returns JWT token or OTP requirement."
 					}
@@ -127,8 +145,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/refresh-token",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "refresh-token"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"refresh-token"
+							]
 						},
 						"description": "Refresh access token using refresh token to prevent user logout.\n\n**Authentication Required:** None (Public endpoint)\n\n**Purpose:**\nPrevents users from getting logged out when their access token expires during active usage. The frontend should call this endpoint automatically before the access token expires.\n\n**Request Body:**\n- `refreshToken` (required, string): The refresh token received during login\n\n**How It Works:**\n1. Login returns both `token` (access token, 15min) and `refreshToken` (7 days)\n2. Frontend uses access token for all API requests\n3. Before access token expires, frontend calls this endpoint with refresh token\n4. Backend validates refresh token and issues new access token\n5. User stays logged in without re-entering credentials\n\n**Token Lifetimes:**\n- Access Token: 15 minutes (configurable via JWT_ACCESS_TOKEN_EXPIRES_IN)\n- Refresh Token: 7 days (configurable via JWT_REFRESH_TOKEN_EXPIRES_IN)\n\n**Response:**\n- Success: Returns new access token with same user data\n  ```json\n  {\n    \"success\": true,\n    \"message\": \"Access token refreshed successfully\",\n    \"data\": {\n      \"token\": \"new_access_token_here\",\n      \"expiresIn\": \"15m\",\n      \"user\": { ... }\n    }\n  }\n  ```\n- Error 400: Invalid refresh token format\n- Error 401: Refresh token expired (user must login again)\n\n**Frontend Implementation:**\nStore both tokens after login:\n```javascript\nconst { token, refreshToken } = response.data;\nlocalStorage.setItem('accessToken', token);\nlocalStorage.setItem('refreshToken', refreshToken);\n```\n\nSet up automatic token refresh:\n```javascript\n// Refresh 1 minute before expiry (14 min for 15min token)\nsetTimeout(() => {\n  refreshAccessToken();\n}, 14 * 60 * 1000);\n```\n\n**Security Notes:**\n- Refresh tokens are stored in database (can be revoked)\n- Each refresh token can only be used by the user who owns it\n- Refresh tokens expire after 7 days of inactivity\n- If refresh token expires, user must login again\n\n**Rate Limiting:** 1000 requests per 15 minutes per IP (loginIPLimiter)"
 					}
@@ -149,8 +172,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/verify-otp",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "verify-otp"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"verify-otp"
+							]
 						},
 						"description": "**Unified OTP Verification Endpoint**\n\nSingle endpoint for all OTP verification types. Supports optional `type` parameter.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `userId` (required, string): User ID to verify\n- `otp` (required, string): 6-digit OTP code\n- `type` (optional, string): Verification type - \"login\" | \"verification\" | \"forgot_password\"\n  - Defaults to \"login\" if not provided (backward compatible)\n\n**Usage Examples:**\n\n**1. User Verification (after registration):**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"verification\"\n}\n```\n**Response:** Returns JWT tokens (token, refreshToken) and user data - user is now logged in automatically after verification\n```json\n{\n  \"success\": true,\n  \"message\": \"User verified successfully\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"expiresIn\": \"24h\",\n    \"user\": { \"_id\": \"...\", \"email\": \"...\", \"role\": \"...\", \"isVerified\": true }\n  }\n}\n```\n\n**2. Login 2FA:**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"login\"\n}\n```\n**Response:** Returns JWT tokens (token, refreshToken) and user data for authentication\n\n**3. Forgot Password (Step 2 of password reset flow):**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\",\n  \"type\": \"forgot_password\"\n}\n```\n**Response:** Returns `verificationToken` (valid 10 minutes) to be used in Step 3\n```json\n{\n  \"success\": true,\n  \"message\": \"OTP verified. You may now reset your password\",\n  \"data\": {\n    \"userId\": \"507f1f77bcf86cd799439011\",\n    \"verificationToken\": \"eyJhbGciOiJIUzI1NiIs...\"\n  }\n}\n```\n**Next Step:** Use this `verificationToken` in `/reset-password` endpoint\n\n**4. Backward Compatible (defaults to login):**\n```json\n{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"otp\": \"123456\"\n}\n```\n**Response:** Same as type=\"login\"\n\n**Development Mode:**\n- Test OTP: 000000 (when USE_DUMMY_OTP=true)\n- Master OTP works for all types\n\n**Security Features:**\n- OTP expires after 10 minutes\n- Single-use only\n- Type-specific rate limiting\n- Verification token (for forgot_password) expires in 10 minutes\n\n**Rate Limiting:**\n- login/verification: 10 attempts per 15 minutes\n- forgot_password: 3 attempts per hour\n\n**Error Responses:**\n- 400: Missing required fields or invalid type\n- 400: Invalid/expired/used OTP\n- 429: Rate limit exceeded"
 					}
@@ -171,8 +199,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/send-verification-otp",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "send-verification-otp"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"send-verification-otp"
+							]
 						},
 						"description": "Send OTP for user verification. Required after registration to verify the account. (Test OTP: 000000)"
 					}
@@ -193,8 +226,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/verify-user",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "verify-user"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"verify-user"
+							]
 						},
 						"description": "Verify user with OTP. Sets isVerified to true. (Test OTP: 000000)"
 					}
@@ -215,8 +253,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/forgot-password",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "forgot-password"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"forgot-password"
+							]
 						},
 						"description": "**Step 1 of Forgot Password Flow** - Initiate password reset and send OTP.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `email` (required, string): User's registered email address\n\n**Process Flow:**\n1. System verifies email exists in database\n2. Generates 6-digit OTP and sends via SMS to user's registered phone\n3. Returns userId needed for subsequent steps\n4. OTP expires after 10 minutes\n\n**Rate Limiting:**\n- 5 requests per hour per email (otpSendResourceLimiter)\n- 500 requests per hour per IP (otpSendIPLimiter)\n\n**Response:**\n- Success: Returns `userId` and confirmation message\n- Error 400: Invalid email format\n- Error 404: Email not found in system\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- No actual SMS sent in development mode\n\n**Next Steps:**\n1. **Step 2:** Call `/verify-otp` with `{ userId, otp, type: \"forgot_password\" }` to get `verificationToken`\n2. **Step 3:** Call `/reset-password` with `{ userId, verificationToken, newPassword }` to complete reset"
 					}
@@ -237,8 +280,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/reset-password",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "reset-password"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"reset-password"
+							]
 						},
 						"description": "**Step 3 of Forgot Password Flow** - Complete password reset with verification token.\n\n**Authentication Required:** None (Public endpoint)\n\n**Complete Forgot Password Flow:**\n1. **Step 1:** POST `/forgot-password` with `{ email }` → Sends OTP, returns `userId`\n2. **Step 2:** POST `/verify-otp` with `{ userId, otp, type: \"forgot_password\" }` → Returns `verificationToken` (10-min validity)\n3. **Step 3:** POST `/reset-password` with `{ userId, verificationToken, newPassword }` → Resets password ✅\n\n**Request Body:**\n- `userId` (required, string): User ID from Step 1\n- `verificationToken` (required, string): Verification token received from Step 2 after OTP verification\n- `newPassword` (required, string): New password to set (minimum 6 characters)\n\n**Process:**\n1. Validates verification token (JWT with 10-minute expiry)\n2. Ensures token hasn't been used for password reset already\n3. Validates new password meets security requirements\n4. Updates user password in database\n5. Expires the verification token (one-time use)\n6. Returns success confirmation\n\n**Password Requirements:**\n- Minimum 6 characters\n- Should contain a mix of characters for security\n\n**Rate Limiting:**\n- 3 requests per hour per email (passwordResetEmailLimiter)\n- 200 requests per hour per IP (passwordResetIPLimiter)\n\n**Response:**\n- Success: `{ success: true, message: \"Password reset successfully\", data: { email } }`\n- Error 400: Invalid/expired verification token, or password requirements not met\n- Error 404: User not found\n- Error 429: Rate limit exceeded\n\n**Security Notes:**\n- Verification token expires after 10 minutes\n- Token can only be used once\n- Separate from OTP - provides additional security layer\n- Failed attempts count towards rate limiting"
 					}
@@ -263,8 +311,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/change-password",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "change-password"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"change-password"
+							]
 						},
 						"description": "Change password for authenticated users without OTP verification.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `currentPassword` (required, string): User's current password for verification\n- `newPassword` (required, string): New password to set\n\n**Process Flow:**\n1. Verifies authentication token is valid\n2. Verifies current password matches user's existing password\n3. Validates new password meets security requirements\n4. Updates password in database\n5. Returns success confirmation\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n- Must be different from current password\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns success message confirming password change\n- Error 400: Invalid current password or password requirements not met\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Note:** This endpoint is also available at `/profile/change-password` with identical functionality.\n\n**Use Cases:**\n- User wants to change password while logged in\n- Regular password rotation for security\n- No OTP required since user is already authenticated"
 					}
@@ -281,8 +334,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/auth/profile",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "profile"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"profile"
+							]
 						},
 						"description": "Get current user profile (requires authentication)"
 					}
@@ -307,8 +365,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/logout",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "logout"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"logout"
+							]
 						},
 						"description": "Logout user and invalidate refresh token.\n\n**Authentication Required:** Bearer token\n\n**Functionality:**\n- Invalidates the user's refresh token by clearing it from the database\n- Prevents the refresh token from being used to generate new access tokens\n- User must login again to get a new access token and refresh token\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns success message confirming logout\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Best Practices:**\n- Call this endpoint when user clicks logout button\n- Clear the access token and refresh token from client storage after successful logout\n- Redirect user to login page after logout\n\n**Use Cases:**\n- User wants to logout from the application\n- Security measure to invalidate refresh token on logout\n- Prevents unauthorized access after logout"
 					}
@@ -334,8 +397,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/dashboard/stats",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "dashboard", "stats"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"dashboard",
+										"stats"
+									]
 								},
 								"description": "Get dashboard statistics (total exhibitors, active events, total leads, active users)"
 							}
@@ -352,8 +421,15 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/dashboard/trends/events?days=7",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "dashboard", "trends", "events"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"dashboard",
+										"trends",
+										"events"
+									],
 									"query": [
 										{
 											"key": "days",
@@ -377,8 +453,15 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/dashboard/trends/leads?days=30",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "dashboard", "trends", "leads"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"dashboard",
+										"trends",
+										"leads"
+									],
 									"query": [
 										{
 											"key": "days",
@@ -401,8 +484,15 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/dashboard/trends/keys?days=90",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "dashboard", "trends", "keys"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"dashboard",
+										"trends",
+										"keys"
+									],
 									"query": [
 										{
 											"key": "days",
@@ -438,8 +528,13 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/admin/exhibitors",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "exhibitors"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"exhibitors"
+									]
 								},
 								"description": "Create a new exhibitor (auto-generates password if not provided)"
 							}
@@ -456,8 +551,13 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/exhibitors?page=1&limit=10&search=",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "exhibitors"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"exhibitors"
+									],
 									"query": [
 										{
 											"key": "page",
@@ -488,8 +588,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/exhibitors/:id",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "exhibitors", ":id"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"exhibitors",
+										":id"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -512,8 +618,15 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/exhibitors/:id/keys",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "exhibitors", ":id", "keys"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"exhibitors",
+										":id",
+										"keys"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -544,8 +657,17 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/admin/events/:eventId/keys/:keyId/payment-status",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "events", ":eventId", "keys", ":keyId", "payment-status"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"events",
+										":eventId",
+										"keys",
+										":keyId",
+										"payment-status"
+									],
 									"variable": [
 										{
 											"key": "eventId",
@@ -580,8 +702,14 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/admin/exhibitors/:id",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "exhibitors", ":id"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"exhibitors",
+										":id"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -604,8 +732,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/exhibitors/:id",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "exhibitors", ":id"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"exhibitors",
+										":id"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -628,8 +762,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/admin/exhibitors/top-performers",
-									"host": ["{{baseUrl}}"],
-									"path": ["admin", "exhibitors", "top-performers"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"exhibitors",
+										"top-performers"
+									]
 								},
 								"description": "Get top performing exhibitors (most events, most keys, most key usage)"
 							}
@@ -657,8 +797,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/events/dashboard/stats",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", "dashboard", "stats"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										"dashboard",
+										"stats"
+									]
 								},
 								"description": "Get exhibitor dashboard statistics (total events, active events, total leads, total keys)"
 							}
@@ -675,8 +821,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/events/dashboard/top-events?limit=5",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", "dashboard", "top-events"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										"dashboard",
+										"top-events"
+									],
 									"query": [
 										{
 											"key": "limit",
@@ -699,8 +851,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/events/dashboard/leads-trend?days=7",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", "dashboard", "leads-trend"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										"dashboard",
+										"leads-trend"
+									],
 									"query": [
 										{
 											"key": "days",
@@ -736,8 +894,12 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/events",
-									"host": ["{{baseUrl}}"],
-									"path": ["events"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events"
+									]
 								},
 								"description": "Create a new event (EXHIBITOR only)"
 							}
@@ -754,8 +916,12 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/events",
-									"host": ["{{baseUrl}}"],
-									"path": ["events"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events"
+									]
 								},
 								"description": "Get all events for authenticated exhibitor"
 							}
@@ -772,8 +938,13 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/events/:id",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", ":id"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										":id"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -804,8 +975,13 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/events/:id",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", ":id"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										":id"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -828,8 +1004,13 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/events/:id",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", ":id"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										":id"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -865,8 +1046,14 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/events/:id/license-keys",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", ":id", "license-keys"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										":id",
+										"license-keys"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -897,8 +1084,15 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/events/:id/license-keys/bulk",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", ":id", "license-keys", "bulk"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										":id",
+										"license-keys",
+										"bulk"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -921,8 +1115,14 @@
 								],
 								"url": {
 									"raw": "{{baseUrl}}/events/:id/license-keys",
-									"host": ["{{baseUrl}}"],
-									"path": ["events", ":id", "license-keys"],
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"events",
+										":id",
+										"license-keys"
+									],
 									"variable": [
 										{
 											"key": "id",
@@ -961,8 +1161,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/rsvp/validate",
-							"host": ["{{baseUrl}}"],
-							"path": ["rsvp", "validate"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"rsvp",
+								"validate"
+							]
 						},
 						"description": "Validate a license key before creating RSVP"
 					}
@@ -987,8 +1192,12 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/rsvp",
-							"host": ["{{baseUrl}}"],
-							"path": ["rsvp"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"rsvp"
+							]
 						},
 						"description": "Create an RSVP by registering with a license key"
 					}
@@ -1005,8 +1214,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/rsvp/my-rsvps?page=1&limit=10&search=&activeOnly=false",
-							"host": ["{{baseUrl}}"],
-							"path": ["rsvp", "my-rsvps"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"rsvp",
+								"my-rsvps"
+							],
 							"query": [
 								{
 									"key": "page",
@@ -1045,8 +1259,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/rsvp/:rsvpId",
-							"host": ["{{baseUrl}}"],
-							"path": ["rsvp", ":rsvpId"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"rsvp",
+								":rsvpId"
+							],
 							"variable": [
 								{
 									"key": "rsvpId",
@@ -1069,8 +1288,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/rsvp/:rsvpId",
-							"host": ["{{baseUrl}}"],
-							"path": ["rsvp", ":rsvpId"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"rsvp",
+								":rsvpId"
+							],
 							"variable": [
 								{
 									"key": "rsvpId",
@@ -1093,8 +1317,14 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/rsvp/event/:eventId",
-							"host": ["{{baseUrl}}"],
-							"path": ["rsvp", "event", ":eventId"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"rsvp",
+								"event",
+								":eventId"
+							],
 							"variable": [
 								{
 									"key": "eventId",
@@ -1131,8 +1361,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/scan-card",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", "scan-card"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"scan-card"
+							]
 						},
 						"description": "Scan a business card using either image or OCR text to extract contact information. Supports both image-based vision API processing and direct OCR text analysis with front and back card support.\n\n**Request Body Options:**\n\n1. **Image Processing:**\n   - `image` (required, string): Base64-encoded image data with data URI prefix\n     - Format: `data:image/jpeg;base64,<base64_string>`\n     - Supported formats: JPEG, PNG, WebP\n     - Max size: 20MB\n\n2. **OCR Text Processing (Front & Back):**\n   - `frontOcrText` (required, string): Raw OCR-extracted text from front of business card\n   - `backOcrText` (optional, string): Raw OCR-extracted text from back of business card\n   - `isOCRText` (optional, boolean): Set to `true` for OCR text processing\n\n**Processing Flow:**\n- **Image Mode:** Uses OpenAI GPT-4o Mini (primary) with Gemini 2.5 Flash fallback to analyze image and extract structured data\n- **OCR Mode:** Combines front and back text, then uses Gemini 2.5 Flash (primary) with OpenAI GPT-4o Mini fallback to parse and convert to structured JSON\n\n**Response:**\nReturns extracted contact information with ALL fields present (empty strings for missing data):\n- firstName, lastName\n- company, position\n- email, phoneNumber\n- website, address, city, country\n- notes\n- frontOcrText, backOcrText (for OCR mode)\n\n**Note:** The following fields are NOT supported and will not be returned:\n- fax\n- zipCode\n- department\n- mobile\n- streetName\n- title\n- uniqueCode"
 					},
@@ -1157,8 +1392,13 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/leads/scan-card",
-									"host": ["{{baseUrl}}"],
-									"path": ["leads", "scan-card"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"leads",
+										"scan-card"
+									]
 								}
 							},
 							"status": "OK",
@@ -1193,8 +1433,13 @@
 								},
 								"url": {
 									"raw": "{{baseUrl}}/leads/scan-card",
-									"host": ["{{baseUrl}}"],
-									"path": ["leads", "scan-card"]
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"leads",
+										"scan-card"
+									]
 								}
 							},
 							"status": "OK",
@@ -1231,8 +1476,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/scan-qr",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", "scan-qr"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"scan-qr"
+							]
 						},
 						"description": "Scan a digital business card QR code to extract entry code or contact information. Returns structured data for lead creation.\n\n**Request Body:**\n- `qrText` (required, string): The decoded text from QR code\n\n**Processing Flow:**\n1. **vCard Format:** If QR text is vCard format, parses contact fields directly\n2. **URL Format:** If QR text is a URL, sends to CrawlerService to scrape webpage and extract contact data\n3. **Entry Code:** If neither vCard nor URL, treats as entry code for organizational QR cards\n\n**Response:**\nReturns structured contact data:\n- entryCode: Unique entry code (if applicable)\n- contactData: Extracted contact fields\n  - firstName, lastName\n  - company, position, department\n  - email, phoneNumber, mobile\n  - website, address, streetName, city, country\n  - title, uniqueCode\n\n**Crawler Service Integration:**\nWhen QR code contains a URL, this endpoint calls the CrawlerService microservice (port 3001) to:\n- Load the webpage using Puppeteer\n- Extract contact information from HTML\n- Parse structured data (schema.org, microformats)\n- Return normalized contact object\n\n**Note:** The following fields are NOT supported:\n- fax\n- zipCode\n- notes"
 					}
@@ -1254,24 +1504,84 @@
 						"body": {
 							"mode": "formdata",
 							"formdata": [
-								{ "key": "eventId", "value": "eventId", "type": "text" },
-								{ "key": "isIndependentLead", "value": "false", "type": "text" },
-								{ "key": "leadType", "value": "full_scan", "type": "text" },
-								{ "key": "entryCode", "value": "SAMPLE_ENTRY_CODE", "type": "text" },
-								{ "key": "ocrText", "value": "Extracted text from card", "type": "text" },
-								{ "key": "details", "value": "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"email\":\"john.doe@example.com\",\"phoneNumber\":\"+1234567890\",\"company\":\"Acme Corp\",\"position\":\"CEO\",\"website\":\"https://acme.com\",\"address\":\"123 Business St\",\"city\":\"San Francisco\",\"country\":\"USA\"}", "type": "text", "description": "Contact details JSON" },
-								{ "key": "rating", "value": "5", "type": "text", "description": "Lead quality rating (1-5)" },
-								{ "key": "images", "type": "file", "src": ["/path/to/image1.jpg"] },
-								{ "key": "images", "type": "file", "src": ["/path/to/image2.jpg"], "disabled": true },
-								{ "key": "images", "type": "file", "src": ["/path/to/image3.jpg"], "disabled": true }
+								{
+									"key": "eventId",
+									"value": "eventId",
+									"type": "text"
+								},
+								{
+									"key": "isIndependentLead",
+									"value": "false",
+									"type": "text"
+								},
+								{
+									"key": "leadType",
+									"value": "full_scan",
+									"type": "text"
+								},
+								{
+									"key": "entryCode",
+									"value": "SAMPLE_ENTRY_CODE",
+									"type": "text"
+								},
+								{
+									"key": "ocrText",
+									"value": "Extracted text from card",
+									"type": "text"
+								},
+								{
+									"key": "details",
+									"value": "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"email\":\"john.doe@example.com\",\"phoneNumber\":\"+1234567890\",\"company\":\"Acme Corp\",\"position\":\"CEO\",\"website\":\"https://acme.com\",\"address\":\"123 Business St\",\"city\":\"San Francisco\",\"country\":\"USA\"}",
+									"type": "text",
+									"description": "Contact details JSON"
+								},
+								{
+									"key": "rating",
+									"value": "5",
+									"type": "text",
+									"description": "Lead quality rating (1-5)"
+								},
+								{
+									"key": "allowDuplicate",
+									"value": "false",
+									"type": "text",
+									"description": "Skip duplicate check (default: false)"
+								},
+								{
+									"key": "images",
+									"type": "file",
+									"src": [
+										"/path/to/image1.jpg"
+									]
+								},
+								{
+									"key": "images",
+									"type": "file",
+									"src": [
+										"/path/to/image2.jpg"
+									],
+									"disabled": true
+								},
+								{
+									"key": "images",
+									"type": "file",
+									"src": [
+										"/path/to/image3.jpg"
+									],
+									"disabled": true
+								}
 							]
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads"
+							]
 						},
-						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card or scan-qr endpoints first to extract data.\n\n**Request Body (multipart/form-data):**\n- `eventId` (optional): Event ID to associate lead with\n- `isIndependentLead` (optional, boolean): Whether lead is independent of events\n- `leadType` (required): Type of lead capture\n  - `full_scan`: Scanned business card with image\n  - `entry_code`: Digital business card with entry code\n  - `manual`: Manually entered lead\n- `entryCode` (optional): Entry code from organizational QR cards\n- `ocrText` (optional): Extracted OCR text from card\n- `details` (optional, JSON string): Contact information object\n  - Available fields: firstName, lastName, company, position, email, phoneNumber, website, address, city, country\n- `rating` (optional, number): Lead quality rating (1-5)\n- `images` (optional, file[]): Business card images (max 3 images)\n\n**Fields NOT Supported in Contact Details:**\n- `notes`: Removed from details schema\n- `fax`: Not supported\n- `zipCode`: Not supported\n\n**Note:** While the QR/card scanning endpoints don't return a `rating` field (you rate leads manually), the lead model itself still supports the `rating` field for tracking lead quality.\n\n**Trial Event Limit:**\nIf creating a lead with a trial event, users are limited to 5 leads. After reaching this limit, they must join a regular event with a license key to continue creating leads. Check trial status with GET /leads/trial-status."
+						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card or scan-qr endpoints first to extract data.\n\n**Request Body (multipart/form-data):**\n- `eventId` (optional): Event ID to associate lead with\n- `isIndependentLead` (optional, boolean): Whether lead is independent of events\n- `leadType` (required): Type of lead capture\n  - `full_scan`: Scanned business card with image\n  - `entry_code`: Digital business card with entry code\n  - `manual`: Manually entered lead\n- `entryCode` (optional): Entry code from organizational QR cards\n- `ocrText` (optional): Extracted OCR text from card\n- `details` (optional, JSON string): Contact information object\n  - Available fields: firstName, lastName, company, position, **emails** (array), **phoneNumbers** (array), website, address, city, country\n- `rating` (optional, number): Lead quality rating (1-5)\n- `images` (optional, file[]): Business card images (max 3 images)\n- `allowDuplicate` (optional, boolean): Skip duplicate check (default: false)\n\n**Duplicate Detection:**\nSystem checks for existing leads matching **ANY email** OR **ANY phone** OR **entryCode** within the same event. If found, returns 409 Conflict.\n\n**Fields NOT Supported in Contact Details:**\n- `notes`: Removed from details schema\n- `fax`: Not supported\n- `zipCode`: Not supported\n\n**Note:** While the QR/card scanning endpoints don't return a `rating` field (you rate leads manually), the lead model itself still supports the `rating` field for tracking lead quality.\n\n**Trial Event Limit:**\nIf creating a lead with a trial event, users are limited to 5 leads. After reaching this limit, they must join a regular event with a license key to continue creating leads. Check trial status with GET /leads/trial-status."
 					}
 				},
 				{
@@ -1286,8 +1596,12 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads?page=1&limit=10&period=today&timeZone=Asia/Kolkata",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads"
+							],
 							"query": [
 								{
 									"key": "page",
@@ -1352,8 +1666,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads/stats",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", "stats"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"stats"
+							]
 						},
 						"description": "Get lead statistics"
 					}
@@ -1370,8 +1689,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads/stats-by-period?filter=weekly&timeZone=UTC",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", "stats-by-period"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"stats-by-period"
+							],
 							"query": [
 								{
 									"key": "filter",
@@ -1400,8 +1724,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads/trial-status",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", "trial-status"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"trial-status"
+							]
 						},
 						"description": "Get user's trial event status including:\n- Trial leads used (out of 5 maximum)\n- Remaining trial leads available\n- Whether trial is still active\n- Trial event details\n\n**Trial Event Feature:**\nNew end users are automatically joined to a trial event when they first access their RSVPs. Users can create up to 5 leads with the trial event without needing a license key. After 5 leads, they must join a regular event with a license key to continue.\n\n**Response Example:**\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"trialLeadsUsed\": 2,\n    \"remainingTrialLeads\": 3,\n    \"maxTrialLeads\": 5,\n    \"isTrialActive\": true,\n    \"hasJoinedTrialEvent\": true,\n    \"trialEvent\": {\n      \"id\": \"674f2a1e5b8c9d001a2b3c4d\",\n      \"name\": \"Trial Event - Get Started with Scan2Card\",\n      \"description\": \"Welcome! Use this trial event to explore...\"\n    }\n  }\n}\n```"
 					}
@@ -1418,8 +1747,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads/:id",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", ":id"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								":id"
+							],
 							"variable": [
 								{
 									"key": "id",
@@ -1450,8 +1784,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/:id",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", ":id"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								":id"
+							],
 							"variable": [
 								{
 									"key": "id",
@@ -1474,8 +1813,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads/export?eventId=all&search=&rating=",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", "export"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"export"
+							],
 							"query": [
 								{
 									"key": "eventId",
@@ -1511,8 +1855,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads/export?type=entryOnly&eventId=all",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", "export"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"export"
+							],
 							"query": [
 								{
 									"key": "type",
@@ -1553,8 +1902,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/leads/:id",
-							"host": ["{{baseUrl}}"],
-							"path": ["leads", ":id"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								":id"
+							],
 							"variable": [
 								{
 									"key": "id",
@@ -1591,8 +1945,12 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/meetings",
-							"host": ["{{baseUrl}}"],
-							"path": ["meetings"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"meetings"
+							]
 						},
 						"description": "Create a new meeting with a lead (ENDUSER only).\n\n**Required Fields:**\n- `leadId` (string): ID of the lead for this meeting\n- `title` (string): Meeting title\n- `meetingMode` (string): One of: 'online', 'offline', 'phone'\n- `startAt` (string): Meeting start time in UTC (ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sssZ)\n- `endAt` (string): Meeting end time in UTC (ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sssZ)\n\n**Optional Fields:**\n- `eventId` (string): ID of associated event\n- `description` (string): Meeting description/agenda\n- `location` (string): Meeting location (address for offline, link for online)\n- `notifyAttendees` (boolean): Whether to notify attendees (default: false)\n\n**Meeting Modes:**\n- `online`: Virtual meeting (provide meeting link in location)\n- `offline`: In-person meeting (provide venue address in location)\n- `phone`: Phone call (provide phone number in location)\n\n**UTC Timestamps:**\n- All times are stored in UTC (24-hour format)\n- Example: 2025-12-15T14:30:00.000Z = Dec 15, 2025 at 2:30 PM UTC\n- Frontend should convert user's local time to UTC before sending\n- startAt must be before endAt\n\n**Response:**\nReturns the created meeting object with status 'scheduled'."
 					}
@@ -1609,8 +1967,12 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/meetings?page=1&limit=10&meetingStatus=scheduled&meetingMode=online",
-							"host": ["{{baseUrl}}"],
-							"path": ["meetings"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"meetings"
+							],
 							"query": [
 								{
 									"key": "page",
@@ -1663,8 +2025,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/meetings/:id",
-							"host": ["{{baseUrl}}"],
-							"path": ["meetings", ":id"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"meetings",
+								":id"
+							],
 							"variable": [
 								{
 									"key": "id",
@@ -1695,8 +2062,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/meetings/:id",
-							"host": ["{{baseUrl}}"],
-							"path": ["meetings", ":id"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"meetings",
+								":id"
+							],
 							"variable": [
 								{
 									"key": "id",
@@ -1720,8 +2092,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/meetings/:id",
-							"host": ["{{baseUrl}}"],
-							"path": ["meetings", ":id"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"meetings",
+								":id"
+							],
 							"variable": [
 								{
 									"key": "id",
@@ -1751,8 +2128,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/auth/profile",
-							"host": ["{{baseUrl}}"],
-							"path": ["auth", "profile"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"profile"
+							]
 						},
 						"description": "Get current user profile with full details.\n\n**Authentication Required:** Bearer token in Authorization header\n\n**Response:** Returns user object including:\n- Personal info (firstName, lastName, email, phoneNumber)\n- Account info (role, isVerified, isActive, is2FAEnabled)\n- Company info (companyName, address for exhibitors)\n- Profile image (profileImageUrl if uploaded)\n- Timestamps (createdAt, updatedAt)"
 					}
@@ -1777,8 +2159,12 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile",
-							"host": ["{{baseUrl}}"],
-							"path": ["profile"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"profile"
+							]
 						},
 						"description": "Update user profile information (without file upload).\n\n**Authentication Required:** Bearer token\n\n**Optional Fields:**\n- `firstName` (string): User's first name\n- `lastName` (string): User's last name\n- `phoneNumber` (string): Phone number with country code\n- `companyName` (string): Company name (for exhibitors)\n- `address` (string): Business address\n- `profileImage` (string): Base64 encoded image or S3 URL\n\n**Response:** Returns updated user profile"
 					}
@@ -1830,8 +2216,12 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile",
-							"host": ["{{baseUrl}}"],
-							"path": ["profile"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"profile"
+							]
 						},
 						"description": "Update user profile with profile image upload.\n\n**Authentication Required:** Bearer token\n\n**Content-Type:** multipart/form-data\n\n**Form Fields:**\n- `firstName` (optional): User's first name\n- `lastName` (optional): User's last name\n- `phoneNumber` (optional): Phone number\n- `companyName` (optional): Company name\n- `address` (optional): Business address\n- `profileImage` (optional): Profile image file\n\n**Image Requirements:**\n- Formats: JPEG, PNG, GIF, WebP\n- Max size: 10MB\n- Uploaded to S3 and URL saved in profile\n\n**Response:** Returns updated user profile with profileImageUrl"
 					}
@@ -1856,8 +2246,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile/change-password",
-							"host": ["{{baseUrl}}"],
-							"path": ["profile", "change-password"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"profile",
+								"change-password"
+							]
 						},
 						"description": "Change password for authenticated users.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `currentPassword` (required, string): User's current password for verification\n- `newPassword` (required, string): New password to set\n\n**Password Requirements:**\n- Minimum length varies by system configuration\n- Should contain a mix of characters for security\n\n**Validation:**\n- Current password must match the user's existing password\n- New password must be different from current password\n- New password must meet security requirements\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns success message confirming password change\n- Error 400: Invalid current password or password requirements not met\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded"
 					}
@@ -1882,8 +2277,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile/toggle-2fa",
-							"host": ["{{baseUrl}}"],
-							"path": ["profile", "toggle-2fa"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"profile",
+								"toggle-2fa"
+							]
 						},
 						"description": "Enable or disable two-factor authentication (2FA) for the user account.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `enable` (required, boolean): Set to `true` to enable 2FA, `false` to disable\n\n**Functionality:**\n- When enabled, user will be required to verify OTP during login\n- OTP is sent via SMS to user's registered phone number\n- Enhances account security by adding second factor verification\n\n**Requirements:**\n- User must have a verified phone number to enable 2FA\n- Only the account owner can toggle their 2FA setting\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns updated user profile with new `twoFactorEnabled` status\n- Error 400: Missing or invalid enable parameter\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Use Cases:**\n- Enable 2FA for enhanced security before important operations\n- Disable 2FA temporarily for easier access during testing"
 					}
@@ -1908,8 +2308,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile/feedback",
-							"host": ["{{baseUrl}}"],
-							"path": ["profile", "feedback"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"profile",
+								"feedback"
+							]
 						},
 						"description": "Submit feedback, bug reports, or feature requests.\n\n**Authentication Required:** Bearer token\n\n**Request Body:**\n- `message` (required, string): Detailed feedback message\n- `rating` (optional, number): Quality/satisfaction rating (1-5 stars)\n- `category` (optional, string): Feedback category (default: \"other\")\n  - Valid values: \"bug\", \"feature_request\", \"improvement\", \"other\"\n\n**Functionality:**\n- Feedback is linked to user account for follow-up\n- Admins can view all feedback through admin dashboard\n- Users can retrieve their own feedback history\n- Helps product team improve the application\n- Status is automatically set to \"pending\"\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns created feedback object with ID, status, and timestamp\n- Error 400: Missing required field (message)\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Best Practices:**\n- Provide detailed description for bugs (steps to reproduce, expected vs actual behavior)\n- Include specific examples when suggesting improvements\n- Use rating to indicate severity or satisfaction level"
 					}
@@ -1926,8 +2331,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/profile/feedback?page=1&limit=10",
-							"host": ["{{baseUrl}}"],
-							"path": ["profile", "feedback"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"profile",
+								"feedback"
+							],
 							"query": [
 								{
 									"key": "page",
@@ -1962,8 +2372,12 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/feedback?page=1&limit=10&category=bug&status=pending",
-							"host": ["{{baseUrl}}"],
-							"path": ["feedback"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"feedback"
+							],
 							"query": [
 								{
 									"key": "page",
@@ -2000,8 +2414,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/feedback/stats",
-							"host": ["{{baseUrl}}"],
-							"path": ["feedback", "stats"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"feedback",
+								"stats"
+							]
 						},
 						"description": "Get feedback statistics (SUPERADMIN only)"
 					}
@@ -2026,8 +2445,14 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/feedback/:id/status",
-							"host": ["{{baseUrl}}"],
-							"path": ["feedback", ":id", "status"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"feedback",
+								":id",
+								"status"
+							],
 							"variable": [
 								{
 									"key": "id",
@@ -2056,8 +2481,14 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/team-manager/dashboard/stats",
-							"host": ["{{baseUrl}}"],
-							"path": ["team-manager", "dashboard", "stats"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"dashboard",
+								"stats"
+							]
 						},
 						"description": "Get team manager dashboard statistics"
 					}
@@ -2074,8 +2505,14 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/team-manager/leads/graph?days=7",
-							"host": ["{{baseUrl}}"],
-							"path": ["team-manager", "leads", "graph"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"leads",
+								"graph"
+							],
 							"query": [
 								{
 									"key": "days",
@@ -2098,8 +2535,14 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/team-manager/leads/all",
-							"host": ["{{baseUrl}}"],
-							"path": ["team-manager", "leads", "all"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"leads",
+								"all"
+							]
 						},
 						"description": "Get all leads for team manager's team"
 					}
@@ -2116,8 +2559,14 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/team-manager/team/members",
-							"host": ["{{baseUrl}}"],
-							"path": ["team-manager", "team", "members"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"team",
+								"members"
+							]
 						},
 						"description": "Get all team members under this manager"
 					}
@@ -2134,8 +2583,16 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/team-manager/team/member/:memberId/leads",
-							"host": ["{{baseUrl}}"],
-							"path": ["team-manager", "team", "member", ":memberId", "leads"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"team",
+								"member",
+								":memberId",
+								"leads"
+							],
 							"variable": [
 								{
 									"key": "memberId",
@@ -2158,8 +2615,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/team-manager/events",
-							"host": ["{{baseUrl}}"],
-							"path": ["team-manager", "events"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"events"
+							]
 						},
 						"description": "Get events managed by this team manager"
 					}
@@ -2176,8 +2638,14 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/team-manager/meetings/team",
-							"host": ["{{baseUrl}}"],
-							"path": ["team-manager", "meetings", "team"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"meetings",
+								"team"
+							]
 						},
 						"description": "Get all meetings for team members"
 					}
@@ -2208,8 +2676,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/notifications/register-token",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications", "register-token"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications",
+								"register-token"
+							]
 						},
 						"description": "Register a Firebase Cloud Messaging token for the authenticated user. This token will be used to send push notifications to the user's device."
 					}
@@ -2234,8 +2707,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/notifications/remove-token",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications", "remove-token"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications",
+								"remove-token"
+							]
 						},
 						"description": "Remove a Firebase Cloud Messaging token from the authenticated user. Use this when user logs out or uninstalls the app."
 					}
@@ -2252,8 +2730,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/notifications/tokens",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications", "tokens"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications",
+								"tokens"
+							]
 						},
 						"description": "Get all registered FCM tokens for the authenticated user. Useful for debugging."
 					}
@@ -2270,8 +2753,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/notifications/test",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications", "test"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications",
+								"test"
+							]
 						},
 						"description": "Send a test push notification to the authenticated user's registered devices. Useful for testing Firebase setup."
 					}
@@ -2288,8 +2776,12 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/notifications?page=1&limit=20",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications"],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications"
+							],
 							"query": [
 								{
 									"key": "page",
@@ -2336,8 +2828,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/notifications/unread-count",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications", "unread-count"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications",
+								"unread-count"
+							]
 						},
 						"description": "Get the count of unread notifications for the authenticated user. Use this for the notification badge."
 					}
@@ -2362,8 +2859,13 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/notifications/mark-as-read",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications", "mark-as-read"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications",
+								"mark-as-read"
+							]
 						},
 						"description": "Mark one or more specific notifications as read. Provide an array of notification IDs in the request body."
 					}
@@ -2380,8 +2882,13 @@
 						],
 						"url": {
 							"raw": "{{baseUrl}}/notifications/mark-all-as-read",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications", "mark-all-as-read"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications",
+								"mark-all-as-read"
+							]
 						},
 						"description": "Mark all unread notifications as read for the authenticated user. Useful for 'mark all as read' functionality."
 					}
@@ -2406,8 +2913,12 @@
 						},
 						"url": {
 							"raw": "{{baseUrl}}/notifications",
-							"host": ["{{baseUrl}}"],
-							"path": ["notifications"]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"notifications"
+							]
 						},
 						"description": "Soft delete one or more notifications. Provide an array of notification IDs in the request body. Deleted notifications won't appear in future queries."
 					}
@@ -2423,9 +2934,13 @@
 				"url": {
 					"raw": "http://localhost:5000/health",
 					"protocol": "http",
-					"host": ["localhost"],
+					"host": [
+						"localhost"
+					],
 					"port": "5000",
-					"path": ["health"]
+					"path": [
+						"health"
+					]
 				},
 				"description": "Check API health status"
 			}

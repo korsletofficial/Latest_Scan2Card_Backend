@@ -86,7 +86,7 @@ export const getTeamMeetings = async (
     .limit(limit)
     .populate({
       path: "leadId",
-      select: "details.firstName details.lastName details.email details.company eventId",
+      select: "details.firstName details.lastName details.emails details.company eventId",
       populate: {
         path: "eventId",
         select: "eventName"
@@ -109,7 +109,7 @@ export const getTeamMeetings = async (
       details: {
         firstName: meeting.leadId.details?.firstName || '',
         lastName: meeting.leadId.details?.lastName || '',
-        email: meeting.leadId.details?.email || '',
+        email: meeting.leadId.details?.emails?.[0] || meeting.leadId.details?.email || '',
         company: meeting.leadId.details?.company || '',
       }
     },
@@ -188,6 +188,9 @@ export const getAllLeadsForManager = async (
       { "details.firstName": { $regex: search, $options: "i" } },
       { "details.lastName": { $regex: search, $options: "i" } },
       { "details.company": { $regex: search, $options: "i" } },
+      { "details.emails": { $elemMatch: { $regex: search, $options: "i" } } },
+      { "details.phoneNumbers": { $elemMatch: { $regex: search, $options: "i" } } },
+      // Legacy support
       { "details.email": { $regex: search, $options: "i" } },
       { "details.phoneNumber": { $regex: search, $options: "i" } },
     ];
