@@ -123,7 +123,15 @@ export const createLead = async (data: CreateLeadData) => {
               isDeleted: false,
             }).lean();
 
-            stallInfo = rsvp?.eventLicenseKey || 'Unknown Stall';
+            // Get stall name from the event's license keys
+            if (rsvp?.eventLicenseKey && event) {
+              const matchingLicenseKey = event.licenseKeys.find(
+                (lk) => lk.key === rsvp.eventLicenseKey
+              );
+              stallInfo = matchingLicenseKey?.stallName || rsvp.eventLicenseKey || 'Unknown Stall';
+            } else {
+              stallInfo = 'Unknown Stall';
+            }
           }
 
           const scannedAt = new Date((existingLead as any).createdAt).toLocaleString();
