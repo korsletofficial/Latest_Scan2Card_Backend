@@ -1,7 +1,7 @@
 import fs from "fs";
 import axios from "axios";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY ;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_MODEL = "gemini-2.5-flash"; // Fallback vision model
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -12,8 +12,8 @@ const DEFAULT_RESPONSE = {
   lastName: "",
   company: "",
   position: "",
-  email: "",
-  phoneNumber: "",
+  emails: [] as string[],      // Array of email addresses
+  phoneNumbers: [] as string[], // Array of phone numbers
   website: "",
   address: "",
   city: "",
@@ -22,16 +22,48 @@ const DEFAULT_RESPONSE = {
 
 /**
  * Ensures all required keys are present in the response object
+ * Handles both string and array fields
  */
 function ensureKeys(obj: any): typeof DEFAULT_RESPONSE {
-  const out = { ...DEFAULT_RESPONSE };
-  for (const k of Object.keys(out)) {
-    if (obj && Object.prototype.hasOwnProperty.call(obj, k) && typeof obj[k] === "string" && obj[k].trim() !== "") {
-      out[k as keyof typeof DEFAULT_RESPONSE] = obj[k].trim();
-    } else {
-      out[k as keyof typeof DEFAULT_RESPONSE] = "";
+  const out: typeof DEFAULT_RESPONSE = {
+    firstName: "",
+    lastName: "",
+    company: "",
+    position: "",
+    emails: [],
+    phoneNumbers: [],
+    website: "",
+    address: "",
+    city: "",
+    country: ""
+  };
+
+  if (!obj) return out;
+
+  // Handle string fields
+  const stringKeys = ['firstName', 'lastName', 'company', 'position', 'website', 'address', 'city', 'country'];
+  for (const k of stringKeys) {
+    if (obj[k] && typeof obj[k] === "string" && obj[k].trim() !== "") {
+      (out as any)[k] = obj[k].trim();
     }
   }
+
+  // Handle emails array
+  if (Array.isArray(obj.emails)) {
+    out.emails = obj.emails.filter((e: any) => typeof e === 'string' && e.trim() !== '').map((e: string) => e.trim());
+  } else if (obj.email && typeof obj.email === 'string' && obj.email.trim() !== '') {
+    // Backward compat: convert single email to array
+    out.emails = [obj.email.trim()];
+  }
+
+  // Handle phoneNumbers array
+  if (Array.isArray(obj.phoneNumbers)) {
+    out.phoneNumbers = obj.phoneNumbers.filter((p: any) => typeof p === 'string' && p.trim() !== '').map((p: string) => p.trim());
+  } else if (obj.phoneNumber && typeof obj.phoneNumber === 'string' && obj.phoneNumber.trim() !== '') {
+    // Backward compat: convert single phone to array
+    out.phoneNumbers = [obj.phoneNumber.trim()];
+  }
+
   return out;
 }
 
@@ -40,7 +72,10 @@ function ensureKeys(obj: any): typeof DEFAULT_RESPONSE {
  */
 function hasAnyValue(obj: any): boolean {
   if (!obj) return false;
-  return Object.values(obj).some(v => typeof v === "string" && v.trim() !== "");
+  return Object.values(obj).some(v => {
+    if (Array.isArray(v)) return v.length > 0;
+    return typeof v === "string" && v.trim() !== "";
+  });
 }
 
 /**
@@ -60,8 +95,10 @@ CRITICAL INSTRUCTIONS:
    - Arabic → English translation
 3) Clean up extracted text (remove extra spaces, artifacts, special chars)
 4) For phone numbers: keep country codes (+91, +1, etc) and digits only
-5) If a field is missing, use empty string ""
-6) Output ONLY valid JSON (no markdown, no commentary)
+5) Extract ALL email addresses found on the card (there may be multiple)
+6) Extract ALL phone numbers found on the card (there may be multiple)
+7) If a field is missing, use empty string "" for strings or empty array [] for arrays
+8) Output ONLY valid JSON (no markdown, no commentary)
 
 Required JSON format with example:
 {
@@ -69,13 +106,17 @@ Required JSON format with example:
   "lastName": "Doe",
   "company": "Tech Corporation",
   "position": "CEO",
-  "email": "john@techcorp.com",
-  "phoneNumber": "+1234567890",
+  "emails": ["john@techcorp.com", "john.doe@gmail.com"],
+  "phoneNumbers": ["+1234567890", "+0987654321"],
   "website": "https://www.techcorp.com",
   "address": "123 Tech Street",
   "city": "San Francisco",
   "country": "USA"
 }
+
+IMPORTANT: 
+- "emails" must be an array of strings (even if only one email)
+- "phoneNumbers" must be an array of strings (even if only one phone)
 
 Return ONLY the JSON object, nothing else.
 `;
@@ -102,10 +143,10 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
     const mediaType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
 
     const url = "https://api.openai.com/v1/chat/completions";
-    console.log("🔍 Attempting OpenAI GPT-4o Mini API call...");
-    console.log(`📍 URL: ${url}`);
-    console.log(`🔑 API Key (first 8 chars): ${OPENAI_API_KEY?.substring(0, 8)}...`);
-    console.log(`📊 Image size: ${Math.round(base64Image.length / 1024)} KB, type: ${mediaType}`);
+    // console.log("🔍 Attempting OpenAI GPT-4o Mini API call...");
+    // console.log(`📍 URL: ${url}`);
+    // console.log(`🔑 API Key (first 8 chars): ${OPENAI_API_KEY?.substring(0, 8)}...`);
+    // console.log(`📊 Image size: ${Math.round(base64Image.length / 1024)} KB, type: ${mediaType}`);
 
     const body = {
       model: OPENAI_MODEL,
@@ -138,8 +179,8 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
       timeout: 30000
     });
 
-    console.log(`✅ OpenAI API response status: ${res.status}`);
-    console.log("📦 OpenAI raw response:", JSON.stringify(res.data, null, 2));
+    // console.log(`✅ OpenAI API response status: ${res.status}`);
+    // console.log("📦 OpenAI raw response:", JSON.stringify(res.data, null, 2));
 
     // Extract text from response
     const text = res?.data?.choices?.[0]?.message?.content ?? "";
@@ -149,7 +190,7 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
       return null;
     }
 
-    console.log("📝 OpenAI extracted text:", text);
+    // console.log("📝 OpenAI extracted text:", text);
 
     // clean triple-backticks etc
     let cleaned = text.replace(/```json|```/g, "").trim();
@@ -166,9 +207,9 @@ async function callOpenAIVision(imagePath: string): Promise<typeof DEFAULT_RESPO
 
     try {
       const parsed = JSON.parse(jsonStr);
-      console.log("📋 OpenAI parsed JSON:", JSON.stringify(parsed, null, 2));
+      // console.log("📋 OpenAI parsed JSON:", JSON.stringify(parsed, null, 2));
       const result = ensureKeys(parsed);
-      console.log("✅ OpenAI API succeeded with data:", JSON.stringify(result, null, 2));
+      // console.log("✅ OpenAI API succeeded with data:", JSON.stringify(result, null, 2));
       return result;
     } catch (err) {
       console.warn("⚠️ OpenAI: JSON parse failed");
@@ -319,7 +360,7 @@ export async function extractBusinessCardWithFallback(imagePath: string): Promis
     console.log("🔍 OpenAI result:", JSON.stringify(openai, null, 2));
 
     if (openai && hasAnyValue(openai)) {
-      console.log("✅ Used OpenAI GPT-4o Mini for extraction - SUCCESS");
+      // console.log("✅ Used OpenAI GPT-4o Mini for extraction - SUCCESS");
       return openai;
     } else {
       console.warn("⚠️ OpenAI returned data but hasAnyValue=false");
@@ -331,9 +372,9 @@ export async function extractBusinessCardWithFallback(imagePath: string): Promis
 
   // 2) fallback to Gemini
   try {
-    console.log("🎯 Attempting Gemini extraction...");
+    // console.log("🎯 Attempting Gemini extraction...");
     const gm = await callGemini(imagePath);
-    console.log("🔍 Gemini result:", JSON.stringify(gm, null, 2));
+    // console.log("🔍 Gemini result:", JSON.stringify(gm, null, 2));
 
     if (gm && hasAnyValue(gm)) {
       console.log("✅ Used Gemini for extraction (fallback) - SUCCESS");

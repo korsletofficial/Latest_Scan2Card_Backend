@@ -202,14 +202,40 @@ export const getUserRsvps = async (
       populate: [
         {
           path: "eventId",
-          select: "eventName type startDate endDate location isActive isTrialEvent",
+          select: "eventName type startDate endDate location isActive isTrialEvent licenseKeys",
         },
       ],
     }
   );
 
+  // Add stallName to each RSVP by matching eventLicenseKey with event's licenseKeys
+  const rsvpsWithStallName = rsvps.docs.map((rsvp) => {
+    const rsvpObj: any = rsvp.toJSON();
+
+    // Initialize stallName as empty string
+    rsvpObj.stallName = '';
+
+    // Find matching license key and extract stallName if license key exists
+    if (rsvpObj.eventLicenseKey && rsvpObj.eventLicenseKey.trim() !== '' && rsvpObj.eventId?.licenseKeys) {
+      const matchingLicenseKey = rsvpObj.eventId.licenseKeys.find(
+        (lk: any) => lk.key === rsvpObj.eventLicenseKey
+      );
+
+      if (matchingLicenseKey) {
+        rsvpObj.stallName = matchingLicenseKey.stallName || '';
+      }
+    }
+
+    // Remove licenseKeys from response to avoid exposing all keys
+    if (rsvpObj.eventId?.licenseKeys) {
+      delete rsvpObj.eventId.licenseKeys;
+    }
+
+    return rsvpObj;
+  });
+
   return {
-    rsvps: rsvps.docs,
+    rsvps: rsvpsWithStallName,
     pagination: {
       total: rsvps.totalDocs,
       page: rsvps.page,

@@ -64,7 +64,7 @@ export const createMeeting = async (data: CreateMeetingData) => {
   await meeting.populate([
     {
       path: "leadId",
-      select: "details.firstName details.lastName details.email"
+      select: "details.firstName details.lastName details.emails"
     },
   ]);
 
@@ -110,7 +110,7 @@ export const getMeetings = async (filter: GetMeetingsFilter) => {
     populate: [
       {
         path: "leadId",
-        select: "details.firstName details.lastName details.email"
+        select: "details.firstName details.lastName details.emails"
       },
     ],
   };
@@ -136,7 +136,7 @@ export const getMeetingById = async (id: string, userId: string) => {
     _id: id,
     userId,
     isDeleted: false,
-  }).populate("leadId", "details.firstName details.lastName details.email");
+  }).populate("leadId", "details.firstName details.lastName details.emails");
 
   if (!meeting) {
     throw new Error("Meeting not found");
@@ -179,7 +179,7 @@ export const updateMeeting = async (
   await meeting.populate([
     {
       path: "leadId",
-      select: "details.firstName details.lastName details.email"
+      select: "details.firstName details.lastName details.emails"
     },
   ]);
 

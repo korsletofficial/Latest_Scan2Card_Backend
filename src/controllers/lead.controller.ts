@@ -104,6 +104,7 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       ocrText,
       details: detailsRaw,
       rating,
+      allowDuplicate, // New: skip duplicate check if true
     } = req.body;
     const userId = req.user?.userId;
 
@@ -151,13 +152,14 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     const lead = await leadService.createLead({
       userId: userId!,
       eventId: sanitizedData.eventId,
-      isIndependentLead: sanitizedData.isIndependentLead,
+      isIndependentLead: sanitizedData.isIndependentLead === true || sanitizedData.isIndependentLead === 'true',
       leadType,
       images: imageUrls,
       entryCode: sanitizedData.entryCode,
       ocrText: sanitizedData.ocrText,
       details: details ? sanitizeEmptyStrings(details) : undefined,
       rating: sanitizedData.rating,
+      allowDuplicate: allowDuplicate === true || allowDuplicate === 'true',
     });
 
     return res.status(201).json({
@@ -167,6 +169,17 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error creating lead:", error);
+
+    // Handle duplicate lead error with special response
+    if (error.isDuplicate) {
+      return res.status(409).json({
+        success: false,
+        isDuplicate: true,
+        message: error.message,
+        duplicateInfo: error.duplicateInfo,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error",
@@ -625,8 +638,8 @@ const generateFullDataCSV = (leads: any[]): string => {
       lead.details?.lastName || "",
       lead.details?.company || "",
       lead.details?.position || "",
-      lead.details?.email || "",
-      lead.details?.phoneNumber || "",
+      (Array.isArray(lead.details?.emails) ? lead.details.emails.join(", ") : (lead.details?.email || "")),
+      (Array.isArray(lead.details?.phoneNumbers) ? lead.details.phoneNumbers.join(", ") : (lead.details?.phoneNumber || "")),
       lead.details?.website || "",
       lead.details?.city || "",
       lead.details?.country || "",
