@@ -18,7 +18,7 @@ const REMINDER_WINDOW_MINUTES = 60; // Send reminder 1 hour before meeting
 export const startMeetingReminderCron = () => {
   // Run every 15 minutes: */15 * * * *
   // For testing, use every minute: * * * * *
-  const cronSchedule = "* * * * *"; // Every 15 minutes
+  const cronSchedule = "*/15 * * * *"; // Every 15 minutes
 
   cron.schedule(cronSchedule, async () => {
     try {
@@ -85,14 +85,19 @@ export const startMeetingReminderCron = () => {
           }
 
           // Send email reminder to lead if email exists (regardless of push notification status)
-          if (lead?.details?.email) {
+          // Use first available email
+          const leadEmail = (lead?.details?.emails && lead.details.emails.length > 0)
+            ? lead.details.emails[0]
+            : lead?.details?.email;
+
+          if (leadEmail) {
             try {
               const leadDisplayName = lead.details.firstName
                 ? `${lead.details.firstName} ${lead.details.lastName || ''}`.trim()
                 : lead.details.company || 'there';
 
               const emailSent = await sendMeetingReminderEmail({
-                leadEmail: lead.details.email,
+                leadEmail: leadEmail,
                 leadName: leadDisplayName,
                 meetingTitle: meeting.title,
                 userFirstName: user.firstName,
@@ -105,9 +110,9 @@ export const startMeetingReminderCron = () => {
               });
 
               if (emailSent) {
-                console.log(`✅ Sent meeting reminder email to ${leadDisplayName} (${lead.details.email})`);
+                console.log(`✅ Sent meeting reminder email to ${leadDisplayName} (${leadEmail})`);
               } else {
-                console.error(`❌ Failed to send reminder email to ${lead.details.email}`);
+                console.error(`❌ Failed to send reminder email to ${leadEmail}`);
               }
             } catch (emailError: any) {
               console.error(`❌ Error sending email to lead ${lead._id}:`, emailError.message);
@@ -188,14 +193,18 @@ export const checkAndSendMeetingReminders = async () => {
       let reminderAttempted = !!notificationCreated;
 
       // Send email reminder to lead if email exists (regardless of push notification status)
-      if (lead?.details?.email) {
+      const leadEmail = (lead?.details?.emails && lead.details.emails.length > 0)
+        ? lead.details.emails[0]
+        : lead?.details?.email;
+
+      if (leadEmail) {
         try {
           const leadDisplayName = lead.details.firstName
             ? `${lead.details.firstName} ${lead.details.lastName || ''}`.trim()
             : lead.details.company || 'there';
 
           await sendMeetingReminderEmail({
-            leadEmail: lead.details.email,
+            leadEmail: leadEmail,
             leadName: leadDisplayName,
             meetingTitle: meeting.title,
             userFirstName: user.firstName,

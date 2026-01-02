@@ -17,6 +17,7 @@ interface CreateLeadData {
   ocrText?: string;
   details?: any;
   rating?: number;
+  allowDuplicate?: boolean; // Skip duplicate check if true
 }
 
 interface GetLeadsFilter {
@@ -67,6 +68,91 @@ export const createLead = async (data: CreateLeadData) => {
     }
   }
   // Images are now optional for all lead types including full_scan
+
+  // CHECK FOR DUPLICATE LEADS (only if allowDuplicate is not true)
+  if (!data.allowDuplicate && data.eventId && !data.isIndependentLead) {
+    const { email, phoneNumber } = data.details || {};
+    const { entryCode } = data;
+
+    // Check if we have any unique identifier (emails, phones, or entryCode)
+    const hasEmails = data.details?.emails && data.details.emails.length > 0;
+    const hasPhones = data.details?.phoneNumbers && data.details.phoneNumbers.length > 0;
+
+    if (hasEmails || hasPhones || entryCode) {
+      const duplicateQuery: any = {
+        eventId: data.eventId,
+        isDeleted: false,
+        $or: []
+      };
+
+      if (hasEmails) {
+        duplicateQuery.$or.push({ 'details.emails': { $in: data.details!.emails } });
+        // Also check legacy field just in case
+        duplicateQuery.$or.push({ 'details.email': { $in: data.details!.emails } });
+      }
+
+      if (hasPhones) {
+        duplicateQuery.$or.push({ 'details.phoneNumbers': { $in: data.details!.phoneNumbers } });
+        // Also check legacy field just in case
+        duplicateQuery.$or.push({ 'details.phoneNumber': { $in: data.details!.phoneNumbers } });
+      }
+
+      if (entryCode && entryCode.trim()) {
+        duplicateQuery.$or.push({ 'entryCode': entryCode.trim() });
+      }
+
+      // Only search if we have at least one criterion
+      if (duplicateQuery.$or.length > 0) {
+        const existingLead = await LeadModel.findOne(duplicateQuery)
+          .sort({ createdAt: -1 }) // Get the most recent duplicate
+          .lean();
+
+        if (existingLead) {
+          // Check if this is a trial event
+          const event = await EventModel.findById(data.eventId);
+          let stallInfo = 'Unknown Stall';
+
+          if (event?.isTrialEvent) {
+            // For trial events, there's no license key/stall
+            stallInfo = 'Trial Event';
+          } else {
+            // Find the stall/license key information for regular events
+            const rsvp = await RsvpModel.findOne({
+              userId: existingLead.userId,
+              eventId: data.eventId,
+              isDeleted: false,
+            }).lean();
+
+            // Get stall name from the event's license keys
+            if (rsvp?.eventLicenseKey && event) {
+              const matchingLicenseKey = event.licenseKeys.find(
+                (lk) => lk.key === rsvp.eventLicenseKey
+              );
+              stallInfo = matchingLicenseKey?.stallName || rsvp.eventLicenseKey || 'Unknown Stall';
+            } else {
+              stallInfo = 'Unknown Stall';
+            }
+          }
+
+          const scannedAt = new Date((existingLead as any).createdAt).toLocaleString();
+
+          // Create a custom error with isDuplicate flag
+          const error: any = new Error(
+            `This lead already exists in this event. ` +
+            `Previously scanned by stall "${stallInfo}" at ${scannedAt}. ` +
+            `To create anyway, set allowDuplicate to true.`
+          );
+          error.isDuplicate = true;
+          error.duplicateInfo = {
+            stallName: stallInfo,
+            scannedAt: scannedAt,
+            existingLeadId: existingLead._id,
+          };
+          throw error;
+        }
+      }
+    }
+  }
 
   // VALIDATE EVENT ACCESS & LICENSE KEY
   if (data.eventId && !data.isIndependentLead) {
@@ -271,6 +357,9 @@ export const getLeads = async (filter: GetLeadsFilter) => {
       { "details.firstName": { $regex: search, $options: "i" } },
       { "details.lastName": { $regex: search, $options: "i" } },
       { "details.company": { $regex: search, $options: "i" } },
+      { "details.emails": { $elemMatch: { $regex: search, $options: "i" } } },
+      { "details.phoneNumbers": { $elemMatch: { $regex: search, $options: "i" } } },
+      // Keep legacy checks for old data
       { "details.email": { $regex: search, $options: "i" } },
       { "details.phoneNumber": { $regex: search, $options: "i" } },
     ];
@@ -797,6 +886,9 @@ export const getLeadsForExport = async (filter: GetLeadsFilter) => {
       { "details.firstName": { $regex: search, $options: "i" } },
       { "details.lastName": { $regex: search, $options: "i" } },
       { "details.company": { $regex: search, $options: "i" } },
+      { "details.emails": { $elemMatch: { $regex: search, $options: "i" } } },
+      { "details.phoneNumbers": { $elemMatch: { $regex: search, $options: "i" } } },
+      // Keep legacy checks for old data
       { "details.email": { $regex: search, $options: "i" } },
       { "details.phoneNumber": { $regex: search, $options: "i" } },
     ];

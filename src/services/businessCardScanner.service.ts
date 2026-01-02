@@ -10,8 +10,8 @@ export interface BusinessCardData {
   lastName?: string;
   company?: string;
   position?: string;
-  email?: string;
-  phoneNumber?: string;
+  emails?: string[];       // Array of email addresses
+  phoneNumbers?: string[]; // Array of phone numbers
   website?: string;
   address?: string;
   city?: string;
@@ -69,7 +69,7 @@ const formatPhoneNumber = (phone: string): string => {
 };
 
 /**
- * Validates and cleans extracted data; always returns all keys with empty strings when missing.
+ * Validates and cleans extracted data; always returns all keys with empty arrays/strings when missing.
  */
 const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
   const cleaned: BusinessCardData = {
@@ -77,8 +77,8 @@ const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
     lastName: "",
     company: "",
     position: "",
-    email: "",
-    phoneNumber: "",
+    emails: [],
+    phoneNumbers: [],
     website: "",
     address: "",
     city: "",
@@ -91,19 +91,37 @@ const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
   if (data.company && data.company.trim()) cleaned.company = data.company.trim();
   if (data.position && data.position.trim()) cleaned.position = data.position.trim();
 
-  if (data.email && data.email.trim()) {
-    // Clean email by removing spaces before validation
-    const emailCleaned = data.email.trim().replace(/\s+/g, '').toLowerCase();
+  // Handle emails array
+  if (Array.isArray(data.emails)) {
+    cleaned.emails = data.emails
+      .map(e => e.trim().replace(/\s+/g, '').toLowerCase())
+      .filter(e => isValidEmail(e));
+    if (cleaned.emails.length > 0) {
+      console.log(`✅ Validated ${cleaned.emails.length} email(s): ${cleaned.emails.join(', ')}`);
+    }
+  } else if ((data as any).email && typeof (data as any).email === 'string') {
+    // Backward compat: handle single email field
+    const emailCleaned = (data as any).email.trim().replace(/\s+/g, '').toLowerCase();
     if (isValidEmail(emailCleaned)) {
-      cleaned.email = emailCleaned;
+      cleaned.emails = [emailCleaned];
       console.log(`✅ Email validated and cleaned: ${emailCleaned}`);
-    } else {
-      console.warn(`⚠️ Invalid email rejected: ${data.email}`);
     }
   }
 
-  if (data.phoneNumber && data.phoneNumber.trim()) {
-    cleaned.phoneNumber = formatPhoneNumber(data.phoneNumber);
+  // Handle phoneNumbers array
+  if (Array.isArray(data.phoneNumbers)) {
+    cleaned.phoneNumbers = data.phoneNumbers
+      .map(p => formatPhoneNumber(p))
+      .filter(p => p.length >= 6); // Basic validation: at least 6 digits
+    if (cleaned.phoneNumbers.length > 0) {
+      console.log(`✅ Validated ${cleaned.phoneNumbers.length} phone(s): ${cleaned.phoneNumbers.join(', ')}`);
+    }
+  } else if ((data as any).phoneNumber && typeof (data as any).phoneNumber === 'string') {
+    // Backward compat: handle single phone field
+    const phoneCleaned = formatPhoneNumber((data as any).phoneNumber);
+    if (phoneCleaned.length >= 6) {
+      cleaned.phoneNumbers = [phoneCleaned];
+    }
   }
 
   if (data.website && data.website.trim()) {
@@ -152,8 +170,8 @@ CRITICAL INSTRUCTIONS:
    - lastName: Last name (translate if in other language) - use from front side
    - company: Company/business name (MUST translate to English) - use from front side
    - position: Job title/role (translate if in other language) - use from front side
-   - email: Email address (usually contains @) - check BOTH sides, REMOVE ALL SPACES from email
-   - phoneNumber: Phone number (keep digits and country codes like +91) - check BOTH sides, pick first valid one
+   - emails: Extract ALL email addresses found on the card (check BOTH sides), return as array of strings
+   - phoneNumbers: Extract ALL phone numbers found (check BOTH sides), return as array of strings
    - website: Website URL (usually starts with http/www) - check BOTH sides
    - address: Street address (translate if in other language) - check BOTH sides
    - city: City name (translate if in other language) - check BOTH sides
@@ -168,10 +186,11 @@ CRITICAL INSTRUCTIONS:
 6. Output Format:
    - ONLY valid JSON, no markdown, no extra text
    - Return a SINGLE flat object, NOT an array
-   - All empty fields must be empty strings ""
+   - All empty fields must be empty strings "" or empty arrays []
    - All text must be in English (translated)
    - DO NOT wrap in a "contacts" array
    - MERGE all information from front and back into ONE contact
+   - "emails" and "phoneNumbers" MUST be arrays of strings
 
 Example correct output:
 {
@@ -179,8 +198,8 @@ Example correct output:
   "lastName": "Doe",
   "company": "Tech Corp",
   "position": "CEO",
-  "email": "john@example.com",
-  "phoneNumber": "+1234567890",
+  "emails": ["john@example.com", "john.doe@techcorp.com"],
+  "phoneNumbers": ["+1234567890", "+0987654321"],
   "website": "https://example.com",
   "address": "123 Main St",
   "city": "New York",
@@ -248,19 +267,44 @@ const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
           console.log("🔄 Detected contacts array, merging contact data...");
           // Merge all contacts, prioritizing non-empty values from first contact
           const merged: BusinessCardData = {};
+
           for (const contact of parsed.contacts) {
-            for (const key of Object.keys(contact)) {
-              const currentValue = merged[key as keyof BusinessCardData];
+            // Handle array fields specifically
+            if (contact.emails && Array.isArray(contact.emails)) {
+              merged.emails = [...(merged.emails || []), ...contact.emails];
+            } else if (contact.email && typeof contact.email === 'string') {
+              merged.emails = [...(merged.emails || []), contact.email];
+            }
+
+            if (contact.phoneNumbers && Array.isArray(contact.phoneNumbers)) {
+              merged.phoneNumbers = [...(merged.phoneNumbers || []), ...contact.phoneNumbers];
+            } else if (contact.phoneNumber && typeof contact.phoneNumber === 'string') {
+              merged.phoneNumbers = [...(merged.phoneNumbers || []), contact.phoneNumber];
+            }
+
+            // Handle string fields
+            const stringKeys: (Exclude<keyof BusinessCardData, "emails" | "phoneNumbers">)[] = [
+              'firstName', 'lastName', 'company', 'position',
+              'website', 'address', 'city', 'country', 'notes'
+            ];
+
+            for (const key of stringKeys) {
+              const currentValue = merged[key];
               const newValue = contact[key];
 
               // Only set if we don't have a value yet, or current value is empty
               if (!currentValue || (typeof currentValue === 'string' && currentValue.trim() === "")) {
                 if (newValue && typeof newValue === 'string' && newValue.trim()) {
-                  merged[key as keyof BusinessCardData] = newValue;
+                  merged[key] = newValue;
                 }
               }
             }
           }
+
+          // Deduplicate arrays
+          if (merged.emails) merged.emails = [...new Set(merged.emails)];
+          if (merged.phoneNumbers) merged.phoneNumbers = [...new Set(merged.phoneNumbers)];
+
           console.log("✅ Merged contact data:", JSON.stringify(merged, null, 2));
           parsed = merged;
         }
@@ -397,17 +441,17 @@ export const scanBusinessCard = async (
 
       const totalFields = Object.keys(extractedData).filter(
         (key) => extractedData[key as keyof BusinessCardData] &&
-                 extractedData[key as keyof BusinessCardData]!.toString().trim() !== ""
+          extractedData[key as keyof BusinessCardData]!.toString().trim() !== ""
       ).length;
       console.log(`✅ Business card scanned successfully. Extracted ${totalFields} fields.`);
     }
 
     const cleanedData = validateAndCleanData(extractedData);
-    console.log("🧹 Cleaned data after validation:", JSON.stringify(cleanedData, null, 2));
+    // console.log("🧹 Cleaned data after validation:", JSON.stringify(cleanedData, null, 2));
 
     const totalFields = Object.keys(cleanedData).filter(
       (key) => cleanedData[key as keyof BusinessCardData] &&
-               cleanedData[key as keyof BusinessCardData]!.toString().trim() !== ""
+        cleanedData[key as keyof BusinessCardData]!.toString().trim() !== ""
     ).length;
     const confidence = Math.min(totalFields / 6, 1);
 

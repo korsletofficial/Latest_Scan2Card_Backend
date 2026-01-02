@@ -38,9 +38,9 @@ export const getMyRsvps = async (req: AuthRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const sanitizedQuery = sanitizeEmptyStrings({ search: req.query.search });
     const search = (sanitizedQuery.search as string)?.trim() || "";
-    const activeOnly = req.query.activeOnly === 'true';
+    const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-    const result = await rsvpService.getUserRsvps(userId!, page, limit, search, activeOnly);
+    const result = await rsvpService.getUserRsvps(userId!, page, limit, search, isActive);
 
     res.status(200).json({
       success: true,

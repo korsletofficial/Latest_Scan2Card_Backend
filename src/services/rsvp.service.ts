@@ -101,7 +101,7 @@ export const getUserRsvps = async (
   page: number = 1,
   limit: number = 10,
   search: string = '',
-  activeOnly: boolean = false
+  isActive?: boolean
 ) => {
   const normalizedSearch = search?.trim() || "";
 
@@ -145,22 +145,26 @@ export const getUserRsvps = async (
     }
   }
 
-  // Build query for RSVPs - Filter out expired license keys
+  // Build query for RSVPs
   const now = new Date();
   const rsvpQuery: any = {
     userId: userId,
     isDeleted: false,
-    $or: [
+  };
+
+  // Filter by expiration status based on isActive parameter
+  if (isActive === true) {
+    // Return only non-expired RSVPs
+    rsvpQuery.$or = [
       { expiresAt: { $exists: false } }, // No expiration (trial events)
       { expiresAt: null }, // No expiration
       { expiresAt: { $gte: now } }, // Not expired yet
-    ],
-  };
-
-  // Add RSVP active filter if requested
-  if (activeOnly) {
-    rsvpQuery.isActive = true;
+    ];
+  } else if (isActive === false) {
+    // Return only expired RSVPs
+    rsvpQuery.expiresAt = { $lt: now };
   }
+  // If isActive is undefined, return all RSVPs (both expired and non-expired)
 
   // If search is provided, find matching event IDs first
   if (normalizedSearch) {
@@ -202,14 +206,40 @@ export const getUserRsvps = async (
       populate: [
         {
           path: "eventId",
-          select: "eventName type startDate endDate location isActive isTrialEvent",
+          select: "eventName type startDate endDate location isActive isTrialEvent licenseKeys",
         },
       ],
     }
   );
 
+  // Add stallName to each RSVP by matching eventLicenseKey with event's licenseKeys
+  const rsvpsWithStallName = rsvps.docs.map((rsvp) => {
+    const rsvpObj: any = rsvp.toJSON();
+
+    // Initialize stallName as empty string
+    rsvpObj.stallName = '';
+
+    // Find matching license key and extract stallName if license key exists
+    if (rsvpObj.eventLicenseKey && rsvpObj.eventLicenseKey.trim() !== '' && rsvpObj.eventId?.licenseKeys) {
+      const matchingLicenseKey = rsvpObj.eventId.licenseKeys.find(
+        (lk: any) => lk.key === rsvpObj.eventLicenseKey
+      );
+
+      if (matchingLicenseKey) {
+        rsvpObj.stallName = matchingLicenseKey.stallName || '';
+      }
+    }
+
+    // Remove licenseKeys from response to avoid exposing all keys
+    if (rsvpObj.eventId?.licenseKeys) {
+      delete rsvpObj.eventId.licenseKeys;
+    }
+
+    return rsvpObj;
+  });
+
   return {
-    rsvps: rsvps.docs,
+    rsvps: rsvpsWithStallName,
     pagination: {
       total: rsvps.totalDocs,
       page: rsvps.page,

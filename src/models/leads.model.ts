@@ -7,8 +7,8 @@ interface ILeadDetails {
   lastName?: string;
   company?: string;
   position?: string;
-  email?: string;
-  phoneNumber?: string;
+  emails?: string[];      // Array of email addresses
+  phoneNumbers?: string[]; // Array of phone numbers
   website?: string;
   address?: string;
   city?: string;
@@ -49,7 +49,7 @@ const LeadSchema = new Schema<ILead>(
       type: [String],
       default: [],
       validate: {
-        validator: function(v: string[]) {
+        validator: function (v: string[]) {
           return v.length <= 3;
         },
         message: 'Maximum 3 images allowed per lead'
@@ -62,8 +62,8 @@ const LeadSchema = new Schema<ILead>(
       lastName: { type: String },
       company: { type: String },
       position: { type: String },
-      email: { type: String },
-      phoneNumber: { type: String },
+      emails: { type: [String], default: [] },
+      phoneNumbers: { type: [String], default: [] },
       website: { type: String },
       address: { type: String },
       city: { type: String },
@@ -86,14 +86,14 @@ const LeadSchema = new Schema<ILead>(
         ret.scannedCardImage = ret.scannedCardImage ?? '';
         ret.images = ret.images ?? [];
 
-        // Convert undefined/null to empty string for details fields
+        // Convert undefined/null to empty arrays/strings for details fields
         if (ret.details) {
           ret.details.firstName = ret.details.firstName ?? '';
           ret.details.lastName = ret.details.lastName ?? '';
           ret.details.company = ret.details.company ?? '';
           ret.details.position = ret.details.position ?? '';
-          ret.details.email = ret.details.email ?? '';
-          ret.details.phoneNumber = ret.details.phoneNumber ?? '';
+          ret.details.emails = ret.details.emails ?? [];
+          ret.details.phoneNumbers = ret.details.phoneNumbers ?? [];
           ret.details.website = ret.details.website ?? '';
           ret.details.address = ret.details.address ?? '';
           ret.details.city = ret.details.city ?? '';
