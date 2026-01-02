@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import RsvpModel from "../models/rsvp.model";
+import NotificationModel from "../models/notification.model";
 import { createLicenseExpiryNotification } from "../services/notification.service";
 
 /**
@@ -50,6 +51,9 @@ export const startLicenseExpiryReminderCron = () => {
           `📅 Found ${rsvpsWithExpiringLicense.length} RSVPs with license expiring in ${days} days`
         );
 
+        // Track users who already received notifications to avoid duplicates
+        const notifiedUsers = new Set<string>();
+
         for (const rsvp of rsvpsWithExpiringLicense) {
           try {
             const user = rsvp.userId as any;
@@ -57,12 +61,43 @@ export const startLicenseExpiryReminderCron = () => {
 
             if (!user || !rsvp.expiresAt) continue;
 
-            const notification = await createLicenseExpiryNotification(user._id.toString(), {
+            const userId = user._id.toString();
+
+            // Skip if already notified this user in this run
+            if (notifiedUsers.has(userId)) {
+              console.log(
+                `⏭️  Skipping duplicate - already notified ${user.firstName} ${user.lastName} for ${days} days expiry`
+              );
+              continue;
+            }
+
+            // Check if notification already sent today for this user and expiry period
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+
+            const existingNotification = await NotificationModel.findOne({
+              userId: userId,
+              type: "license_expiry",
+              "data.daysUntilExpiry": days,
+              createdAt: { $gte: startOfToday },
+              isDeleted: false,
+            });
+
+            if (existingNotification) {
+              console.log(
+                `⏭️  Notification already exists for ${user.firstName} ${user.lastName} (${days} days expiry)`
+              );
+              notifiedUsers.add(userId);
+              continue;
+            }
+
+            const notification = await createLicenseExpiryNotification(userId, {
               daysUntilExpiry: days,
               expiryDate: rsvp.expiresAt,
             });
 
             if (notification) {
+              notifiedUsers.add(userId);
               console.log(
                 `✅ Sent license expiry reminder to ${user.firstName} ${user.lastName} for event "${event?.eventName}" (${days} days remaining)`
               );
@@ -90,6 +125,9 @@ export const startLicenseExpiryReminderCron = () => {
 
       console.log(`⚠️  Found ${expiredRsvps.length} RSVPs with expired licenses`);
 
+      // Track users who already received expired notifications
+      const notifiedExpiredUsers = new Set<string>();
+
       for (const rsvp of expiredRsvps) {
         try {
           const user = rsvp.userId as any;
@@ -97,12 +135,43 @@ export const startLicenseExpiryReminderCron = () => {
 
           if (!user || !rsvp.expiresAt) continue;
 
-          const notification = await createLicenseExpiryNotification(user._id.toString(), {
+          const userId = user._id.toString();
+
+          // Skip if already notified this user in this run
+          if (notifiedExpiredUsers.has(userId)) {
+            console.log(
+              `⏭️  Skipping duplicate - already notified ${user.firstName} ${user.lastName} for expired license`
+            );
+            continue;
+          }
+
+          // Check if expired notification already sent today
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+
+          const existingNotification = await NotificationModel.findOne({
+            userId: userId,
+            type: "license_expiry",
+            "data.daysUntilExpiry": 0,
+            createdAt: { $gte: startOfToday },
+            isDeleted: false,
+          });
+
+          if (existingNotification) {
+            console.log(
+              `⏭️  Expired notification already exists for ${user.firstName} ${user.lastName}`
+            );
+            notifiedExpiredUsers.add(userId);
+            continue;
+          }
+
+          const notification = await createLicenseExpiryNotification(userId, {
             daysUntilExpiry: 0,
             expiryDate: rsvp.expiresAt,
           });
 
           if (notification) {
+            notifiedExpiredUsers.add(userId);
             console.log(
               `✅ Sent expired license notification to ${user.firstName} ${user.lastName} for event "${event?.eventName}"`
             );

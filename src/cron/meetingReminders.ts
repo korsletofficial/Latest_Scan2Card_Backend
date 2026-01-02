@@ -2,6 +2,7 @@ import cron from "node-cron";
 import MeetingModel from "../models/meeting.model";
 import UserModel from "../models/user.model";
 import LeadsModel from "../models/leads.model";
+import NotificationModel from "../models/notification.model";
 import { sendNotificationToDevice, sendNotificationToMultipleDevices } from "../services/firebase.service";
 import { sendMeetingReminderEmail } from "../services/email.service";
 import { createMeetingReminderNotification } from "../services/notification.service";
@@ -58,6 +59,27 @@ export const startMeetingReminderCron = () => {
             continue;
           }
 
+          const userId = user._id.toString();
+          const meetingId = meeting._id.toString();
+
+          // Check if notification already sent for this meeting
+          const existingNotification = await NotificationModel.findOne({
+            userId: userId,
+            type: "meeting_reminder",
+            "data.meetingId": meetingId,
+            isDeleted: false,
+          });
+
+          if (existingNotification) {
+            console.log(
+              `⏭️  Meeting reminder already sent for meeting ${meetingId} to ${user.firstName} ${user.lastName}`
+            );
+            // Mark as sent to prevent future checks
+            meeting.reminderSent = true;
+            await meeting.save();
+            continue;
+          }
+
           // Calculate time until meeting
           const timeUntilMeeting = meeting.startAt.getTime() - now.getTime();
           const minutesUntil = Math.round(timeUntilMeeting / (1000 * 60));
@@ -66,8 +88,8 @@ export const startMeetingReminderCron = () => {
           const leadName = lead?.details?.name || lead?.details?.firstName || "Unknown";
 
           // Create notification in database (this will also send push if user has FCM tokens)
-          const notificationCreated = await createMeetingReminderNotification(user._id.toString(), {
-            meetingId: meeting._id.toString(),
+          const notificationCreated = await createMeetingReminderNotification(userId, {
+            meetingId: meetingId,
             title: meeting.title,
             leadName,
             startAt: meeting.startAt,
