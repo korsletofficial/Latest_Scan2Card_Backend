@@ -101,7 +101,7 @@ export const getUserRsvps = async (
   page: number = 1,
   limit: number = 10,
   search: string = '',
-  activeOnly: boolean = false
+  isActive?: boolean
 ) => {
   const normalizedSearch = search?.trim() || "";
 
@@ -145,22 +145,26 @@ export const getUserRsvps = async (
     }
   }
 
-  // Build query for RSVPs - Filter out expired license keys
+  // Build query for RSVPs
   const now = new Date();
   const rsvpQuery: any = {
     userId: userId,
     isDeleted: false,
-    $or: [
+  };
+
+  // Filter by expiration status based on isActive parameter
+  if (isActive === true) {
+    // Return only non-expired RSVPs
+    rsvpQuery.$or = [
       { expiresAt: { $exists: false } }, // No expiration (trial events)
       { expiresAt: null }, // No expiration
       { expiresAt: { $gte: now } }, // Not expired yet
-    ],
-  };
-
-  // Add RSVP active filter if requested
-  if (activeOnly) {
-    rsvpQuery.isActive = true;
+    ];
+  } else if (isActive === false) {
+    // Return only expired RSVPs
+    rsvpQuery.expiresAt = { $lt: now };
   }
+  // If isActive is undefined, return all RSVPs (both expired and non-expired)
 
   // If search is provided, find matching event IDs first
   if (normalizedSearch) {
