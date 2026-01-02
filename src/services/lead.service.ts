@@ -55,6 +55,8 @@ export const createLead = async (data: CreateLeadData) => {
     throw new Error("Rating must be between 1 and 5");
   }
 
+
+  
   // Validate images array if provided
   if (data.images && data.images.length > 3) {
     throw new Error("Maximum 3 images allowed per lead");
