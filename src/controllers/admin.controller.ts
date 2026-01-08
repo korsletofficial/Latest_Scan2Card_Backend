@@ -52,6 +52,22 @@ export const createExhibitor = async (
       });
     }
 
+    // Validate firstName length
+    if (firstName.length < 1 || firstName.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'First name must be between 1 and 100 characters',
+      });
+    }
+
+    // Validate lastName length
+    if (lastName.length < 1 || lastName.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Last name must be between 1 and 100 characters',
+      });
+    }
+
     // Validate at least one contact method
     if (!email && !phoneNumber) {
       return res.status(400).json({
@@ -62,6 +78,12 @@ export const createExhibitor = async (
 
     // Validate email format if provided
     if (email) {
+      if (email.length > 255) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email must not exceed 255 characters',
+        });
+      }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return res.status(400).json({
@@ -71,11 +93,51 @@ export const createExhibitor = async (
       }
     }
 
-    // Validate password length if provided
-    if (password && password.length < 6) {
+    // Validate phoneNumber if provided
+    if (phoneNumber) {
+      if (phoneNumber.length > 20) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone number must not exceed 20 characters',
+        });
+      }
+      const phoneRegex = /^\+?[\d\s\-()]{7,20}$/;
+      if (!phoneRegex.test(phoneNumber)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone number must be a valid format',
+        });
+      }
+    }
+
+    // Validate companyName if provided
+    if (companyName && companyName.length > 200) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 6 characters long",
+        message: 'Company name must not exceed 200 characters',
+      });
+    }
+
+    // Validate password length if provided (minimum 8 for security)
+    if (password && password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters long",
+      });
+    }
+
+    if (password && password.length > 255) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must not exceed 255 characters",
+      });
+    }
+
+    // Validate address if provided
+    if (address && address.length > 300) {
+      return res.status(400).json({
+        success: false,
+        message: 'Address must not exceed 300 characters',
       });
     }
 

@@ -24,12 +24,43 @@ export interface IRsvp extends Document {
 // Define Schema
 const RsvpSchema = new Schema<IRsvp>(
   {
-    eventId: { type: Schema.Types.ObjectId, required: true, ref: "Events" },
-    userId: { type: Schema.Types.ObjectId, required: true, ref: "Users" },
-    eventLicenseKey: { type: Schema.Types.String },
-    expiresAt: { type: Schema.Types.Date },
-    addedBy: { type: Schema.Types.ObjectId, ref: "Users" },
-    status: { type: Number, required: true, default: 1 },
+    eventId: { 
+      type: Schema.Types.ObjectId, 
+      required: true, 
+      ref: "Events" 
+    },
+    userId: { 
+      type: Schema.Types.ObjectId, 
+      required: true, 
+      ref: "Users" 
+    },
+    eventLicenseKey: { 
+      type: String,
+      maxlength: 100,
+      trim: true,
+      uppercase: true
+    },
+    expiresAt: { 
+      type: Date,
+      validate: {
+        validator: function (v: Date | undefined) {
+          if (!v) return true; // Allow null/undefined
+          return v instanceof Date && v >= new Date();
+        },
+        message: 'expiresAt must be today or in the future'
+      }
+    },
+    addedBy: { 
+      type: Schema.Types.ObjectId, 
+      ref: "Users" 
+    },
+    status: { 
+      type: Number, 
+      required: true, 
+      default: 1,
+      min: 0,
+      max: 10
+    },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
   },

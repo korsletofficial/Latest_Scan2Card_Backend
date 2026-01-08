@@ -9,9 +9,32 @@ export const createRsvp = async (req: AuthRequest, res: Response) => {
     const { rsvpLicenseKey } = req.body;
     const userId = req.user?._id;
 
+    // Input validation
+    if (!rsvpLicenseKey || typeof rsvpLicenseKey !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'License key is required and must be a string',
+      });
+    }
+
+    const trimmedKey = rsvpLicenseKey.trim();
+    if (trimmedKey.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'License key cannot be empty',
+      });
+    }
+
+    if (trimmedKey.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'License key must not exceed 100 characters',
+      });
+    }
+
     const sanitizedData = sanitizeEmptyStrings({
       userId: userId!,
-      rsvpLicenseKey,
+      rsvpLicenseKey: trimmedKey.toUpperCase(),
     });
 
     const rsvp = await rsvpService.createRsvp(sanitizedData);
@@ -39,6 +62,28 @@ export const getMyRsvps = async (req: AuthRequest, res: Response) => {
     const sanitizedQuery = sanitizeEmptyStrings({ search: req.query.search });
     const search = (sanitizedQuery.search as string)?.trim() || "";
     const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
+
+    // Input validation
+    if (page < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Page must be greater than or equal to 1',
+      });
+    }
+
+    if (limit < 1 || limit > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Limit must be between 1 and 100',
+      });
+    }
+
+    if (search && search.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search term must not exceed 100 characters',
+      });
+    }
 
     const result = await rsvpService.getUserRsvps(userId!, page, limit, search, isActive);
 
@@ -154,7 +199,30 @@ export const validateLicenseKey = async (req: AuthRequest, res: Response) => {
   try {
     const { licenseKey } = req.body;
 
-    const sanitizedData = sanitizeEmptyStrings({ licenseKey });
+    // Input validation
+    if (!licenseKey || typeof licenseKey !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'License key is required and must be a string',
+      });
+    }
+
+    const trimmedKey = licenseKey.trim();
+    if (trimmedKey.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'License key cannot be empty',
+      });
+    }
+
+    if (trimmedKey.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'License key must not exceed 100 characters',
+      });
+    }
+
+    const sanitizedData = sanitizeEmptyStrings({ licenseKey: trimmedKey.toUpperCase() });
     const result = await rsvpService.validateLicenseKey(sanitizedData.licenseKey);
 
     res.status(200).json({

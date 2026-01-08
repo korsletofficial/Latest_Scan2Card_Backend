@@ -161,10 +161,36 @@ export const getTeamMembers = async (req: AuthRequest, res: Response) => {
     const teamManagerId = req.user?.userId;
     const { page = 1, limit = 10, search = "" } = req.query;
 
+    // Validate pagination parameters
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+
+    if (isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Page must be a positive number",
+      });
+    }
+
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Limit must be between 1 and 100",
+      });
+    }
+
+    // Validate search parameter length (max 100 chars)
+    if (search && String(search).length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Search term must not exceed 100 characters",
+      });
+    }
+
     const result = await teamManagerService.getTeamMembers(
       teamManagerId!,
-      Number(page),
-      Number(limit),
+      pageNum,
+      limitNum,
       search as string
     );
 

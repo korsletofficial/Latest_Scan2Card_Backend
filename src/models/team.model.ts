@@ -15,11 +15,32 @@ export interface ITeam extends Document {
 // Team Schema
 const TeamSchema = new Schema<ITeam>(
   {
-    teamName: { type: String, required: true, trim: true },
-    description: { type: String, trim: true },
-    teamManagerId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
-    eventId: { type: Schema.Types.ObjectId, ref: "Events", required: true },
-    members: [{ type: Schema.Types.ObjectId, ref: "Users" }],
+    teamName: { 
+      type: String, 
+      required: true, 
+      trim: true,
+      minlength: 2,
+      maxlength: 150
+    },
+    description: { 
+      type: String, 
+      trim: true,
+      maxlength: 1000
+    },
+    teamManagerId: { 
+      type: Schema.Types.ObjectId, 
+      ref: "Users", 
+      required: true 
+    },
+    eventId: { 
+      type: Schema.Types.ObjectId, 
+      ref: "Events", 
+      required: true 
+    },
+    members: [{ 
+      type: Schema.Types.ObjectId, 
+      ref: "Users"
+    }],
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
   },

@@ -9,11 +9,27 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
     const { eventName, description, type, startDate, endDate, location } = req.body;
     const exhibitorId = req.user?.userId;
 
-    // Validation
+    // Validation - Required fields
     if (!eventName || !type || !startDate || !endDate) {
       return res.status(400).json({
         success: false,
         message: "eventName, type, startDate, and endDate are required",
+      });
+    }
+
+    // Validate eventName length (3-200)
+    if (String(eventName).length < 3 || String(eventName).length > 200) {
+      return res.status(400).json({
+        success: false,
+        message: "eventName must be between 3 and 200 characters",
+      });
+    }
+
+    // Validate description length (max 2000)
+    if (description && String(description).length > 2000) {
+      return res.status(400).json({
+        success: false,
+        message: "description must not exceed 2000 characters",
       });
     }
 
@@ -25,19 +41,49 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Validate location fields if provided
+    if (location) {
+      if (location.venue && String(location.venue).length > 150) {
+        return res.status(400).json({
+          success: false,
+          message: "Location venue must not exceed 150 characters",
+        });
+      }
+      if (location.address && String(location.address).length > 300) {
+        return res.status(400).json({
+          success: false,
+          message: "Location address must not exceed 300 characters",
+        });
+      }
+      if (location.city && String(location.city).length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "Location city must not exceed 100 characters",
+        });
+      }
+    }
+
     // Validate dates
     const start = new Date(startDate);
     const end = new Date(endDate);
+
+    // Check if dates are valid
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date format",
+      });
+    }
 
     // Get today's date at midnight (in local timezone, treated as UTC for comparison)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Allow start and end date to be the same, but both must be today or in the future
+    // Allow start date to be today or in the future
     if (start < today) {
       return res.status(400).json({
         success: false,
-        message: "Event start date cannot be in the past",
+        message: "Event start date must be today or in the future",
       });
     }
 
@@ -200,6 +246,7 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
     const { stallName, email, maxActivations = 1, expiresAt } = req.body;
     const exhibitorId = req.user?.userId;
 
+    // Validate email
     if (!email) {
       return res.status(400).json({
         success: false,
@@ -207,6 +254,40 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       });
     }
 
+    // Email length and format validation (255 chars max)
+    if (String(email).length > 255) {
+      return res.status(400).json({
+        success: false,
+        message: "Email must not exceed 255 characters",
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(String(email))) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format",
+      });
+    }
+
+    // Validate stallName if provided (150 chars max)
+    if (stallName && String(stallName).length > 150) {
+      return res.status(400).json({
+        success: false,
+        message: "stallName must not exceed 150 characters",
+      });
+    }
+
+    // Validate maxActivations (1-10000)
+    const maxAct = Number(maxActivations);
+    if (isNaN(maxAct) || maxAct < 1 || maxAct > 10000) {
+      return res.status(400).json({
+        success: false,
+        message: "maxActivations must be between 1 and 10000",
+      });
+    }
+
+    // Validate expiration date
     if (!expiresAt) {
       return res.status(400).json({
         success: false,
@@ -214,7 +295,6 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       });
     }
 
-    // Validate expiration date
     const expirationDate = new Date(expiresAt);
     if (isNaN(expirationDate.getTime())) {
       return res.status(400).json({
@@ -238,19 +318,10 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email format",
-      });
-    }
-
     const sanitizedData = sanitizeEmptyStrings({
       stallName,
       email,
-      maxActivations,
+      maxActivations: maxAct,
       expiresAt: expirationDate,
     });
 

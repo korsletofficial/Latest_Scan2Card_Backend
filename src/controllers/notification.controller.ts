@@ -17,6 +17,21 @@ export const registerFCMToken = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Validate FCM token format
+    if (typeof fcmToken !== 'string' || fcmToken.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "FCM token must be a non-empty string",
+      });
+    }
+
+    if (fcmToken.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: "FCM token must not exceed 500 characters",
+      });
+    }
+
     // Find user and add FCM token if not already present
     const user = await UserModel.findById(userId);
 
@@ -60,6 +75,21 @@ export const removeFCMToken = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({
         success: false,
         message: "FCM token is required",
+      });
+    }
+
+    // Validate FCM token format
+    if (typeof fcmToken !== 'string' || fcmToken.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "FCM token must be a non-empty string",
+      });
+    }
+
+    if (fcmToken.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: "FCM token must not exceed 500 characters",
       });
     }
 
@@ -178,7 +208,7 @@ export const sendTestNotification = async (req: AuthRequest, res: Response) => {
 export const getNotifications = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const { page, limit, type, isRead, priority } = req.query;
+    const { page = 1, limit = 10, type, isRead, priority } = req.query;
 
     if (!userId) {
       return res.status(401).json({
@@ -187,10 +217,45 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const options: any = {};
+    // Input validation
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 10;
 
-    if (page) options.page = parseInt(page as string);
-    if (limit) options.limit = parseInt(limit as string);
+    if (pageNum < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Page must be greater than or equal to 1",
+      });
+    }
+
+    if (limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Limit must be between 1 and 100",
+      });
+    }
+
+    // Validate type filter if provided
+    if (type && !['meeting_reminder', 'license_expiry', 'lead_update', 'team_update', 'event_update', 'system'].includes(type as string)) {
+      return res.status(400).json({
+        success: false,
+        message: "Type must be one of: meeting_reminder, license_expiry, lead_update, team_update, event_update, system",
+      });
+    }
+
+    // Validate priority filter if provided
+    if (priority && !['low', 'medium', 'high'].includes(priority as string)) {
+      return res.status(400).json({
+        success: false,
+        message: "Priority must be one of: low, medium, high",
+      });
+    }
+
+    const options: any = {
+      page: pageNum,
+      limit: limitNum,
+    };
+
     if (type) options.type = type as string;
     if (typeof isRead === "string") options.isRead = isRead === "true";
     if (priority) options.priority = priority as string;
@@ -261,6 +326,13 @@ export const markNotificationsAsRead = async (req: AuthRequest, res: Response) =
       });
     }
 
+    if (notificationIds.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot mark more than 100 notifications at a time",
+      });
+    }
+
     const count = await notificationService.markAsRead(notificationIds, userId);
 
     return res.status(200).json({
@@ -326,6 +398,13 @@ export const deleteNotifications = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({
         success: false,
         message: "notificationIds array is required",
+      });
+    }
+
+    if (notificationIds.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete more than 100 notifications at a time",
       });
     }
 

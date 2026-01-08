@@ -11,6 +11,37 @@ export const getAllFeedback = async (req: AuthRequest, res: Response) => {
     const status = req.query.status as string;
     const category = req.query.category as string;
 
+    // Input validation
+    if (page < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Page must be greater than or equal to 1',
+      });
+    }
+
+    if (limit < 1 || limit > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Limit must be between 1 and 100',
+      });
+    }
+
+    // Validate status filter if provided
+    if (status && !['pending', 'reviewed', 'resolved'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status must be one of: pending, reviewed, resolved',
+      });
+    }
+
+    // Validate category filter if provided
+    if (category && !['bug', 'feature_request', 'improvement', 'other'].includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Category must be one of: bug, feature_request, improvement, other',
+      });
+    }
+
     const result = await feedbackService.getAllFeedback({
       page,
       limit,
@@ -36,6 +67,21 @@ export const updateFeedbackStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+
+    // Input validation
+    if (!status || typeof status !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Status is required and must be a string',
+      });
+    }
+
+    if (!['pending', 'reviewed', 'resolved'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status must be one of: pending, reviewed, resolved',
+      });
+    }
 
     const sanitizedData = sanitizeEmptyStrings({ status });
     const feedback = await feedbackService.updateFeedbackStatus(id, sanitizedData.status);

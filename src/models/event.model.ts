@@ -41,29 +41,119 @@ export interface IEvent extends Document {
 // Event Schema
 const EventSchema = new Schema<IEvent>(
   {
-    eventName: { type: String, required: true },
-    description: { type: String },
-    type: { type: String, enum: ["Offline", "Online", "Hybrid"], required: true },
-    startDate: { type: Date, required: true },
-    endDate: { type: Date, required: true },
+    eventName: { 
+      type: String, 
+      required: true,
+      minlength: 3,
+      maxlength: 200,
+      trim: true
+    },
+    description: { 
+      type: String,
+      maxlength: 2000,
+      trim: true
+    },
+    type: { 
+      type: String, 
+      enum: ["Offline", "Online", "Hybrid"], 
+      required: true 
+    },
+    startDate: { 
+      type: Date, 
+      required: true,
+      validate: {
+        validator: function (v: Date) {
+          return v instanceof Date && v >= new Date();
+        },
+        message: 'startDate must be today or in the future'
+      }
+    },
+    endDate: { 
+      type: Date, 
+      required: true,
+      validate: {
+        validator: function (this: any, v: Date) {
+          return v instanceof Date && v >= this.startDate;
+        },
+        message: 'endDate must be greater than or equal to startDate'
+      }
+    },
     location: {
-      venue: { type: String },
-      address: { type: String },
-      city: { type: String },
+      venue: { 
+        type: String,
+        maxlength: 150,
+        trim: true
+      },
+      address: { 
+        type: String,
+        maxlength: 300,
+        trim: true
+      },
+      city: { 
+        type: String,
+        maxlength: 100,
+        trim: true
+      },
     },
     licenseKeys: [
       new Schema(
         {
-          key: { type: String, required: true },
-          stallName: { type: String },
-          email: { type: String, required: true },
+          key: { 
+            type: String, 
+            required: true,
+            minlength: 5,
+            maxlength: 100,
+            uppercase: true,
+            trim: true
+          },
+          stallName: { 
+            type: String,
+            maxlength: 150,
+            trim: true
+          },
+          email: { 
+            type: String, 
+            required: true,
+            maxlength: 255,
+            lowercase: true,
+            trim: true,
+            validate: {
+              validator: function (v: string) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return emailRegex.test(v);
+              },
+              message: 'Invalid email format in license key'
+            }
+          },
           teamManagerId: { type: Schema.Types.ObjectId, ref: "Users" },
-          expiresAt: { type: Date, required: true },
+          expiresAt: { 
+            type: Date, 
+            required: true,
+            validate: {
+              validator: function (v: Date) {
+                return v instanceof Date && v >= new Date();
+              },
+              message: 'License key expiresAt must be today or in the future'
+            }
+          },
           isActive: { type: Boolean, default: true },
-          maxActivations: { type: Number, default: 1 },
-          usedCount: { type: Number, default: 0 },
+          maxActivations: { 
+            type: Number, 
+            default: 1,
+            min: 1,
+            max: 10000
+          },
+          usedCount: { 
+            type: Number, 
+            default: 0,
+            min: 0
+          },
           usedBy: [{ type: Schema.Types.ObjectId, ref: "Users" }],
-          paymentStatus: { type: String, enum: ["pending", "completed"], default: "pending" },
+          paymentStatus: { 
+            type: String, 
+            enum: ["pending", "completed"], 
+            default: "pending" 
+          },
         },
         { timestamps: true }
       ),
