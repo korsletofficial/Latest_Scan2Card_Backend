@@ -118,6 +118,74 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // VALIDATE DETAILS FIELDS
+    if (details) {
+      // Validate email format, count, and length
+      if (details.emails && Array.isArray(details.emails)) {
+        if (details.emails.length > 10) {
+          return res.status(400).json({ 
+            success: false, 
+            message: 'Maximum 10 email addresses allowed' 
+          });
+        }
+        
+        // Check individual email length
+        const tooLongEmails = details.emails.filter((email: string) => String(email).length > 255);
+        if (tooLongEmails.length > 0) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Email address(es) too long. Maximum 255 characters per email` 
+          });
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const invalidEmails = details.emails.filter((email: string) => !emailRegex.test(String(email)));
+        if (invalidEmails.length > 0) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Invalid email format: ${invalidEmails.slice(0, 3).join(', ')}${invalidEmails.length > 3 ? '...' : ''}` 
+          });
+        }
+      }
+
+      // Validate phone format, count, and length
+      if (details.phoneNumbers && Array.isArray(details.phoneNumbers)) {
+        if (details.phoneNumbers.length > 10) {
+          return res.status(400).json({ 
+            success: false, 
+            message: 'Maximum 10 phone numbers allowed' 
+          });
+        }
+        
+        // Check individual phone length
+        const tooLongPhones = details.phoneNumbers.filter((phone: string) => String(phone).length > 20);
+        if (tooLongPhones.length > 0) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Phone number(s) too long. Maximum 20 characters per phone number` 
+          });
+        }
+        
+        const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+        const invalidPhones = details.phoneNumbers.filter((phone: string) => !phoneRegex.test(String(phone)));
+        if (invalidPhones.length > 0) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Invalid phone format: ${invalidPhones.slice(0, 3).join(', ')}${invalidPhones.length > 3 ? '...' : ''}` 
+          });
+        }
+      }
+
+      // Validate total payload size of details object
+      const detailsJson = JSON.stringify(details);
+      if (detailsJson.length > 10000) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Details object is too large. Maximum 10KB allowed.' 
+        });
+      }
+    }
+
     // Validation based on lead type
     // Handle up to 3 image uploads (card/QR + additional)
     let imageUrls: string[] = [];

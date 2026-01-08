@@ -271,14 +271,26 @@ export const getDashboardStats = async (teamManagerId: string) => {
     isDeleted: false,
   });
 
-  // Count team members (all unique users who created leads in managed events)
-  const leadsInManagedEvents = await LeadsModel.find({
-    eventId: { $in: managedEventIds },
-    isDeleted: false,
-  }).select("userId");
+  // Count team members (all unique users who joined events using license keys assigned to this team manager)
+  const teamMembersResult = await RsvpModel.aggregate([
+    {
+      $match: {
+        eventId: { $in: managedEventIds },
+        eventLicenseKey: { $nin: [null, ""] },
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: "$userId",
+      },
+    },
+    {
+      $count: "uniqueUsers",
+    },
+  ]);
 
-  const uniqueUserIds = new Set(leadsInManagedEvents.map((lead) => lead.userId.toString()));
-  const totalMembers = uniqueUserIds.size;
+  const totalMembers = teamMembersResult.length > 0 ? teamMembersResult[0].uniqueUsers : 0;
 
   // Total license keys assigned
   const totalLicenseKeys = licenseKeys.length;
@@ -462,14 +474,15 @@ export const getTeamMembers = async (
     };
   }
 
-  // Get all leads in managed events
-  const leadsInManagedEvents = await LeadsModel.find({
+  // Get all RSVPs in managed events with license keys
+  const rsvpsInManagedEvents = await RsvpModel.find({
     eventId: { $in: managedEventIds },
+    eventLicenseKey: { $nin: [null, ""] },
     isDeleted: false,
   }).select("userId");
 
-  // Get unique userIds who created leads in managed events
-  const uniqueUserIds = [...new Set(leadsInManagedEvents.map((lead) => lead.userId.toString()))];
+  // Get unique userIds who RSVPed with keys in managed events
+  const uniqueUserIds = [...new Set(rsvpsInManagedEvents.map((rsvp) => rsvp.userId.toString()))];
 
   // Build search query
   const searchQuery: any = {
