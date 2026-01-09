@@ -17,6 +17,9 @@ export interface IRsvp extends Document {
   status: number;
   isActive: boolean;
   isDeleted: boolean;
+  isRevoked: boolean; // Access revoked by team manager
+  revokedBy?: Types.ObjectId; // Team manager who revoked access
+  revokedAt?: Date; // When access was revoked
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,45 +27,53 @@ export interface IRsvp extends Document {
 // Define Schema
 const RsvpSchema = new Schema<IRsvp>(
   {
-    eventId: { 
-      type: Schema.Types.ObjectId, 
-      required: true, 
-      ref: "Events" 
+    eventId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+      ref: "Events"
     },
-    userId: { 
-      type: Schema.Types.ObjectId, 
-      required: true, 
-      ref: "Users" 
+    userId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+      ref: "Users"
     },
-    eventLicenseKey: { 
+    eventLicenseKey: {
       type: String,
       maxlength: 100,
       trim: true,
       uppercase: true
     },
-    expiresAt: { 
+    expiresAt: {
       type: Date,
       validate: {
-        validator: function (v: Date | undefined) {
+        validator: function (this: any, v: Date | undefined) {
           if (!v) return true; // Allow null/undefined
+          // Only validate if the field is being modified
+          if (!this.isModified('expiresAt')) return true;
           return v instanceof Date && v >= new Date();
         },
         message: 'expiresAt must be today or in the future'
       }
     },
-    addedBy: { 
-      type: Schema.Types.ObjectId, 
-      ref: "Users" 
+    addedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "Users"
     },
-    status: { 
-      type: Number, 
-      required: true, 
+    status: {
+      type: Number,
+      required: true,
       default: 1,
       min: 0,
       max: 10
     },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
+    isRevoked: { type: Boolean, default: false },
+    revokedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "Users"
+    },
+    revokedAt: { type: Date },
   },
   {
     timestamps: true,
@@ -86,12 +97,13 @@ RsvpSchema.index({ eventId: 1, userId: 1 });
 RsvpSchema.index({ eventLicenseKey: 1 });
 RsvpSchema.index({ userId: 1, isDeleted: 1 });
 RsvpSchema.index({ eventId: 1, isDeleted: 1 });
+RsvpSchema.index({ userId: 1, isRevoked: 1 }); // For filtering revoked access
 
 // Add Pagination Plugin
 RsvpSchema.plugin(mongoosePaginate);
 
 // Define IRsvpModel with Pagination Support
-export interface IRsvpModel extends PaginateModel<IRsvp> {}
+export interface IRsvpModel extends PaginateModel<IRsvp> { }
 
 // Create Model with Pagination Type
 const RsvpModel = model<IRsvp, IRsvpModel>("Rsvp", RsvpSchema);

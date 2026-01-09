@@ -671,3 +671,138 @@ export const getAllLicenseKeys = async (
     },
   };
 };
+
+// Revoke event access for a team member
+export const revokeEventAccess = async (
+  teamManagerId: string,
+  memberId: string,
+  eventId: string
+) => {
+  // Verify team manager has access to this event
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event not found or you don't have access to manage this event");
+  }
+
+  // Find the RSVP for this member and event
+  const rsvp = await RsvpModel.findOne({
+    userId: new mongoose.Types.ObjectId(memberId),
+    eventId: new mongoose.Types.ObjectId(eventId),
+    isDeleted: false,
+  });
+
+  if (!rsvp) {
+    throw new Error("RSVP not found for this member and event");
+  }
+
+  // Check if already revoked
+  if (rsvp.isRevoked) {
+    throw new Error("Access is already revoked for this member");
+  }
+
+  // Update RSVP to revoke access
+  rsvp.isRevoked = true;
+  rsvp.revokedBy = new mongoose.Types.ObjectId(teamManagerId);
+  rsvp.revokedAt = new Date();
+  await rsvp.save();
+
+  return rsvp;
+};
+
+// Restore event access for a team member
+export const restoreEventAccess = async (
+  teamManagerId: string,
+  memberId: string,
+  eventId: string
+) => {
+  // Verify team manager has access to this event
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event not found or you don't have access to manage this event");
+  }
+
+  // Find the RSVP for this member and event
+  const rsvp = await RsvpModel.findOne({
+    userId: new mongoose.Types.ObjectId(memberId),
+    eventId: new mongoose.Types.ObjectId(eventId),
+    isDeleted: false,
+  });
+
+  if (!rsvp) {
+    throw new Error("RSVP not found for this member and event");
+  }
+
+  // Check if not revoked
+  if (!rsvp.isRevoked) {
+    throw new Error("Access is not revoked for this member");
+  }
+
+  // Update RSVP to restore access
+  rsvp.isRevoked = false;
+  rsvp.revokedBy = undefined;
+  rsvp.revokedAt = undefined;
+  await rsvp.save();
+
+  return rsvp;
+};
+
+// Get team member's events with revocation status
+export const getTeamMemberEvents = async (
+  teamManagerId: string,
+  memberId: string
+) => {
+  // Get all events managed by this team manager
+  const managedEvents = await EventModel.find({
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  }).select("_id");
+
+  const managedEventIds = managedEvents.map((e) => e._id);
+
+  if (managedEventIds.length === 0) {
+    return [];
+  }
+
+  // Get RSVPs for this member in managed events
+  const rsvps = await RsvpModel.find({
+    userId: new mongoose.Types.ObjectId(memberId),
+    eventId: { $in: managedEventIds },
+    isDeleted: false,
+  })
+    .populate("eventId", "eventName description startDate endDate isActive")
+    .populate("revokedBy", "firstName lastName email")
+    .lean();
+
+  // Format the response
+  const memberEvents = rsvps.map((rsvp: any) => ({
+    _id: rsvp.eventId._id,
+    eventName: rsvp.eventId.eventName,
+    description: rsvp.eventId.description,
+    startDate: rsvp.eventId.startDate,
+    endDate: rsvp.eventId.endDate,
+    isActive: rsvp.eventId.isActive,
+    isRevoked: rsvp.isRevoked,
+    revokedAt: rsvp.revokedAt,
+    revokedBy: rsvp.revokedBy
+      ? {
+        _id: rsvp.revokedBy._id,
+        firstName: rsvp.revokedBy.firstName,
+        lastName: rsvp.revokedBy.lastName,
+        email: rsvp.revokedBy.email,
+      }
+      : null,
+    licenseKey: rsvp.eventLicenseKey,
+  }));
+
+  return memberEvents;
+};

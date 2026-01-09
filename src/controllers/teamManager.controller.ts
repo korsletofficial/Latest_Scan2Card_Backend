@@ -260,3 +260,155 @@ export const getAllLicenseKeys = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+// Revoke event access for a team member
+export const revokeEventAccess = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { memberId } = req.params;
+    const { eventId } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required",
+      });
+    }
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    const rsvp = await teamManagerService.revokeEventAccess(
+      teamManagerId!,
+      memberId,
+      eventId
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Event access revoked successfully",
+      data: rsvp,
+    });
+  } catch (error: any) {
+    console.error("❌ Revoke event access error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("already revoked")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to revoke event access",
+    });
+  }
+};
+
+// Restore event access for a team member
+export const restoreEventAccess = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { memberId } = req.params;
+    const { eventId } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required",
+      });
+    }
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    const rsvp = await teamManagerService.restoreEventAccess(
+      teamManagerId!,
+      memberId,
+      eventId
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Event access restored successfully",
+      data: rsvp,
+    });
+  } catch (error: any) {
+    console.error("❌ Restore event access error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("not revoked")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to restore event access",
+    });
+  }
+};
+
+// Get team member's events with revocation status
+export const getTeamMemberEvents = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { memberId } = req.params;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required",
+      });
+    }
+
+    const events = await teamManagerService.getTeamMemberEvents(
+      teamManagerId!,
+      memberId
+    );
+
+    res.status(200).json({
+      success: true,
+      data: events,
+    });
+  } catch (error: any) {
+    console.error("❌ Get team member events error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get team member events",
+    });
+  }
+};
+

@@ -56,7 +56,7 @@ export const createLead = async (data: CreateLeadData) => {
   }
 
 
-  
+
   // Validate images array if provided
   if (data.images && data.images.length > 3) {
     throw new Error("Maximum 3 images allowed per lead");
@@ -266,6 +266,20 @@ export const getLeads = async (filter: GetLeadsFilter) => {
   } else {
     // For end users, only show their own leads
     query.userId = userId;
+
+    // Exclude leads from events where access has been revoked
+    const revokedRsvps = await RsvpModel.find({
+      userId: userId,
+      isRevoked: true,
+      isDeleted: false,
+    }).select("eventId");
+
+    const revokedEventIds = revokedRsvps.map((rsvp) => rsvp.eventId);
+
+    // If there are revoked events, exclude leads from those events
+    if (revokedEventIds.length > 0) {
+      query.eventId = { $nin: revokedEventIds };
+    }
   }
 
   if (eventId) {
