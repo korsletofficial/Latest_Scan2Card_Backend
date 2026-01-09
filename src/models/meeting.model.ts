@@ -23,13 +23,45 @@ const MeetingSchema = new Schema<IMeeting>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
     leadId: { type: Schema.Types.ObjectId, ref: "Leads", required: true },
-    title: { type: String, required: true },
-    description: { type: String },
+    title: { 
+      type: String, 
+      required: true,
+      minlength: [3, 'Meeting title must be at least 3 characters'],
+      maxlength: [200, 'Meeting title must not exceed 200 characters'],
+      trim: true
+    },
+    description: { 
+      type: String,
+      maxlength: [2000, 'Meeting description must not exceed 2000 characters'],
+      trim: true
+    },
     meetingMode: { type: String, enum: ["online", "offline", "phone"], required: true },
     meetingStatus: { type: String, enum: ["scheduled", "completed", "cancelled", "rescheduled"], default: "scheduled" },
-    startAt: { type: Date, required: true },
-    endAt: { type: Date, required: true },
-    location: { type: String },
+    startAt: { 
+      type: Date, 
+      required: true,
+      validate: {
+        validator: function (v: Date) {
+          return v instanceof Date && v >= new Date();
+        },
+        message: 'startAt must be today or in the future'
+      }
+    },
+    endAt: { 
+      type: Date, 
+      required: true,
+      validate: {
+        validator: function (this: IMeeting, v: Date) {
+          return v instanceof Date && v > this.startAt;
+        },
+        message: 'endAt must be after startAt'
+      }
+    },
+    location: { 
+      type: String,
+      maxlength: [300, 'Location must not exceed 300 characters'],
+      trim: true
+    },
     notifyAttendees: { type: Boolean, default: false },
     reminderSent: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },

@@ -19,6 +19,39 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     const { firstName, lastName, phoneNumber } = req.body;
     const userId = req.user.userId;
 
+    // Validate firstName length (1-100) if provided
+    if (firstName && (String(firstName).length < 1 || String(firstName).length > 100)) {
+      return res.status(400).json({
+        success: false,
+        message: "firstName must be between 1 and 100 characters",
+      });
+    }
+
+    // Validate lastName length (1-100) if provided
+    if (lastName && (String(lastName).length < 1 || String(lastName).length > 100)) {
+      return res.status(400).json({
+        success: false,
+        message: "lastName must be between 1 and 100 characters",
+      });
+    }
+
+    // Validate phoneNumber length and format if provided
+    if (phoneNumber) {
+      if (String(phoneNumber).length > 20) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number must not exceed 20 characters",
+        });
+      }
+      const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+      if (!phoneRegex.test(String(phoneNumber))) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid phone format (use digits, spaces, dashes, plus, or parentheses)",
+        });
+      }
+    }
+
     let profileImageUrl = req.body.profileImage;
 
     // If a file is uploaded, upload to S3 first
@@ -46,6 +79,24 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
       profileImageUrl = result.publicUrl || result.url;
       console.log(`✅ Profile image uploaded: ${result.key}`);
+    }
+
+    // Validate profileImageUrl if provided as string
+    if (profileImageUrl && typeof profileImageUrl === 'string') {
+      if (profileImageUrl.length > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Profile image URL must not exceed 1000 characters',
+        });
+      }
+      try {
+        new URL(profileImageUrl);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid URL format for profile image',
+        });
+      }
     }
 
     const sanitizedData = sanitizeEmptyStrings({
@@ -117,8 +168,50 @@ export const submitFeedback = async (req: AuthRequest, res: Response) => {
     const { message, rating, category } = req.body;
     const userId = req.user.userId;
 
+    // Input validation
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Feedback message is required and must be a string',
+      });
+    }
+
+    const trimmedMessage = message.trim();
+    if (trimmedMessage.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Feedback message must be at least 10 characters',
+      });
+    }
+
+    if (trimmedMessage.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Feedback message must not exceed 2000 characters',
+      });
+    }
+
+    // Validate rating if provided
+    if (rating !== undefined && rating !== null) {
+      const ratingNum = Number(rating);
+      if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+        return res.status(400).json({
+          success: false,
+          message: 'Rating must be a number between 1 and 5',
+        });
+      }
+    }
+
+    // Validate category if provided
+    if (category && !['bug', 'feature_request', 'improvement', 'other'].includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Category must be one of: bug, feature_request, improvement, other',
+      });
+    }
+
     const sanitizedData = sanitizeEmptyStrings({
-      message,
+      message: trimmedMessage,
       rating,
       category,
     });
@@ -152,6 +245,21 @@ export const getMyFeedback = async (req: AuthRequest, res: Response) => {
     const userId = req.user.userId;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
+
+    // Input validation
+    if (page < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Page must be greater than or equal to 1',
+      });
+    }
+
+    if (limit < 1 || limit > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Limit must be between 1 and 100',
+      });
+    }
 
     const result = await feedbackService.getUserFeedback(userId, page, limit);
 

@@ -10,6 +10,9 @@ import {
   getMemberLeads,
   getAllLeadsForManager,
   getAllLicenseKeys,
+  revokeEventAccess,
+  restoreEventAccess,
+  getTeamMemberEvents,
 } from "../controllers/teamManager.controller";
 import {
   adminDashboardLimiter,
@@ -27,6 +30,9 @@ router.get("/leads/graph", authenticateToken, authorizeRoles("TEAMMANAGER"), adm
 router.get("/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLeadsForManager);
 router.get("/team/members", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getTeamMembers);
 router.get("/team/member/:memberId/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMemberLeads);
+router.get("/team/member/:memberId/events", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter,  getTeamMemberEvents);
+router.patch("/team/member/:memberId/revoke-access", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter,  revokeEventAccess);
+router.patch("/team/member/:memberId/restore-access", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter,  restoreEventAccess);
 router.get("/events", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMyEvents);
 router.get("/meetings/team", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getTeamMeetings);
 router.get("/license-keys", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLicenseKeys);

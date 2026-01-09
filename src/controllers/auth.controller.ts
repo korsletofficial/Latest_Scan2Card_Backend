@@ -8,11 +8,27 @@ export const register = async (req: Request, res: Response) => {
   try {
     const { firstName, lastName, email, phoneNumber, password, roleName, companyName, exhibitorId } = req.body;
 
-    // Validation
+    // Validation - Required fields
     if (!firstName || !lastName || !password || !roleName) {
       return res.status(400).json({
         success: false,
         message: "firstName, lastName, password, and roleName are required",
+      });
+    }
+
+    // Validate firstName length (1-100)
+    if (String(firstName).length < 1 || String(firstName).length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "firstName must be between 1 and 100 characters",
+      });
+    }
+
+    // Validate lastName length (1-100)
+    if (String(lastName).length < 1 || String(lastName).length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "lastName must be between 1 and 100 characters",
       });
     }
 
@@ -26,8 +42,14 @@ export const register = async (req: Request, res: Response) => {
 
     // Email validation (only if provided)
     if (email) {
+      if (String(email).length > 255) {
+        return res.status(400).json({
+          success: false,
+          message: "Email must not exceed 255 characters",
+        });
+      }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      if (!emailRegex.test(String(email))) {
         return res.status(400).json({
           success: false,
           message: "Invalid email format",
@@ -35,11 +57,43 @@ export const register = async (req: Request, res: Response) => {
       }
     }
 
-    // Password validation (minimum 6 characters)
-    if (password.length < 6) {
+    // Phone validation (only if provided)
+    if (phoneNumber) {
+      if (String(phoneNumber).length > 20) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number must not exceed 20 characters",
+        });
+      }
+      const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+      if (!phoneRegex.test(String(phoneNumber))) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid phone format (use digits, spaces, dashes, plus, or parentheses)",
+        });
+      }
+    }
+
+    // Password validation (minimum 8 characters, max 255)
+    if (String(password).length < 8) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 6 characters long",
+        message: "Password must be at least 8 characters long",
+      });
+    }
+
+    if (String(password).length > 255) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must not exceed 255 characters",
+      });
+    }
+
+    // Company name validation (max 200)
+    if (companyName && String(companyName).length > 200) {
+      return res.status(400).json({
+        success: false,
+        message: "Company name must not exceed 200 characters",
       });
     }
 

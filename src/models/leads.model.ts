@@ -55,20 +55,54 @@ const LeadSchema = new Schema<ILead>(
         message: 'Maximum 3 images allowed per lead'
       }
     },
-    entryCode: { type: String }, // Entry code from organizational QR cards
-    ocrText: { type: String },
+    entryCode: { type: String, maxlength: 255 },
+    ocrText: { type: String, maxlength: 5000 },
     details: {
-      firstName: { type: String },
-      lastName: { type: String },
-      company: { type: String },
-      position: { type: String },
-      emails: { type: [String], default: [] },
-      phoneNumbers: { type: [String], default: [] },
-      website: { type: String },
-      address: { type: String },
-      city: { type: String },
-      country: { type: String },
-      notes: { type: String },
+      firstName: { type: String, maxlength: 100 },
+      lastName: { type: String, maxlength: 100 },
+      company: { type: String, maxlength: 150 },
+      position: { type: String, maxlength: 100 },
+      emails: { 
+        type: [String], 
+        default: [],
+        validate: [
+          {
+            validator: function (v: string[]) {
+              return v.length <= 10;
+            },
+            message: 'Maximum 10 email addresses allowed'
+          },
+          {
+            validator: function (v: string[]) {
+              return v.every((email: string) => email.length <= 255);
+            },
+            message: 'Each email must be maximum 255 characters'
+          }
+        ]
+      },
+      phoneNumbers: { 
+        type: [String], 
+        default: [],
+        validate: [
+          {
+            validator: function (v: string[]) {
+              return v.length <= 10;
+            },
+            message: 'Maximum 10 phone numbers allowed'
+          },
+          {
+            validator: function (v: string[]) {
+              return v.every((phone: string) => phone.length <= 20);
+            },
+            message: 'Each phone number must be maximum 20 characters'
+          }
+        ]
+      },
+      website: { type: String, maxlength: 500 },
+      address: { type: String, maxlength: 200 },
+      city: { type: String, maxlength: 100 },
+      country: { type: String, maxlength: 100 },
+      notes: { type: String, maxlength: 2000 },
     },
     rating: { type: Number, min: 1, max: 5 },
     isActive: { type: Boolean, default: true },

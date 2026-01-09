@@ -531,11 +531,26 @@ export const getExhibitorDashboardStats = async (exhibitorId: string) => {
     isDeleted: false,
   });
 
-  // Get team members count
-  const teamMembers = await TeamModel.countDocuments({
-    teamManagerId: exhibitorId,
-    isDeleted: false,
-  });
+  // Get team members count - unique users who joined events using license keys
+  const teamMembersResult = await RsvpModel.aggregate([
+    {
+      $match: {
+        eventId: { $in: eventIds },
+        eventLicenseKey: { $nin: [null, ""] },
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: "$userId",
+      },
+    },
+    {
+      $count: "uniqueUsers",
+    },
+  ]);
+
+  const teamMembers = teamMembersResult.length > 0 ? teamMembersResult[0].uniqueUsers : 0;
 
   return {
     totalEvents,

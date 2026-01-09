@@ -26,9 +26,70 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Validate title
+    if (typeof title !== 'string' || title.trim().length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting title must be at least 3 characters",
+      });
+    }
+
+    if (title.length > 200) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting title must not exceed 200 characters",
+      });
+    }
+
+    // Validate description if provided
+    if (description && typeof description === 'string' && description.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting description must not exceed 2000 characters",
+      });
+    }
+
+    // Validate meetingMode
+    const validModes = ['online', 'offline', 'phone'];
+    if (!validModes.includes(meetingMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting mode must be one of: online, offline, phone",
+      });
+    }
+
+    // Validate location if mode is offline
+    if (meetingMode === 'offline' && !location) {
+      return res.status(400).json({
+        success: false,
+        message: "Location is required for offline meetings",
+      });
+    }
+
+    if (location && typeof location === 'string' && location.length > 300) {
+      return res.status(400).json({
+        success: false,
+        message: "Location must not exceed 300 characters",
+      });
+    }
+
     // Validate that startAt is before endAt
     const startDate = new Date(startAt);
     const endDate = new Date(endAt);
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "startAt and endAt must be valid dates",
+      });
+    }
+
+    if (startDate < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "startAt must be today or in the future",
+      });
+    }
 
     if (startDate >= endDate) {
       return res.status(400).json({
@@ -40,12 +101,12 @@ export const createMeeting = async (req: AuthRequest, res: Response) => {
     const sanitizedData = sanitizeEmptyStrings({
       userId: userId!,
       leadId,
-      title,
+      title: title.trim(),
       description,
       meetingMode,
       startAt: startDate,
       endAt: endDate,
-      location,
+      location: location?.trim(),
       notifyAttendees,
     });
 
@@ -79,13 +140,63 @@ export const getMeetings = async (req: AuthRequest, res: Response) => {
       sortOrder,
     } = req.query;
 
+    // Input validation
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+
+    if (pageNum < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Page must be greater than or equal to 1",
+      });
+    }
+
+    if (limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Limit must be between 1 and 100",
+      });
+    }
+
+    // Validate sortBy if provided
+    if (sortBy && !['startAt', 'createdAt'].includes(sortBy as string)) {
+      return res.status(400).json({
+        success: false,
+        message: "sortBy must be one of: startAt, createdAt",
+      });
+    }
+
+    // Validate sortOrder if provided
+    if (sortOrder && !['asc', 'desc'].includes(sortOrder as string)) {
+      return res.status(400).json({
+        success: false,
+        message: "sortOrder must be one of: asc, desc",
+      });
+    }
+
+    // Validate meetingMode if provided
+    if (meetingMode && !['online', 'offline', 'phone'].includes(meetingMode as string)) {
+      return res.status(400).json({
+        success: false,
+        message: "meetingMode must be one of: online, offline, phone",
+      });
+    }
+
+    // Validate meetingStatus if provided
+    if (meetingStatus && !['scheduled', 'completed', 'cancelled', 'rescheduled'].includes(meetingStatus as string)) {
+      return res.status(400).json({
+        success: false,
+        message: "meetingStatus must be one of: scheduled, completed, cancelled, rescheduled",
+      });
+    }
+
     const result = await meetingService.getMeetings({
       userId: userId!,
       leadId: leadId as string,
       meetingStatus: meetingStatus as string,
       meetingMode: meetingMode as string,
-      page: Number(page),
-      limit: Number(limit),
+      page: pageNum,
+      limit: limitNum,
       sortBy: sortBy as "startAt" | "createdAt" | undefined,
       sortOrder: sortOrder as "asc" | "desc" | undefined,
     });
@@ -142,10 +253,64 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
       isActive,
     } = req.body;
 
+    // Validate title if provided
+    if (title && (typeof title !== 'string' || title.trim().length < 3)) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting title must be at least 3 characters",
+      });
+    }
+
+    if (title && title.length > 200) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting title must not exceed 200 characters",
+      });
+    }
+
+    // Validate description if provided
+    if (description && typeof description === 'string' && description.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting description must not exceed 2000 characters",
+      });
+    }
+
+    // Validate meetingMode if provided
+    if (meetingMode && !['online', 'offline', 'phone'].includes(meetingMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting mode must be one of: online, offline, phone",
+      });
+    }
+
+    // Validate meetingStatus if provided
+    if (meetingStatus && !['scheduled', 'completed', 'cancelled', 'rescheduled'].includes(meetingStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting status must be one of: scheduled, completed, cancelled, rescheduled",
+      });
+    }
+
+    // Validate location if provided
+    if (location && typeof location === 'string' && location.length > 300) {
+      return res.status(400).json({
+        success: false,
+        message: "Location must not exceed 300 characters",
+      });
+    }
+
     // Validate that startAt is before endAt if both are provided
     if (startAt && endAt) {
       const startDate = new Date(startAt);
       const endDate = new Date(endAt);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "startAt and endAt must be valid dates",
+        });
+      }
 
       if (startDate >= endDate) {
         return res.status(400).json({
@@ -156,13 +321,13 @@ export const updateMeeting = async (req: AuthRequest, res: Response) => {
     }
 
     const sanitizedData = sanitizeEmptyStrings({
-      title,
+      title: title?.trim(),
       description,
       meetingMode,
       meetingStatus,
       startAt: startAt ? new Date(startAt) : undefined,
       endAt: endAt ? new Date(endAt) : undefined,
-      location,
+      location: location?.trim(),
       notifyAttendees,
       isActive,
     });

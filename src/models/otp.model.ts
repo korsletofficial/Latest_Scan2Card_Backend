@@ -13,12 +13,41 @@ export interface IOTP extends Document {
 const OTPSchema = new Schema<IOTP>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "Users", required: true },
-    otp: { type: String, required: true },
+    otp: { 
+      type: String, 
+      required: true,
+      minlength: [4, 'OTP must be at least 4 characters'],
+      maxlength: [6, 'OTP must not exceed 6 characters'],
+      trim: true
+    },
     purpose: { type: String, enum: ["login", "enable_2fa", "disable_2fa", "verification", "forgot_password"], required: true },
-    expiresAt: { type: Date, required: true },
+    expiresAt: { 
+      type: Date, 
+      required: true,
+      validate: {
+        validator: function (v: Date) {
+          return v instanceof Date && v > new Date();
+        },
+        message: 'expiresAt must be in the future'
+      }
+    },
     isUsed: { type: Boolean, default: false },
-    verificationToken: { type: String, required: false }, // Optional JWT for password reset
-    verificationTokenExpiry: { type: Date, required: false }, // Optional token expiry
+    verificationToken: { 
+      type: String, 
+      required: false,
+      maxlength: [1000, 'Verification token must not exceed 1000 characters']
+    },
+    verificationTokenExpiry: { 
+      type: Date, 
+      required: false,
+      validate: {
+        validator: function (v: Date | undefined) {
+          if (!v) return true; // Allow null/undefined
+          return v instanceof Date && v > new Date();
+        },
+        message: 'verificationTokenExpiry must be in the future'
+      }
+    },
   },
   {
     timestamps: true,
