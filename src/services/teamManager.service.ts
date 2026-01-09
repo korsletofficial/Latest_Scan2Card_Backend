@@ -673,11 +673,12 @@ export const getAllLicenseKeys = async (
 };
 
 // Revoke event access for a team member
-export const revokeEventAccess = async (
+export const revokeEventAccess = async ( 
   teamManagerId: string,
   memberId: string,
   eventId: string
 ) => {
+  
   // Verify team manager has access to this event
   const event = await EventModel.findOne({
     _id: eventId,
