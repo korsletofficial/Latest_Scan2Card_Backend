@@ -213,10 +213,16 @@ export const loginUser = async (data: LoginData) => {
   const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace('d', '') || '7');
   refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + expiryDays);
 
-  // Store refresh token in database
-  user.refreshToken = refreshToken;
-  user.refreshTokenExpiry = refreshTokenExpiry;
-  await user.save();
+  // Store refresh token in database using updateOne to avoid full document validation
+  await UserModel.updateOne(
+    { _id: user._id },
+    { 
+      $set: { 
+        refreshToken: refreshToken,
+        refreshTokenExpiry: refreshTokenExpiry 
+      }
+    }
+  );
 
   return {
     token, // Access token (backward compatible key name)
@@ -317,8 +323,8 @@ export const sendVerificationOTP = async (userId: string, phoneNumber?: string) 
 
   // Update phone number if provided
   if (phoneNumber && phoneNumber !== user.phoneNumber) {
-    user.phoneNumber = phoneNumber;
-    await user.save();
+    await UserModel.updateOne({ _id: user._id }, { $set: { phoneNumber } });
+    user.phoneNumber = phoneNumber; // Update local reference for return value
   }
 
   // Determine source (prefer phone if available, otherwise email)
@@ -401,8 +407,7 @@ export const resetPasswordWithOTP = async (
 
   // Hash new password
   const hashedPassword = await bcrypt.hash(newPassword, 10);
-  user.password = hashedPassword;
-  await user.save();
+  await UserModel.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
 
   return {
     email: user.email,
@@ -613,10 +618,16 @@ export const verifyOTPUnified = async (
       const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace('d', '') || '7');
       refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + expiryDays);
 
-      // Store refresh token in database
-      user.refreshToken = refreshToken;
-      user.refreshTokenExpiry = refreshTokenExpiry;
-      await user.save();
+      // Store refresh token in database using updateOne to avoid full document validation
+      await UserModel.updateOne(
+        { _id: user._id },
+        { 
+          $set: { 
+            refreshToken: refreshToken,
+            refreshTokenExpiry: refreshTokenExpiry 
+          }
+        }
+      );
 
       return {
         token,
@@ -706,8 +717,7 @@ export const resetPasswordWithVerificationToken = async (
 
   // Hash new password
   const hashedPassword = await bcrypt.hash(newPassword, 10);
-  user.password = hashedPassword;
-  await user.save();
+  await UserModel.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
 
   // Mark the verification token as fully consumed (expire it)
   otpRecord.verificationTokenExpiry = new Date(Date.now() - 1000); // Set to past
@@ -728,14 +738,14 @@ export const logoutUser = async (userId: string) => {
     throw new Error("User not found");
   }
 
-  // Clear refresh token and expiry
-  user.refreshToken = undefined;
-  user.refreshTokenExpiry = undefined;
-
-  // Clear all FCM tokens (remove push notification devices)
-  user.fcmTokens = [];
-
-  await user.save();
+  // Clear refresh token, expiry, and all FCM tokens using updateOne to avoid validation issues
+  await UserModel.updateOne(
+    { _id: user._id },
+    { 
+      $unset: { refreshToken: 1, refreshTokenExpiry: 1 },
+      $set: { fcmTokens: [] }
+    }
+  );
 
   console.log(`✅ User ${userId} logged out - cleared refresh token and FCM tokens`);
 
