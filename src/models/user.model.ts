@@ -24,6 +24,11 @@ export interface IUser extends Document {
   fcmTokens?: string[]; // Firebase Cloud Messaging tokens for push notifications
   refreshToken?: string; // Refresh token for session renewal
   refreshTokenExpiry?: Date; // Expiry date for refresh token
+  // License key restrictions (for EXHIBITOR role only)
+  maxLicenseKeys?: number; // Maximum number of license keys allowed
+  maxTotalActivations?: number; // Maximum total activations across all keys
+  currentLicenseKeyCount?: number; // Current number of license keys created
+  currentTotalActivations?: number; // Current total activations allocated
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -130,12 +135,33 @@ const UserSchema = new Schema<IUser>(
         message: 'Maximum 10 FCM tokens allowed, each max 500 characters'
       }
     },
-    refreshToken: { 
-      type: String, 
+    refreshToken: {
+      type: String,
       select: false,
       maxlength: 1000
     },
     refreshTokenExpiry: { type: Date, select: false },
+    // License key restrictions (for EXHIBITOR role only)
+    maxLicenseKeys: {
+      type: Number,
+      min: 0,
+      default: 20 // Default: 20 license keys allowed
+    },
+    maxTotalActivations: {
+      type: Number,
+      min: 0,
+      default: 100 // Default: 100 total activations allowed
+    },
+    currentLicenseKeyCount: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+    currentTotalActivations: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
   },
   {
     timestamps: true,

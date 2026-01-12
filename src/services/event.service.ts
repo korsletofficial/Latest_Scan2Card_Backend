@@ -43,6 +43,67 @@ const generateLicenseKey = (): string => {
   return nanoid();
 };
 
+// Helper function to validate license key restrictions
+const validateLicenseKeyRestrictions = async (
+  exhibitorId: string,
+  numberOfKeys: number,
+  totalActivationsNeeded: number
+) => {
+  const exhibitor = await UserModel.findById(exhibitorId);
+
+  if (!exhibitor) {
+    throw new Error("Exhibitor not found");
+  }
+
+  // Check max license keys restriction
+  if (exhibitor.maxLicenseKeys !== undefined && exhibitor.maxLicenseKeys !== null) {
+    const currentCount = exhibitor.currentLicenseKeyCount || 0;
+    const newTotal = currentCount + numberOfKeys;
+
+    if (newTotal > exhibitor.maxLicenseKeys) {
+      throw new Error(
+        `License key limit exceeded. You can create ${exhibitor.maxLicenseKeys} license keys in total. ` +
+        `You have already created ${currentCount} keys and are trying to create ${numberOfKeys} more.`
+      );
+    }
+  }
+
+  // Check max total activations restriction
+  if (exhibitor.maxTotalActivations !== undefined && exhibitor.maxTotalActivations !== null) {
+    const currentActivations = exhibitor.currentTotalActivations || 0;
+    const newTotal = currentActivations + totalActivationsNeeded;
+
+    if (newTotal > exhibitor.maxTotalActivations) {
+      const remaining = exhibitor.maxTotalActivations - currentActivations;
+      throw new Error(
+        `Total activations limit exceeded. You have ${exhibitor.maxTotalActivations} total activations allowed. ` +
+        `You have already used ${currentActivations} activations and are trying to allocate ${totalActivationsNeeded} more. ` +
+        `Only ${remaining} activations remaining.`
+      );
+    }
+  }
+
+  return exhibitor;
+};
+
+// Helper function to update exhibitor's license key counts
+const updateExhibitorLicenseKeyCounts = async (
+  exhibitorId: string,
+  numberOfKeys: number,
+  totalActivations: number
+) => {
+  await UserModel.findByIdAndUpdate(
+    exhibitorId,
+    {
+      $inc: {
+        currentLicenseKeyCount: numberOfKeys,
+        currentTotalActivations: totalActivations,
+      },
+    },
+    { new: true }
+  );
+};
+
 // Helper function to create team manager for license
 const createTeamManagerForLicense = async (
   email: string,
@@ -296,6 +357,10 @@ export const generateLicenseKeyForEvent = async (
     throw new Error(`License key expiration date cannot be before the event start date (${event.startDate.toISOString().split('T')[0]})`);
   }
 
+  // Validate license key restrictions
+  const maxActivations = data.maxActivations || 1;
+  await validateLicenseKeyRestrictions(exhibitorId, 1, maxActivations);
+
   // Generate license key
   const licenseKey = generateLicenseKey();
 
@@ -317,6 +382,9 @@ export const generateLicenseKeyForEvent = async (
   });
 
   await event.save();
+
+  // Update exhibitor's license key counts
+  await updateExhibitorLicenseKeyCounts(exhibitorId, 1, maxActivations);
 
   // Send email with credentials
   try {
@@ -364,6 +432,15 @@ export const bulkGenerateLicenseKeys = async (
   if (!event) {
     throw new Error("Event not found");
   }
+
+  // Calculate total keys and activations needed upfront for validation
+  const numberOfKeys = licenseKeys.length;
+  const totalActivationsNeeded = licenseKeys.reduce((sum, key) => {
+    return sum + (key.maxActivations || 1);
+  }, 0);
+
+  // Validate license key restrictions before processing
+  await validateLicenseKeyRestrictions(exhibitorId, numberOfKeys, totalActivationsNeeded);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const generatedKeys: any[] = [];
@@ -473,6 +550,14 @@ export const bulkGenerateLicenseKeys = async (
   }
 
   await event.save();
+
+  // Update exhibitor's license key counts based on successfully generated keys
+  if (generatedKeys.length > 0) {
+    const actualActivationsUsed = generatedKeys.reduce((sum, key) => {
+      return sum + (key.maxActivations || 1);
+    }, 0);
+    await updateExhibitorLicenseKeyCounts(exhibitorId, generatedKeys.length, actualActivationsUsed);
+  }
 
   return {
     generatedKeys,

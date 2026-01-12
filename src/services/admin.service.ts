@@ -16,6 +16,8 @@ interface ExhibitorData {
 
 interface UpdateExhibitorData extends Partial<ExhibitorData> {
   isActive?: boolean;
+  maxLicenseKeys?: number;
+  maxTotalActivations?: number;
 }
 
 // Get all exhibitors
@@ -158,6 +160,28 @@ export const updateExhibitor = async (id: string, data: UpdateExhibitorData) => 
     exhibitor.companyName = data.companyName.trim();
   if (typeof data.isActive === "boolean") exhibitor.isActive = data.isActive;
   if (data.password) exhibitor.password = await bcrypt.hash(data.password, 10);
+
+  // Handle maxLicenseKeys update with validation
+  if (data.maxLicenseKeys !== undefined) {
+    const currentKeyCount = exhibitor.currentLicenseKeyCount ?? 0;
+    if (data.maxLicenseKeys < currentKeyCount) {
+      throw new Error(
+        `Cannot reduce max license keys to ${data.maxLicenseKeys}. Exhibitor has already created ${currentKeyCount} license keys. Please delete some keys first or set the limit to at least ${currentKeyCount}.`
+      );
+    }
+    exhibitor.maxLicenseKeys = data.maxLicenseKeys;
+  }
+
+  // Handle maxTotalActivations update with validation
+  if (data.maxTotalActivations !== undefined) {
+    const currentActivations = exhibitor.currentTotalActivations ?? 0;
+    if (data.maxTotalActivations < currentActivations) {
+      throw new Error(
+        `Cannot reduce max total activations to ${data.maxTotalActivations}. Exhibitor has already allocated ${currentActivations} activations. Please reduce activations on existing keys first or set the limit to at least ${currentActivations}.`
+      );
+    }
+    exhibitor.maxTotalActivations = data.maxTotalActivations;
+  }
 
   await exhibitor.save();
 

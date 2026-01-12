@@ -24,6 +24,8 @@ export interface RegisterUserDTO {
   password: string;
   roleName: "SUPERADMIN" | "EXHIBITOR" | "TEAMMANAGER" | "ENDUSER";
   exhibitorId?: string;
+  maxLicenseKeys?: number;
+  maxTotalActivations?: number;
 }
 
 interface LoginData {
@@ -86,6 +88,8 @@ export const registerUser = async (data: RegisterUserDTO) => {
     isActive: true,
     isDeleted: false,
     isVerified: false, // User needs to verify via OTP
+    ...(data.maxLicenseKeys !== undefined && { maxLicenseKeys: data.maxLicenseKeys }),
+    ...(data.maxTotalActivations !== undefined && { maxTotalActivations: data.maxTotalActivations }),
   });
 
   // Populate role to get role name
@@ -239,6 +243,11 @@ export const loginUser = async (data: LoginData) => {
       twoFactorEnabled: user.twoFactorEnabled,
       isVerified: user.isVerified,
       profileImage: user.profileImage || null,
+      // License key restrictions (for EXHIBITOR role)
+      maxLicenseKeys: user.maxLicenseKeys,
+      maxTotalActivations: user.maxTotalActivations,
+      currentLicenseKeyCount: user.currentLicenseKeyCount,
+      currentTotalActivations: user.currentTotalActivations,
     },
   };
 };
@@ -274,6 +283,11 @@ export const getUserById = async (userId: string) => {
     twoFactorEnabled: user.twoFactorEnabled,
     isVerified: user.isVerified,
     profileImage: user.profileImage || null,
+    // License key restrictions (for EXHIBITOR role)
+    maxLicenseKeys: user.maxLicenseKeys,
+    maxTotalActivations: user.maxTotalActivations,
+    currentLicenseKeyCount: user.currentLicenseKeyCount,
+    currentTotalActivations: user.currentTotalActivations,
   };
 };
 

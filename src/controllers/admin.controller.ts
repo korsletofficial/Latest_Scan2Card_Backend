@@ -12,6 +12,8 @@ type CreateExhibitorBody = {
   companyName?: string;
   password?: string;
   address?: string;
+  maxLicenseKeys?: number;
+  maxTotalActivations?: number;
 };
 
 const REQUIRED_FIELDS: Array<keyof CreateExhibitorBody> = ["firstName", "lastName"];
@@ -41,7 +43,7 @@ export const createExhibitor = async (
   next: NextFunction
 ) => {
   try {
-    const { firstName, lastName, email, phoneNumber, companyName, password, address } = req.body;
+    const { firstName, lastName, email, phoneNumber, companyName, password, address, maxLicenseKeys, maxTotalActivations } = req.body;
 
     // Validate required fields
     const missingFields = REQUIRED_FIELDS.filter((field) => !req.body?.[field]);
@@ -141,6 +143,30 @@ export const createExhibitor = async (
       });
     }
 
+    // Validate and convert maxLicenseKeys if provided
+    let parsedMaxLicenseKeys: number | undefined = undefined;
+    if (maxLicenseKeys !== undefined && maxLicenseKeys !== null) {
+      parsedMaxLicenseKeys = typeof maxLicenseKeys === 'string' ? parseInt(maxLicenseKeys, 10) : maxLicenseKeys;
+      if (isNaN(parsedMaxLicenseKeys) || parsedMaxLicenseKeys < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'maxLicenseKeys must be a non-negative number',
+        });
+      }
+    }
+
+    // Validate and convert maxTotalActivations if provided
+    let parsedMaxTotalActivations: number | undefined = undefined;
+    if (maxTotalActivations !== undefined && maxTotalActivations !== null) {
+      parsedMaxTotalActivations = typeof maxTotalActivations === 'string' ? parseInt(maxTotalActivations, 10) : maxTotalActivations;
+      if (isNaN(parsedMaxTotalActivations) || parsedMaxTotalActivations < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'maxTotalActivations must be a non-negative number',
+        });
+      }
+    }
+
     const normalizedEmail = email ? normalizeEmail(email) : undefined;
     const finalPassword = password || generateRandomPassword();
 
@@ -152,6 +178,8 @@ export const createExhibitor = async (
       ...(companyName && { companyName: companyName.trim() }),
       password: finalPassword,
       roleName: "EXHIBITOR" as const,
+      ...(parsedMaxLicenseKeys !== undefined && { maxLicenseKeys: parsedMaxLicenseKeys }),
+      ...(parsedMaxTotalActivations !== undefined && { maxTotalActivations: parsedMaxTotalActivations }),
     });
 
     const exhibitor = await registerUser(sanitizedData as any);
@@ -235,7 +263,7 @@ export const getExhibitorById = async (req: Request, res: Response) => {
 export const updateExhibitor = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, email, phoneNumber, companyName, password, address, isActive } = req.body;
+    const { firstName, lastName, email, phoneNumber, companyName, password, address, isActive, maxLicenseKeys, maxTotalActivations } = req.body;
 
     const sanitizedData = sanitizeEmptyStrings({
       firstName,
@@ -247,6 +275,30 @@ export const updateExhibitor = async (req: Request, res: Response) => {
       address,
       isActive,
     });
+
+    // Validate and parse maxLicenseKeys if provided
+    if (maxLicenseKeys !== undefined && maxLicenseKeys !== null) {
+      const parsedMaxLicenseKeys = typeof maxLicenseKeys === 'string' ? parseInt(maxLicenseKeys, 10) : maxLicenseKeys;
+      if (isNaN(parsedMaxLicenseKeys) || parsedMaxLicenseKeys < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'maxLicenseKeys must be a non-negative number',
+        });
+      }
+      (sanitizedData as any).maxLicenseKeys = parsedMaxLicenseKeys;
+    }
+
+    // Validate and parse maxTotalActivations if provided
+    if (maxTotalActivations !== undefined && maxTotalActivations !== null) {
+      const parsedMaxTotalActivations = typeof maxTotalActivations === 'string' ? parseInt(maxTotalActivations, 10) : maxTotalActivations;
+      if (isNaN(parsedMaxTotalActivations) || parsedMaxTotalActivations < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'maxTotalActivations must be a non-negative number',
+        });
+      }
+      (sanitizedData as any).maxTotalActivations = parsedMaxTotalActivations;
+    }
 
     const updatedExhibitor = await adminService.updateExhibitor(id, sanitizedData);
 
