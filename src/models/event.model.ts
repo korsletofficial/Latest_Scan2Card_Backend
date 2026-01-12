@@ -58,12 +58,17 @@ const EventSchema = new Schema<IEvent>(
       enum: ["Offline", "Online", "Hybrid"], 
       required: true 
     },
-    startDate: { 
-      type: Date, 
+    startDate: {
+      type: Date,
       required: true,
       validate: {
         validator: function (v: Date) {
-          return v instanceof Date && v >= new Date();
+          if (!(v instanceof Date)) return false;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const inputDate = new Date(v);
+          inputDate.setHours(0, 0, 0, 0);
+          return inputDate >= today;
         },
         message: 'startDate must be today or in the future'
       }
@@ -126,12 +131,17 @@ const EventSchema = new Schema<IEvent>(
             }
           },
           teamManagerId: { type: Schema.Types.ObjectId, ref: "Users" },
-          expiresAt: { 
-            type: Date, 
+          expiresAt: {
+            type: Date,
             required: true,
             validate: {
               validator: function (v: Date) {
-                return v instanceof Date && v >= new Date();
+                if (!(v instanceof Date)) return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const inputDate = new Date(v);
+                inputDate.setHours(0, 0, 0, 0);
+                return inputDate >= today;
               },
               message: 'License key expiresAt must be today or in the future'
             }
