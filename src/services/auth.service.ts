@@ -26,6 +26,7 @@ export interface RegisterUserDTO {
   exhibitorId?: string;
   maxLicenseKeys?: number;
   maxTotalActivations?: number;
+  skipVerification?: boolean;
 }
 
 interface LoginData {
@@ -44,26 +45,34 @@ export const registerUser = async (data: RegisterUserDTO) => {
     throw new Error("At least one of email or phoneNumber must be provided");
   }
 
-  // Check if user already exists with the same email or phone number
-  const existingUserQuery: any[] = [];
+  // Check if user already exists with the same email
   if (data.email) {
-    existingUserQuery.push({ email: data.email });
-  }
-  if (data.phoneNumber) {
-    existingUserQuery.push({ phoneNumber: data.phoneNumber });
-  }
+    const existingUserByEmail = await UserModel.findOne({
+      email: data.email,
+      isDeleted: false,
+    });
 
-  const existingUser = await UserModel.findOne({
-    $or: existingUserQuery,
-    isDeleted: false,
-  });
-
-  if (existingUser) {
-    if (data.email && existingUser.email === data.email) {
+    if (existingUserByEmail) {
       throw new Error("User with this email already exists");
     }
-    if (data.phoneNumber && existingUser.phoneNumber === data.phoneNumber) {
-      throw new Error("User with this phone number already exists");
+  }
+
+  // Check phone number uniqueness ONLY for ENDUSER role
+  // For other roles (SUPERADMIN, EXHIBITOR, TEAMMANAGER), phone is just contact info
+  if (data.phoneNumber && data.roleName === "ENDUSER") {
+    // Find role first to get its ID
+    const endUserRole = await RoleModel.findOne({ name: "ENDUSER", isDeleted: false });
+
+    if (endUserRole) {
+      const existingUserByPhone = await UserModel.findOne({
+        phoneNumber: data.phoneNumber,
+        role: endUserRole._id,
+        isDeleted: false,
+      });
+
+      if (existingUserByPhone) {
+        throw new Error("User with this phone number already exists");
+      }
     }
   }
 
@@ -87,7 +96,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
     companyName: data.companyName,
     isActive: true,
     isDeleted: false,
-    isVerified: false, // User needs to verify via OTP
+    isVerified: data.skipVerification ? true : false, // Auto-verify if skipVerification is true
     ...(data.maxLicenseKeys !== undefined && { maxLicenseKeys: data.maxLicenseKeys }),
     ...(data.maxTotalActivations !== undefined && { maxTotalActivations: data.maxTotalActivations }),
   });
@@ -95,22 +104,29 @@ export const registerUser = async (data: RegisterUserDTO) => {
   // Populate role to get role name
   await newUser.populate("role");
 
-  // Send verification OTP automatically after registration (NON-BLOCKING)
-  // Fire-and-forget pattern: don't wait for OTP to send before returning response
-  const source = newUser.phoneNumber ? "phoneNumber" : "email";
+  // Only send verification OTP if skipVerification is false (for ENDUSER)
+  if (!data.skipVerification) {
+    // Send verification OTP automatically after registration (NON-BLOCKING)
+    // Fire-and-forget pattern: don't wait for OTP to send before returning response
+    const source = newUser.phoneNumber ? "phoneNumber" : "email";
 
-  // Send OTP asynchronously without blocking registration response
-  handleSendVerificationCode({
-    userId: newUser._id.toString(),
-    source,
-  })
-    .then(() => {
-      console.log(`✅ Verification OTP sent to new user ${newUser.email || newUser.phoneNumber}`);
+    // Send OTP asynchronously without blocking registration response
+    handleSendVerificationCode({
+      userId: newUser._id.toString(),
+      source,
     })
-    .catch((error: any) => {
-      console.error(`❌ Failed to send verification OTP to ${newUser.email || newUser.phoneNumber}:`, error.message);
-      // OTP sending failure is logged but doesn't block registration
-    });
+      .then(() => {
+        console.log(`✅ Verification OTP sent to new user ${newUser.email || newUser.phoneNumber}`);
+      })
+      .catch((error: any) => {
+        console.error(`❌ Failed to send verification OTP to ${newUser.email || newUser.phoneNumber}:`, error.message);
+        // OTP sending failure is logged but doesn't block registration
+      });
+  }
+
+  const message = data.skipVerification
+    ? "Registration successful. Account is automatically verified."
+    : "Registration successful. Please verify your account with the OTP sent to your " + (newUser.phoneNumber ? "phoneNumber" : "email");
 
   return {
     user: {
@@ -123,7 +139,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
       companyName: newUser.companyName,
       isVerified: newUser.isVerified,
     },
-    message: "Registration successful. Please verify your account with the OTP sent to your " + source,
+    message,
   };
 };
 
@@ -153,6 +169,13 @@ export const loginUser = async (data: LoginData) => {
   // Check if user is active
   if (!user.isActive) {
     throw new Error("Your account has been deactivated");
+  }
+
+  // Check role restriction for phone number login
+  // Phone number login is only allowed for ENDUSER role (mobile app)
+  // Dashboard users (SUPERADMIN, EXHIBITOR, TEAMMANAGER) must use email login
+  if (data.phoneNumber && (user.role as any).name !== "ENDUSER") {
+    throw new Error("This phone number is registered for dashboard access. Please use the web dashboard and login with your email.");
   }
 
   // Compare password (skip if this is after OTP verification)

@@ -66,9 +66,8 @@ const UserSchema = new Schema<IUser>(
         message: 'Invalid email format'
       }
     },
-    phoneNumber: { 
-      type: String, 
-      unique: true, 
+    phoneNumber: {
+      type: String,
       sparse: true,
       maxlength: 20,
       validate: {

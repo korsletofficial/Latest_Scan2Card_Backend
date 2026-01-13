@@ -142,7 +142,7 @@ const createTeamManagerForLicense = async (
     // Create password (same as email for testing)
     const hashedPassword = await bcrypt.hash(email, 10);
 
-    // Create team manager user
+    // Create team manager user (auto-verified since created by exhibitor)
     const teamManager = await UserModel.create({
       firstName: defaultFirstName.charAt(0).toUpperCase() + defaultFirstName.slice(1),
       lastName: defaultLastName.charAt(0).toUpperCase() + defaultLastName.slice(1),
@@ -152,9 +152,10 @@ const createTeamManagerForLicense = async (
       exhibitorId,
       isActive: true,
       isDeleted: false,
+      isVerified: true, // Auto-verify team managers created by exhibitor
     });
 
-    console.log(`✅ Team Manager created: ${email} (Password: ${email})`);
+    console.log(`✅ Team Manager created and auto-verified: ${email} (Password: ${email})`);
     return teamManager._id;
   } catch (error: any) {
     console.error("❌ Create team manager error:", error);

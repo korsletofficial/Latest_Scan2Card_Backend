@@ -178,6 +178,7 @@ export const createExhibitor = async (
       ...(companyName && { companyName: companyName.trim() }),
       password: finalPassword,
       roleName: "EXHIBITOR" as const,
+      skipVerification: true, // Auto-verify exhibitors created by SuperAdmin
       ...(parsedMaxLicenseKeys !== undefined && { maxLicenseKeys: parsedMaxLicenseKeys }),
       ...(parsedMaxTotalActivations !== undefined && { maxTotalActivations: parsedMaxTotalActivations }),
     });
