@@ -144,67 +144,69 @@ const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
  * Prompt for analyzing OCR-extracted text
  */
 const getOCRTextAnalysisPrompt = (): string => {
-  return `You are an expert at parsing OCR-extracted text from business cards and converting it into structured JSON format.
+  return `Parse this OCR text from a business card and extract ALL information. Translate any Indian language text to English.
 
-CRITICAL INSTRUCTIONS:
-1. The text below is raw OCR output which may contain:
-   - Mixed languages (English + Hindi/Chinese/Arabic/etc)
-   - OCR artifacts and errors
-   - Scattered formatting
-   - Text from BOTH FRONT and BACK sides of the SAME business card (separated by "--- BACK SIDE ---")
+CRITICAL: Extract EVERY piece of information from the text below, including:
+- Person's FULL NAME (first name + last name) - THIS IS CRITICAL, don't leave empty!
+- Job title/Position (Owner, Proprietor, Manager, Director, etc.)
+- Company/Business name
+- ALL phone numbers
+- ALL email addresses
+- Website
+- Address, City, Country
 
-2. IMPORTANT - Merging Front and Back:
-   - The text may contain information from BOTH sides of ONE business card
-   - ALWAYS merge ALL information from both sides into a SINGLE contact object
-   - Use the primary contact name from the front, but COMBINE all contact details (email, phone, address, website) from BOTH sides
-   - Even if you see different information on front vs back, treat it as ONE person's complete business card
-   - Prioritize the most complete and valid information for each field
+INDIAN LANGUAGE TRANSLATION:
+If text is in Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, Malayalam, Gujarati, Punjabi, Urdu, translate to English.
 
-3. ALWAYS translate ALL non-English text to English before putting in JSON:
-   - Hindi text like "मशीनरी स्टोर" → "Machinery Store"
-   - Chinese text should be transliterated/translated to English
-   - Arabic text should be translated to English
+Translation examples:
 
-4. Extract and clean the following fields (remove extra spaces/artifacts):
-   - firstName: First name (translate if in other language) - use from front side
-   - lastName: Last name (translate if in other language) - use from front side
-   - company: Company/business name (MUST translate to English) - use from front side
-   - position: Job title/role (translate if in other language) - use from front side
-   - emails: Extract ALL email addresses found on the card (check BOTH sides), return as array of strings
-   - phoneNumbers: Extract ALL phone numbers found (check BOTH sides), return as array of strings
-   - website: Website URL (usually starts with http/www) - check BOTH sides
-   - address: Street address (translate if in other language) - check BOTH sides
-   - city: City name (translate if in other language) - check BOTH sides
-   - country: Country name (translate to English) - check BOTH sides
+Hindi: "राजेश कुमार" → "Rajesh Kumar", "प्रबंधक" → "Manager", "मालिक" → "Owner", "मुंबई" → "Mumbai"
+Tamil: "ராஜேஷ்" → "Rajesh", "சென்னை" → "Chennai"
+Telugu: "రాజేష్" → "Rajesh", "హైదరాబాద్" → "Hyderabad"
+Bengali: "রাজেশ" → "Rajesh", "কোলকাতা" → "Kolkata"
+Marathi: "राजेश" → "Rajesh", "पुणे" → "Pune"
+Kannada: "ರಾಜೇಶ್" → "Rajesh", "ಬೆಂಗಳೂರು" → "Bengaluru"
+Malayalam: "രാജേഷ്" → "Rajesh"
+Gujarati: "રાજેશ" → "Rajesh"
+Punjabi: "ਰਾਜੇਸ਼" → "Rajesh"
+Urdu: "راجیش" → "Rajesh"
 
-5. OCR Quality Tips:
-   - If you see repeated characters or garbled text, try to interpret the intended word
-   - Phone numbers might be separated by spaces/dashes - remove them and keep digits
-   - Addresses often span multiple lines - combine them into single string
-   - Company names are usually prominent - look for capitalized words
+EXTRACTION INSTRUCTIONS:
+1. READ ALL THE TEXT CAREFULLY - The person's name is usually the most prominent text
+2. FIND THE NAME - Don't leave firstName/lastName empty! If you see a name, extract it
+3. FIND JOB TITLE - Look for: Owner, Proprietor, Director, Manager, "प्रबंधक", "मालिक", "निदेशक"
+4. FIND COMPANY NAME - The business name
+5. FIND ALL PHONE NUMBERS - Add +91 for Indian numbers: "9876543210" → "+919876543210"
+6. FIND ALL EMAIL ADDRESSES - Look for @ symbol
+7. FIND WEBSITE - Look for www or .com
+8. FIND ADDRESS & CITY - Translate Indian language text
+9. TRANSLATE all Indian language text to English
 
-6. Output Format:
-   - ONLY valid JSON, no markdown, no extra text
-   - Return a SINGLE flat object, NOT an array
-   - All empty fields must be empty strings "" or empty arrays []
-   - All text must be in English (translated)
-   - DO NOT wrap in a "contacts" array
-   - MERGE all information from front and back into ONE contact
-   - "emails" and "phoneNumbers" MUST be arrays of strings
+The OCR text may contain information from BOTH sides of the card - merge everything into ONE contact.
 
-Example correct output:
+Phone formatting: Remove spaces/dashes and add +91 for Indian numbers
+- "98765-43210" → "+919876543210"
+- "9876543210" → "+919876543210"
+
+Output format (return ONLY valid JSON, no markdown):
 {
-  "firstName": "John",
-  "lastName": "Doe",
-  "company": "Tech Corp",
-  "position": "CEO",
-  "emails": ["john@example.com", "john.doe@techcorp.com"],
-  "phoneNumbers": ["+1234567890", "+0987654321"],
+  "firstName": "Rajesh",
+  "lastName": "Kumar",
+  "company": "Machinery Trading Company",
+  "position": "Owner",
+  "emails": ["email@example.com"],
+  "phoneNumbers": ["+919876543210"],
   "website": "https://example.com",
-  "address": "123 Main St",
-  "city": "New York",
-  "country": "USA"
+  "address": "Shop No. 45, MG Road",
+  "city": "Mumbai",
+  "country": "India"
 }
+
+CRITICAL:
+- Don't leave firstName/lastName empty if you see a person's name in the text!
+- Translate ALL Indian language text to English
+- Return ONLY valid JSON (no markdown, no explanations)
+- "emails" and "phoneNumbers" must be arrays
 
 OCR Text to Parse:
 `;
@@ -232,7 +234,7 @@ const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
       const res = await axios.post(
         url,
         {
-          model: "gpt-4o-mini",
+          model: "gpt-4o", // Using gpt-4o for superior Indian language OCR accuracy and translation
           messages: [
             {
               role: "system",

@@ -3,9 +3,9 @@ import axios from "axios";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.5-flash"; // Fallback vision model
+const GEMINI_MODEL = "gemini-2.0-flash-exp"; // Fallback vision model with better multilingual support
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = "gpt-4o-mini"; // Primary vision model
+const OPENAI_MODEL = "gpt-4o"; // Primary vision model - superior accuracy for Indian language OCR and translation
 
 const DEFAULT_RESPONSE = {
   firstName: "",
@@ -81,44 +81,86 @@ function hasAnyValue(obj: any): boolean {
 /**
  * Builds the extraction prompt for the AI models
  * Asks the model to extract required keys and translate non-English text
- * Handles multilingual business cards (Hindi, Chinese, Arabic, etc.)
+ * Handles multilingual business cards with STRONG FOCUS on Indian languages
  */
 function buildPrompt(): string {
   return `
-You are an expert at extracting structured contact info from business cards in ANY language (English, Hindi, Chinese, Arabic, Japanese, etc.).
+Extract ALL information from this business card image and translate any Indian language text to English.
 
-CRITICAL INSTRUCTIONS:
-1) Analyze the image carefully to extract ALL contact information
-2) ALWAYS translate any non-English text to English:
-   - Hindi text like "मशीनरी स्टोर" → "Machinery Store"
-   - Chinese/Japanese → English transliteration/translation
-   - Arabic → English translation
-3) Clean up extracted text (remove extra spaces, artifacts, special chars)
-4) For phone numbers: keep country codes (+91, +1, etc) and digits only
-5) Extract ALL email addresses found on the card (there may be multiple)
-6) Extract ALL phone numbers found on the card (there may be multiple)
-7) If a field is missing, use empty string "" for strings or empty array [] for arrays
-8) Output ONLY valid JSON (no markdown, no commentary)
+CRITICAL: You MUST scan the ENTIRE image carefully and extract EVERY piece of information visible, including:
+- Person's FULL NAME (first name + last name)
+- Company/Business name
+- Job title/Position/Designation
+- ALL phone numbers (mobile, office, landline)
+- ALL email addresses
+- Website/URL
+- Complete address
+- City
+- State
+- Country
 
-Required JSON format with example:
+🇮🇳 INDIAN LANGUAGE TRANSLATION:
+If you see text in Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, Malayalam, Gujarati, Punjabi, Urdu, or any other Indian language, you MUST:
+1. Read the text in the original script
+2. Translate it to English
+3. For names: provide phonetic transliteration
+
+Translation examples:
+
+Hindi: "राजेश कुमार" → "Rajesh Kumar", "प्रबंधक" → "Manager", "मुंबई" → "Mumbai"
+Tamil: "ராஜேஷ்" → "Rajesh", "சென்னை" → "Chennai"
+Telugu: "రాజేష్" → "Rajesh", "హైదరాబాద్" → "Hyderabad"
+Bengali: "রাজেশ" → "Rajesh", "কোলকাতা" → "Kolkata"
+Marathi: "राजेश पाटील" → "Rajesh Patil", "पुणे" → "Pune"
+Kannada: "ರಾಜೇಶ್" → "Rajesh", "ಬೆಂಗಳೂರು" → "Bengaluru"
+Malayalam: "രാജേഷ്" → "Rajesh", "കൊച്ചി" → "Kochi"
+Gujarati: "રાજેશ" → "Rajesh", "અમદાવાદ" → "Ahmedabad"
+Punjabi: "ਰਾਜੇਸ਼" → "Rajesh", "ਚੰਡੀਗੜ੍ਹ" → "Chandigarh"
+Urdu: "راجیش" → "Rajesh"
+
+IMPORTANT EXTRACTION RULES:
+1. LOOK FOR THE PERSON'S NAME - it's usually the most prominent text, often at the top
+2. LOOK FOR JOB TITLE/POSITION - words like "प्रबंधक" (Manager), "निदेशक" (Director), "Proprietor", "Owner", "CEO", "Director", "Manager"
+3. LOOK FOR EMAIL - contains @ symbol
+4. LOOK FOR PHONE NUMBERS - 10-digit numbers (add +91 for India)
+5. TRANSLATE all Indian language text to English
+
+STEP-BY-STEP EXTRACTION PROCESS:
+1. SCAN THE ENTIRE IMAGE - Look at every corner, every line of text
+2. FIND THE PERSON'S NAME - Usually the largest/most prominent text (first name + last name)
+3. FIND JOB TITLE - Look for: Owner, Proprietor, Director, Manager, CEO, or words like "प्रबंधक", "मालिक", "निदेशक"
+4. FIND COMPANY NAME - The business/shop/company name
+5. FIND ALL PHONE NUMBERS - Look for 10-digit numbers, add +91 if Indian
+6. FIND ALL EMAIL ADDRESSES - Look for text with @ symbol
+7. FIND WEBSITE - Look for www. or .com
+8. FIND ADDRESS - Street, building, shop number
+9. FIND CITY - City name
+10. TRANSLATE any Indian language text to English
+
+Phone number formatting:
+- Add +91 for Indian numbers: "9876543210" → "+919876543210"
+- Remove spaces/dashes: "98765-43210" → "+919876543210"
+
+Output format:
 {
-  "firstName": "John",
-  "lastName": "Doe",
-  "company": "Tech Corporation",
-  "position": "CEO",
-  "emails": ["john@techcorp.com", "john.doe@gmail.com"],
-  "phoneNumbers": ["+1234567890", "+0987654321"],
-  "website": "https://www.techcorp.com",
-  "address": "123 Tech Street",
-  "city": "San Francisco",
-  "country": "USA"
+  "firstName": "Rajesh",
+  "lastName": "Kumar",
+  "company": "Machinery Trading Company",
+  "position": "Managing Director",
+  "emails": ["rajesh@machinerytrading.com", "info@machinerytrading.com"],
+  "phoneNumbers": ["+919876543210", "+919823456789"],
+  "website": "https://www.machinerytrading.com",
+  "address": "Shop No. 45, MG Road, Andheri West",
+  "city": "Mumbai",
+  "country": "India"
 }
 
-IMPORTANT: 
-- "emails" must be an array of strings (even if only one email)
-- "phoneNumbers" must be an array of strings (even if only one phone)
-
-Return ONLY the JSON object, nothing else.
+CRITICAL REQUIREMENTS:
+- Extract EVERY piece of information you can see on the card
+- The person's name is CRITICAL - don't leave firstName/lastName empty if you see a name
+- Translate ALL Indian language text to English
+- Return ONLY valid JSON (no markdown, no explanations)
+- "emails" and "phoneNumbers" must be arrays of strings
 `;
 }
 
