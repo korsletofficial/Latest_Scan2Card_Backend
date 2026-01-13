@@ -152,7 +152,14 @@ export const loginUser = async (data: LoginData) => {
   if (data.email) {
     query.email = data.email;
   } else if (data.phoneNumber) {
+    // Phone number login is ONLY for ENDUSER role (mobile app)
+    // Find ENDUSER role and add to query to ensure we only find ENDUSER accounts
+    const endUserRole = await RoleModel.findOne({ name: "ENDUSER", isDeleted: false });
+    if (!endUserRole) {
+      throw new Error("Invalid credentials");
+    }
     query.phoneNumber = data.phoneNumber;
+    query.role = endUserRole._id; // Only search for ENDUSER role
   } else {
     throw new Error("Email or phone number must be provided");
   }
@@ -169,13 +176,6 @@ export const loginUser = async (data: LoginData) => {
   // Check if user is active
   if (!user.isActive) {
     throw new Error("Your account has been deactivated");
-  }
-
-  // Check role restriction for phone number login
-  // Phone number login is only allowed for ENDUSER role (mobile app)
-  // Dashboard users (SUPERADMIN, EXHIBITOR, TEAMMANAGER) must use email login
-  if (data.phoneNumber && (user.role as any).name !== "ENDUSER") {
-    throw new Error("This phone number is registered for dashboard access. Please use the web dashboard and login with your email.");
   }
 
   // Compare password (skip if this is after OTP verification)
