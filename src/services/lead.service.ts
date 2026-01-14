@@ -181,13 +181,21 @@ export const createLead = async (data: CreateLeadData) => {
         userId: data.userId,
         eventId: data.eventId,
         isDeleted: false,
-        isActive: true, // RSVP must be active
+        // isActive: true, // REMOVED: Fetch even if inactive to show correct error
       });
 
       if (!rsvp) {
         throw new Error(
           "You don't have a valid registration for this event. " +
           "Please register with a license key first."
+        );
+      }
+
+      // Check if RSVP is active
+      if (!rsvp.isActive) {
+        throw new Error(
+          "Your access to this event is currently inactive. " +
+          "Please contact the event organizer."
         );
       }
 
