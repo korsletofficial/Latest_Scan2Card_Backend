@@ -137,6 +137,88 @@ export const getTeamMeetings = async (
   };
 };
 
+// Get ALL meetings for team manager's calendar feed (no pagination)
+export const getAllTeamMeetingsForCalendar = async (teamManagerId: string) => {
+  // Find all events managed by this team manager
+  const managedEvents = await EventModel.find({
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+  const managedEventIds = managedEvents.map((e) => e._id.toString());
+
+  if (managedEventIds.length === 0) {
+    return [];
+  }
+
+  // Find the ObjectId for the ENDUSER role
+  const endUserRole = await RoleModel.findOne({
+    name: "ENDUSER",
+    isDeleted: false,
+  });
+  if (!endUserRole) {
+    throw new Error("ENDUSER role not found");
+  }
+
+  // Find all team members (ENDUSERs) under this manager
+  const teamMembers = await UserModel.find({
+    role: endUserRole._id,
+    isDeleted: false,
+  });
+  const teamMemberIds = teamMembers.map((u) => u._id.toString());
+
+  // Find all leads for these events and team members
+  const leads = await LeadsModel.find({
+    eventId: { $in: managedEventIds },
+    userId: { $in: teamMemberIds },
+    isDeleted: false,
+  });
+  const leadIds = leads.map((l) => l._id.toString());
+
+  // Find all scheduled/rescheduled meetings (not cancelled/completed)
+  const meetings = await MeetingModel.find({
+    leadId: { $in: leadIds },
+    userId: { $in: teamMemberIds },
+    meetingStatus: { $in: ["scheduled", "rescheduled"] },
+    isDeleted: false,
+  })
+    .select("_id userId leadId title description meetingMode meetingStatus startAt endAt location createdAt")
+    .sort({ startAt: 1 })
+    .populate({
+      path: "leadId",
+      select: "details.firstName details.lastName details.emails details.company eventId",
+      populate: {
+        path: "eventId",
+        select: "eventName"
+      }
+    })
+    .populate("userId", "firstName lastName email")
+    .lean();
+
+  // Format for calendar use
+  return meetings.map((meeting: any) => ({
+    _id: meeting._id,
+    title: meeting.title,
+    description: meeting.description || '',
+    meetingMode: meeting.meetingMode,
+    meetingStatus: meeting.meetingStatus,
+    startAt: meeting.startAt,
+    endAt: meeting.endAt,
+    location: meeting.location || '',
+    createdBy: {
+      firstName: meeting.userId?.firstName || '',
+      lastName: meeting.userId?.lastName || '',
+      email: meeting.userId?.email || '',
+    },
+    lead: {
+      firstName: meeting.leadId?.details?.firstName || '',
+      lastName: meeting.leadId?.details?.lastName || '',
+      email: meeting.leadId?.details?.emails?.[0] || '',
+      company: meeting.leadId?.details?.company || '',
+    },
+    eventName: meeting.leadId?.eventId?.eventName || '',
+  }));
+};
+
 // Get all leads for manager
 export const getAllLeadsForManager = async (
   teamManagerId: string,

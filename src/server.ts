@@ -17,6 +17,7 @@ import profileRoutes from "./routes/profile.routes";
 import feedbackRoutes from "./routes/feedback.routes";
 import teamManagerRoutes from "./routes/teamManager.routes";
 import notificationRoutes from "./routes/notification.routes";
+import calendarRoutes from "./routes/calendar.routes";
 import keepServerActive from "./cron/serverActive";
 import startMeetingReminderCron from "./cron/meetingReminders";
 import startLicenseExpiryReminderCron from "./cron/licenseExpiryReminders";
@@ -32,7 +33,12 @@ const PORT = process.env.PORT || 5000;
 app.set('trust proxy', 1);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true, // Allow all origins
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
+}));
 app.use(express.json({ limit: '10mb' })); // Allow up to 10MB for image uploads
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -53,6 +59,7 @@ app.use("/api/profile", profileRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/team-manager", teamManagerRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/calendar", calendarRoutes);
 
 // Health check route
 app.get("/health", (req: Request, res: Response) => {

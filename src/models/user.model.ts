@@ -29,6 +29,9 @@ export interface IUser extends Document {
   maxTotalActivations?: number; // Maximum total activations across all keys
   currentLicenseKeyCount?: number; // Current number of license keys created
   currentTotalActivations?: number; // Current total activations allocated
+  // Calendar feed subscription (for TEAMMANAGER role)
+  calendarFeedToken?: string; // Unique token for calendar feed access
+  calendarFeedEnabled?: boolean; // Whether calendar feed is active
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -160,6 +163,18 @@ const UserSchema = new Schema<IUser>(
       type: Number,
       min: 0,
       default: 0
+    },
+    // Calendar feed subscription (for TEAMMANAGER role)
+    calendarFeedToken: {
+      type: String,
+      unique: true,
+      sparse: true,
+      maxlength: 50,
+      index: true
+    },
+    calendarFeedEnabled: {
+      type: Boolean,
+      default: false
     },
   },
   {
