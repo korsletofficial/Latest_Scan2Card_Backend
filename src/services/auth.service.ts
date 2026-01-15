@@ -778,7 +778,7 @@ export const logoutUser = async (userId: string) => {
   // Clear refresh token, expiry, and all FCM tokens using updateOne to avoid validation issues
   await UserModel.updateOne(
     { _id: user._id },
-    { 
+    {
       $unset: { refreshToken: 1, refreshTokenExpiry: 1 },
       $set: { fcmTokens: [] }
     }
@@ -788,5 +788,58 @@ export const logoutUser = async (userId: string) => {
 
   return {
     message: "Logged out successfully",
+  };
+};
+
+// Delete Account (Soft Delete with PII Anonymization)
+// - Removes personal data (phone, email, profile image)
+// - Sets name to "Scan2Card User"
+// - Marks account as inactive and deleted
+// - Preserves user's created data (leads, etc.) for admin visibility
+export const deleteAccount = async (userId: string) => {
+  await connectToMongooseDatabase();
+
+  // Find user
+  const user = await UserModel.findById(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (user.isDeleted) {
+    throw new Error("Account is already deleted");
+  }
+
+  // Generate unique placeholder for phone/email to avoid unique constraint issues
+  const timestamp = Date.now();
+  const deletedPhonePlaceholder = `deleted_${timestamp}_${userId}`;
+  const deletedEmailPlaceholder = `deleted_${timestamp}_${userId}@deleted.scan2card.com`;
+
+  // Soft delete: anonymize personal data but keep the record
+  await UserModel.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        firstName: "Scan2Card",
+        lastName: "User",
+        phoneNumber: deletedPhonePlaceholder,
+        email: deletedEmailPlaceholder,
+        profileImage: null,
+        isActive: false,
+        isDeleted: true,
+        fcmTokens: [],
+        twoFactorEnabled: false,
+      },
+      $unset: {
+        refreshToken: 1,
+        refreshTokenExpiry: 1,
+        calendarFeedToken: 1,
+      },
+    }
+  );
+
+  console.log(`✅ User ${userId} account deleted - personal data anonymized`);
+
+  return {
+    message: "Account deleted successfully",
   };
 };

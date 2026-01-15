@@ -567,9 +567,9 @@ export const getTeamMembers = async (
   const uniqueUserIds = [...new Set(rsvpsInManagedEvents.map((rsvp) => rsvp.userId.toString()))];
 
   // Build search query
+  // Note: We don't filter by isDeleted to show soft-deleted members as "Scan2Card User"
   const searchQuery: any = {
     _id: { $in: uniqueUserIds.map((id) => new mongoose.Types.ObjectId(id)) },
-    isDeleted: false,
   };
 
   if (search) {
@@ -585,7 +585,7 @@ export const getTeamMembers = async (
 
   // Get paginated members
   const members = await UserModel.find(searchQuery)
-    .select("firstName lastName email phoneNumber isActive createdAt")
+    .select("firstName lastName email phoneNumber isActive isDeleted createdAt")
     .skip((page - 1) * limit)
     .limit(limit)
     .sort({ createdAt: -1 });
@@ -605,6 +605,7 @@ export const getTeamMembers = async (
         email: member.email,
         phoneNumber: member.phoneNumber,
         isActive: member.isActive,
+        isDeleted: member.isDeleted,
         leadCount,
         joinedAt: member.createdAt,
       };

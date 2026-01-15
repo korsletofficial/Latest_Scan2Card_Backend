@@ -375,6 +375,29 @@
 						},
 						"description": "Logout user and invalidate refresh token.\n\n**Authentication Required:** Bearer token\n\n**Functionality:**\n- Invalidates the user's refresh token by clearing it from the database\n- Prevents the refresh token from being used to generate new access tokens\n- User must login again to get a new access token and refresh token\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success: Returns success message confirming logout\n- Error 401: Invalid or missing authentication token\n- Error 429: Rate limit exceeded\n\n**Best Practices:**\n- Call this endpoint when user clicks logout button\n- Clear the access token and refresh token from client storage after successful logout\n- Redirect user to login page after logout\n\n**Use Cases:**\n- User wants to logout from the application\n- Security measure to invalidate refresh token on logout\n- Prevents unauthorized access after logout"
 					}
+				},
+				{
+					"name": "Delete Account",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/delete-account",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"delete-account"
+							]
+						},
+						"description": "Soft delete user account with PII anonymization.\n\n**Authentication Required:** Bearer token\n\n**Functionality:**\n- Soft deletes the user account (sets isDeleted: true, isActive: false)\n- Anonymizes personal data for privacy compliance:\n  - Name changed to \"Scan2Card User\"\n  - Phone number replaced with placeholder\n  - Email replaced with placeholder\n  - Profile image removed\n- Clears authentication tokens (refresh token, FCM tokens)\n- Preserves user's created data (leads, etc.) for admin visibility\n\n**Rate Limiting:** 30 requests per minute per user (profileWriteLimiter)\n\n**Response:**\n- Success 200: { success: true, message: \"Account deleted successfully\" }\n- Error 401: Invalid or missing authentication token\n- Error 400: Account already deleted\n- Error 404: User not found\n\n**Important Notes:**\n- This action is irreversible from the user's perspective\n- Data created by the user remains visible to team admins\n- User will see \"Scan2Card User\" instead of actual name in records"
+					}
 				}
 			],
 			"description": "Authentication endpoints for user registration, login, and profile"

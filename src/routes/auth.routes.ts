@@ -12,7 +12,8 @@ import {
   refreshToken,
   verifyOTPUnified,
   resetPassword,
-  logout
+  logout,
+  deleteAccount
 } from "../controllers/auth.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import {
@@ -68,5 +69,6 @@ router.post("/reset-password", passwordResetEmailLimiter, passwordResetIPLimiter
 router.get("/profile", authenticateToken, readLimiter, getProfile);
 router.post("/change-password", authenticateToken, profileWriteLimiter, changePassword);
 router.post("/logout", authenticateToken, profileWriteLimiter, logout);
+router.delete("/delete-account", authenticateToken, profileWriteLimiter, deleteAccount);
 
 export default router;

@@ -560,3 +560,31 @@ export const logout = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+// Delete Account Controller (Soft Delete with PII Anonymization)
+export const deleteAccount = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    await authService.deleteAccount(req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Account deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("❌ Delete account error:", error);
+
+    const statusCode = error.message === "User not found" ? 404 : 400;
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || "Account deletion failed",
+    });
+  }
+};
