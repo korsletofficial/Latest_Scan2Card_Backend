@@ -318,6 +318,18 @@ export const generateLicenseKeyForEvent = async (req: AuthRequest, res: Response
       });
     }
 
+    // Validate maximum expiry limit (15 days from today)
+    const maxExpiryDate = new Date();
+    maxExpiryDate.setDate(maxExpiryDate.getDate() + 15);
+    maxExpiryDate.setHours(23, 59, 59, 999);
+
+    if (expirationDate > maxExpiryDate) {
+      return res.status(400).json({
+        success: false,
+        message: "License key expiry date cannot exceed 15 days from today",
+      });
+    }
+
     const sanitizedData = sanitizeEmptyStrings({
       stallName,
       email,
@@ -396,6 +408,110 @@ export const getLicenseKeys = async (req: AuthRequest, res: Response) => {
     return res.status(error.message === "Event not found" ? 404 : 500).json({
       success: false,
       message: error.message || "Failed to retrieve license keys",
+    });
+  }
+};
+
+// Update license key for an event
+export const updateLicenseKey = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: eventId, licenseKeyId } = req.params;
+    const { stallName, maxActivations, expiresAt } = req.body;
+    const exhibitorId = req.user?.userId;
+
+    // Validate that at least one field is provided
+    if (stallName === undefined && maxActivations === undefined && expiresAt === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one field must be provided for update (stallName, maxActivations, or expiresAt)",
+      });
+    }
+
+    // Validate stallName if provided (150 chars max)
+    if (stallName !== undefined && stallName !== null && String(stallName).length > 150) {
+      return res.status(400).json({
+        success: false,
+        message: "stallName must not exceed 150 characters",
+      });
+    }
+
+    // Validate maxActivations if provided (1-10000)
+    if (maxActivations !== undefined) {
+      const maxAct = Number(maxActivations);
+      if (isNaN(maxAct) || maxAct < 1 || maxAct > 10000) {
+        return res.status(400).json({
+          success: false,
+          message: "maxActivations must be between 1 and 10000",
+        });
+      }
+    }
+
+    // Validate expiration date if provided
+    let validatedExpiresAt: Date | undefined;
+    if (expiresAt !== undefined) {
+      const expirationDate = new Date(expiresAt);
+      if (isNaN(expirationDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid expiration date format",
+        });
+      }
+
+      // Set expiration to end of day in IST
+      expirationDate.setUTCHours(18, 29, 59, 999);
+
+      // Get today's date at midnight for comparison
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (expirationDate < today) {
+        return res.status(400).json({
+          success: false,
+          message: "Expiration date must be today or in the future",
+        });
+      }
+
+      // Validate maximum expiry limit (15 days from today)
+      const maxExpiryDate = new Date();
+      maxExpiryDate.setDate(maxExpiryDate.getDate() + 15);
+      maxExpiryDate.setHours(23, 59, 59, 999);
+
+      if (expirationDate > maxExpiryDate) {
+        return res.status(400).json({
+          success: false,
+          message: "License key expiry date cannot exceed 15 days from today",
+        });
+      }
+
+      validatedExpiresAt = expirationDate;
+    }
+
+    const updateData = sanitizeEmptyStrings({
+      stallName,
+      maxActivations: maxActivations !== undefined ? Number(maxActivations) : undefined,
+      expiresAt: validatedExpiresAt,
+    });
+
+    const result = await eventService.updateLicenseKey(eventId, exhibitorId!, licenseKeyId, updateData);
+
+    return res.status(200).json({
+      success: true,
+      message: "License key updated successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Update license key error:", error);
+
+    if (error.message === "Event not found" || error.message === "License key not found") {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Failed to update license key",
     });
   }
 };

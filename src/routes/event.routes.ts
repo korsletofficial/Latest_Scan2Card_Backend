@@ -8,6 +8,7 @@ import {
   generateLicenseKeyForEvent,
   bulkGenerateLicenseKeys,
   getLicenseKeys,
+  updateLicenseKey,
   getExhibitorDashboardStats,
   getTopEventsByLeads,
   getLeadsTrend,
@@ -46,5 +47,6 @@ router.get("/:id", authenticateToken, authorizeRoles("EXHIBITOR"), readLimiter, 
 router.post("/:id/license-keys", authenticateToken, authorizeRoles("EXHIBITOR"), eventWriteLimiter, generateLicenseKeyForEvent);
 router.post("/:id/license-keys/bulk", authenticateToken, authorizeRoles("EXHIBITOR"), eventWriteLimiter, bulkGenerateLicenseKeys);
 router.get("/:id/license-keys", authenticateToken, authorizeRoles("EXHIBITOR"), readLimiter, getLicenseKeys);
+router.put("/:id/license-keys/:licenseKeyId", authenticateToken, authorizeRoles("EXHIBITOR"), eventWriteLimiter, updateLicenseKey);
 
 export default router;

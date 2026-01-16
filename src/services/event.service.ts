@@ -486,6 +486,16 @@ export const bulkGenerateLicenseKeys = async (
       continue;
     }
 
+    // Validate maximum expiry limit (15 days from today)
+    const maxExpiryDate = new Date();
+    maxExpiryDate.setDate(maxExpiryDate.getDate() + 15);
+    maxExpiryDate.setHours(23, 59, 59, 999);
+
+    if (expirationDate > maxExpiryDate) {
+      errors.push({ row: i + 1, error: "License key expiry date cannot exceed 15 days from today" });
+      continue;
+    }
+
     // Validate that license key expiration date is not before event start date
     const eventStartDate = new Date(event.startDate);
     eventStartDate.setHours(0, 0, 0, 0);
@@ -583,6 +593,100 @@ export const getLicenseKeys = async (eventId: string, exhibitorId: string) => {
   return {
     eventName: event.eventName,
     licenseKeys: event.licenseKeys,
+  };
+};
+
+// Update license key for an event
+interface UpdateLicenseKeyData {
+  stallName?: string;
+  maxActivations?: number;
+  expiresAt?: Date;
+}
+
+export const updateLicenseKey = async (
+  eventId: string,
+  exhibitorId: string,
+  licenseKeyId: string,
+  data: UpdateLicenseKeyData
+) => {
+  const event = await EventModel.findOne({
+    _id: eventId,
+    exhibitorId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event not found");
+  }
+
+  // Find the license key by ID
+  const licenseKey = event.licenseKeys.find(
+    (lk) => lk._id?.toString() === licenseKeyId
+  );
+
+  if (!licenseKey) {
+    throw new Error("License key not found");
+  }
+
+  // Validate that license key expiration date is not before event start date
+  if (data.expiresAt) {
+    const eventStartDate = new Date(event.startDate);
+    eventStartDate.setHours(0, 0, 0, 0);
+
+    const keyExpirationDate = new Date(data.expiresAt);
+    keyExpirationDate.setHours(0, 0, 0, 0);
+
+    if (keyExpirationDate < eventStartDate) {
+      throw new Error(
+        `License key expiration date cannot be before the event start date (${event.startDate.toISOString().split("T")[0]})`
+      );
+    }
+  }
+
+  // Update the license key fields
+  if (data.stallName !== undefined) {
+    licenseKey.stallName = data.stallName;
+  }
+  
+  let activationsDifference = 0;
+  if (data.maxActivations !== undefined) {
+    // Check if new maxActivations is less than usedCount
+    if (data.maxActivations < licenseKey.usedCount) {
+      throw new Error(
+        `maxActivations (${data.maxActivations}) cannot be less than the current usage count (${licenseKey.usedCount})`
+      );
+    }
+    
+    // Calculate the difference to update organiser's currentTotalActivations
+    activationsDifference = data.maxActivations - licenseKey.maxActivations;
+    licenseKey.maxActivations = data.maxActivations;
+  }
+  if (data.expiresAt !== undefined) {
+    licenseKey.expiresAt = data.expiresAt;
+  }
+
+  await event.save();
+
+  // Update the organiser's currentTotalActivations if maxActivations was changed
+  if (activationsDifference !== 0) {
+    await UserModel.findByIdAndUpdate(
+      exhibitorId,
+      { $inc: { currentTotalActivations: activationsDifference } }
+    );
+  }
+
+  return {
+    licenseKey: {
+      _id: licenseKey._id,
+      key: licenseKey.key,
+      stallName: licenseKey.stallName,
+      email: licenseKey.email,
+      maxActivations: licenseKey.maxActivations,
+      usedCount: licenseKey.usedCount,
+      expiresAt: licenseKey.expiresAt,
+      isActive: licenseKey.isActive,
+      paymentStatus: licenseKey.paymentStatus,
+    },
   };
 };
 

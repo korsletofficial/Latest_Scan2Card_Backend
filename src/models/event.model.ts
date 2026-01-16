@@ -61,17 +61,7 @@ const EventSchema = new Schema<IEvent>(
     startDate: {
       type: Date,
       required: true,
-      validate: {
-        validator: function (v: Date) {
-          if (!(v instanceof Date)) return false;
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const inputDate = new Date(v);
-          inputDate.setHours(0, 0, 0, 0);
-          return inputDate >= today;
-        },
-        message: 'startDate must be today or in the future'
-      }
+      // Date validation is handled in the controller to avoid issues with existing events
     },
     endDate: { 
       type: Date, 
@@ -134,17 +124,7 @@ const EventSchema = new Schema<IEvent>(
           expiresAt: {
             type: Date,
             required: true,
-            validate: {
-              validator: function (v: Date) {
-                if (!(v instanceof Date)) return false;
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const inputDate = new Date(v);
-                inputDate.setHours(0, 0, 0, 0);
-                return inputDate >= today;
-              },
-              message: 'License key expiresAt must be today or in the future'
-            }
+            // Date validation is handled in the controller/service to avoid issues with existing license keys
           },
           isActive: { type: Boolean, default: true },
           maxActivations: { 
