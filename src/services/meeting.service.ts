@@ -1,5 +1,13 @@
 import MeetingModel from "../models/meeting.model";
 import LeadModel from "../models/leads.model";
+import RsvpModel from "../models/rsvp.model";
+import EventModel from "../models/event.model";
+import mongoose from "mongoose";
+import {
+  createCalendarEventForMeeting,
+  updateCalendarEventForMeeting,
+  cancelCalendarEventForMeeting,
+} from "./calendarIntegration.service";
 
 interface CreateMeetingData {
   userId: string;
@@ -11,6 +19,8 @@ interface CreateMeetingData {
   endAt: Date;
   location?: string;
   notifyAttendees?: boolean;
+  // Optional: skip calendar sync (e.g., for bulk operations)
+  skipCalendarSync?: boolean;
 }
 
 interface GetMeetingsFilter {
@@ -49,6 +59,46 @@ export const createMeeting = async (data: CreateMeetingData) => {
     throw new Error("Lead not found or access denied");
   }
 
+  // Check meeting creation permission
+  // Priority: Individual RSVP permission > License key bulk permission
+  // This allows team manager to give exceptions after bulk revoke
+  const rsvp = await RsvpModel.findOne({
+    userId: new mongoose.Types.ObjectId(data.userId),
+    eventId: lead.eventId,
+    isDeleted: false,
+  });
+
+  // If individual permission is explicitly set to false, deny
+  if (rsvp && rsvp.canCreateMeeting === false) {
+    throw new Error("Meeting creation has been disabled for you on this event by your team manager");
+  }
+
+  // If individual permission is explicitly set to true (restored as exception), allow
+  // Skip license key check - individual override takes priority
+  const hasIndividualPermissionGranted = rsvp && rsvp.canCreateMeeting === true;
+
+  // Check license key-level permission (bulk) only if no individual exception
+  if (!hasIndividualPermissionGranted && rsvp?.eventLicenseKey) {
+    const event = await EventModel.findOne({
+      _id: lead.eventId,
+      isDeleted: false,
+    });
+
+    if (event) {
+      const licenseKey = event.licenseKeys.find(
+        (lk) => lk.key === rsvp.eventLicenseKey
+      );
+
+      // If bulk permission is disabled and user has no individual exception, deny
+      if (licenseKey && licenseKey.allowTeamMeetings === false) {
+        throw new Error("Meeting creation has been disabled for this event by your team manager");
+      }
+    }
+  }
+
+  // Get lead email for calendar invite
+  const leadEmail = lead.details?.emails?.[0] || (lead.details as any)?.email;
+
   const meeting = await MeetingModel.create({
     userId: data.userId,
     leadId: data.leadId,
@@ -59,7 +109,66 @@ export const createMeeting = async (data: CreateMeetingData) => {
     endAt: data.endAt,
     location: data.location,
     notifyAttendees: data.notifyAttendees || false,
+    calendarSyncStatus: "pending", // Will be updated after sync attempt
   });
+
+  // Attempt to sync with Team Manager's calendar (async, non-blocking)
+  if (!data.skipCalendarSync) {
+    try {
+      const calendarResult = await createCalendarEventForMeeting(
+        data.userId,
+        {
+          _id: meeting._id.toString(),
+          title: data.title,
+          description: data.description,
+          startAt: data.startAt,
+          endAt: data.endAt,
+          location: data.location,
+          meetingMode: data.meetingMode as "online" | "offline" | "phone",
+          leadEmail,
+        },
+        lead.eventId?.toString()
+      );
+
+      if (calendarResult.success) {
+        // Update meeting with calendar sync info
+        meeting.externalCalendarEventId = calendarResult.eventId;
+        meeting.externalCalendarProvider = calendarResult.provider;
+        meeting.calendarSyncStatus = "synced";
+        meeting.calendarSyncedAt = new Date();
+
+        // Set video conference link if generated
+        if (calendarResult.videoLink) {
+          meeting.videoConferenceLink = calendarResult.videoLink;
+          meeting.videoConferenceProvider =
+            calendarResult.provider === "google" ? "google_meet" : "teams";
+
+          // Also update location for online meetings with the video link
+          if (data.meetingMode === "online" && !data.location) {
+            meeting.location = calendarResult.videoLink;
+          }
+        }
+
+        await meeting.save();
+      } else {
+        // Calendar sync failed but meeting was created
+        meeting.calendarSyncStatus = "failed";
+        meeting.calendarSyncError = calendarResult.error;
+        await meeting.save();
+        console.log("Calendar sync failed:", calendarResult.error);
+      }
+    } catch (syncError: any) {
+      // Log error but don't fail meeting creation
+      console.error("Calendar sync error:", syncError);
+      meeting.calendarSyncStatus = "failed";
+      meeting.calendarSyncError = syncError.message;
+      await meeting.save();
+    }
+  } else {
+    // Calendar sync skipped
+    meeting.calendarSyncStatus = "not_applicable";
+    await meeting.save();
+  }
 
   await meeting.populate([
     {
@@ -161,6 +270,9 @@ export const updateMeeting = async (
     throw new Error("Meeting not found");
   }
 
+  // Check if meeting is being cancelled
+  const isBeingCancelled = data.meetingStatus === "cancelled" && meeting.meetingStatus !== "cancelled";
+
   // Update fields
   if (data.title !== undefined) meeting.title = data.title;
   if (data.description !== undefined) meeting.description = data.description;
@@ -176,6 +288,51 @@ export const updateMeeting = async (
 
   await meeting.save();
 
+  // Sync changes to external calendar if connected
+  if (meeting.externalCalendarEventId && meeting.calendarSyncStatus === "synced") {
+    try {
+      if (isBeingCancelled) {
+        // Cancel the calendar event
+        const cancelResult = await cancelCalendarEventForMeeting(id);
+        if (cancelResult.success) {
+          meeting.calendarSyncStatus = "synced";
+          meeting.calendarSyncedAt = new Date();
+          meeting.calendarSyncError = undefined;
+        } else {
+          meeting.calendarSyncError = cancelResult.error;
+        }
+      } else {
+        // Update the calendar event
+        const updateResult = await updateCalendarEventForMeeting(id, {
+          title: data.title,
+          description: data.description,
+          startAt: data.startAt,
+          endAt: data.endAt,
+          location: data.location,
+          meetingMode: data.meetingMode,
+        });
+
+        if (updateResult.success) {
+          meeting.calendarSyncedAt = new Date();
+          meeting.calendarSyncError = undefined;
+
+          // Update video link if changed
+          if (updateResult.videoLink) {
+            meeting.videoConferenceLink = updateResult.videoLink;
+          }
+        } else {
+          meeting.calendarSyncError = updateResult.error;
+        }
+      }
+
+      await meeting.save();
+    } catch (syncError: any) {
+      console.error("Calendar sync error on update:", syncError);
+      meeting.calendarSyncError = syncError.message;
+      await meeting.save();
+    }
+  }
+
   await meeting.populate([
     {
       path: "leadId",
@@ -188,23 +345,29 @@ export const updateMeeting = async (
 
 // Delete Meeting (soft delete)
 export const deleteMeeting = async (id: string, userId: string) => {
-  const meeting = await MeetingModel.findOneAndUpdate(
-    {
-      _id: id,
-      userId,
-      isDeleted: false,
-    },
-    {
-      isDeleted: true,
-    },
-    {
-      new: false, // Return original document to check if it existed
-    }
-  );
+  const meeting = await MeetingModel.findOne({
+    _id: id,
+    userId,
+    isDeleted: false,
+  });
 
   if (!meeting) {
     throw new Error("Meeting not found");
   }
+
+  // Cancel calendar event if synced
+  if (meeting.externalCalendarEventId && meeting.calendarSyncStatus === "synced") {
+    try {
+      await cancelCalendarEventForMeeting(id);
+    } catch (syncError: any) {
+      console.error("Calendar sync error on delete:", syncError);
+      // Continue with deletion even if calendar sync fails
+    }
+  }
+
+  // Soft delete the meeting
+  meeting.isDeleted = true;
+  await meeting.save();
 
   return { message: "Meeting deleted successfully" };
 };

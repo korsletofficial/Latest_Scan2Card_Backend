@@ -1671,10 +1671,22 @@
 									"value": "Asia/Kolkata",
 									"description": "IANA timezone (default: Asia/Kolkata for India)",
 									"disabled": true
+								},
+								{
+									"key": "licenseKey",
+									"value": "",
+									"description": "Filter by license key/stall (returns leads from users with this license key)",
+									"disabled": true
+								},
+								{
+									"key": "canCreateMeeting",
+									"value": "true",
+									"description": "Filter leads where user can create meetings (true). Checks RSVP and license key permissions.",
+									"disabled": true
 								}
 							]
 						},
-						"description": "Get all leads for authenticated user with pagination and filters.\n\n**Query Parameters:**\n- `page` (number): Page number (default: 1)\n- `limit` (number): Items per page (default: 10)\n- `eventId` (string): Filter by specific event\n- `isIndependentLead` (boolean): Filter independent leads\n- `search` (string): Search by name, company, email, or phone\n- `minimal` (boolean): Return minimal data without populated refs\n- `period` (string): Filter by time period (new feature)\n  - `today`: Leads created today (00:00-23:59 in user's timezone)\n  - `weekly`: Leads created this week excluding today (Monday-Sunday)\n  - `earlier`: Leads created before this week\n- `timeZone` (string): IANA timezone for period filtering (default: Asia/Kolkata)\n  - Examples: Asia/Kolkata, America/New_York, Europe/London, UTC\n\n**Time-based Filtering:**\nThe `period` parameter enables timezone-aware lead filtering:\n- MongoDB stores all timestamps in UTC\n- The API converts your timezone to UTC for accurate queries\n- Week starts on Monday and ends on Sunday\n- Default timezone is Asia/Kolkata (Indian Standard Time)\n\n**Sorting:**\nLeads are sorted by creation date in descending order (newest first).\n\n**Response:**\nReturns paginated list of leads with metadata."
+						"description": "Get all leads for authenticated user with pagination and filters.\n\n**Query Parameters:**\n- `page` (number): Page number (default: 1)\n- `limit` (number): Items per page (default: 10)\n- `eventId` (string): Filter by specific event\n- `isIndependentLead` (boolean): Filter independent leads\n- `search` (string): Search by name, company, email, or phone\n- `minimal` (boolean): Return minimal data without populated refs\n- `period` (string): Filter by time period (new feature)\n  - `today`: Leads created today (00:00-23:59 in user's timezone)\n  - `weekly`: Leads created this week excluding today (Monday-Sunday)\n  - `earlier`: Leads created before this week\n- `timeZone` (string): IANA timezone for period filtering (default: Asia/Kolkata)\n  - Examples: Asia/Kolkata, America/New_York, Europe/London, UTC\n- `licenseKey` (string): Filter leads by license key/stall\n- `canCreateMeeting` (boolean): Filter leads where user can create meetings\n  - When `true`, only returns leads from events where meeting creation is allowed\n  - Checks individual RSVP permission (`canCreateMeeting` field)\n  - Checks license key bulk permission (`allowTeamMeetings` field)\n  - Individual RSVP permission takes priority over license key setting\n\n**Time-based Filtering:**\nThe `period` parameter enables timezone-aware lead filtering:\n- MongoDB stores all timestamps in UTC\n- The API converts your timezone to UTC for accurate queries\n- Week starts on Monday and ends on Sunday\n- Default timezone is Asia/Kolkata (Indian Standard Time)\n\n**Meeting Permission Logic:**\nWhen `canCreateMeeting=true`:\n1. If RSVP has `canCreateMeeting=false` → event excluded\n2. If RSVP has `canCreateMeeting=true` → event included (individual override)\n3. Otherwise, if license key has `allowTeamMeetings=false` → event excluded\n4. If no restrictions → event included\n\n**Sorting:**\nLeads are sorted by creation date in descending order (newest first).\n\n**Response:**\nReturns paginated list of leads with metadata."
 					}
 				},
 				{
@@ -2671,6 +2683,88 @@
 							]
 						},
 						"description": "Get all meetings for team members"
+					}
+				},
+				{
+					"name": "Grant Calendar Permission",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"eventId\": \"{{eventId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/team/member/:memberId/grant-calendar-permission",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"team",
+								"member",
+								":memberId",
+								"grant-calendar-permission"
+							],
+							"variable": [
+								{
+									"key": "memberId",
+									"value": "",
+									"description": "The ID of the team member"
+								}
+							]
+						},
+						"description": "Grant calendar permission to a team member, allowing them to connect and use their own Google/Outlook calendar for meeting sync.\n\n**When granted:**\n- Member can connect their own Google/Outlook calendar\n- Meetings created by the member will sync to THEIR calendar (not team manager's)\n- Member gets their own Google Meet / Teams links\n\n**Request Body:**\n- `eventId` (required): The event ID to grant calendar permission for\n\n**Response:**\n- Returns updated RSVP with `canUseOwnCalendar: true`"
+					}
+				},
+				{
+					"name": "Revoke Calendar Permission",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"eventId\": \"{{eventId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/team-manager/team/member/:memberId/revoke-calendar-permission",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"team-manager",
+								"team",
+								"member",
+								":memberId",
+								"revoke-calendar-permission"
+							],
+							"variable": [
+								{
+									"key": "memberId",
+									"value": "",
+									"description": "The ID of the team member"
+								}
+							]
+						},
+						"description": "Revoke calendar permission from a team member. Their meetings will sync to the team manager's calendar again.\n\n**When revoked:**\n- Member can no longer use their own calendar\n- Meetings created by the member will sync to TEAM MANAGER's calendar\n- Falls back to previous behavior\n\n**Request Body:**\n- `eventId` (required): The event ID to revoke calendar permission for\n\n**Response:**\n- Returns updated RSVP with `canUseOwnCalendar: false`"
 					}
 				}
 			],

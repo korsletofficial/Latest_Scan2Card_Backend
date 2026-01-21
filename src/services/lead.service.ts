@@ -33,6 +33,7 @@ interface GetLeadsFilter {
   period?: "today" | "weekly" | "earlier"; // New: time-based filter
   timeZone?: string; // New: user's timezone (e.g., "Asia/Kolkata")
   licenseKey?: string; // New: filter by license key/stall
+  canCreateMeeting?: string; // Filter leads where user can create meetings
 }
 
 interface UpdateLeadData {
@@ -257,6 +258,7 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     period,
     timeZone = "Asia/Kolkata", // Default to Indian timezone
     licenseKey,
+    canCreateMeeting,
   } = filter;
 
   // Build filter query based on role
@@ -326,6 +328,89 @@ export const getLeads = async (filter: GetLeadsFilter) => {
   if (period) {
     const dateRanges = getDateRangesByPeriod(period, timeZone);
     query.createdAt = dateRanges;
+  }
+
+  // Filter leads by meeting creation permission
+  if (canCreateMeeting === "true") {
+    // Get user's RSVPs with their permissions
+    const userRsvps = await RsvpModel.find({
+      userId: userId,
+      isDeleted: false,
+    }).lean();
+
+    // Create a map of eventId -> RSVP for quick lookup
+    const rsvpMap = new Map(
+      userRsvps.map((rsvp) => [rsvp.eventId?.toString(), rsvp])
+    );
+
+    // Get all events to check license key permissions
+    const eventIdsFromRsvps = userRsvps
+      .filter((rsvp) => rsvp.eventId)
+      .map((rsvp) => rsvp.eventId);
+
+    const events = await EventModel.find({
+      _id: { $in: eventIdsFromRsvps },
+      isDeleted: false,
+    }).lean();
+
+    // Create a map of eventId -> event for quick lookup
+    const eventMap = new Map(
+      events.map((event) => [event._id.toString(), event])
+    );
+
+    // Determine which events allow meeting creation
+    const allowedEventIds: mongoose.Types.ObjectId[] = [];
+
+    for (const rsvp of userRsvps) {
+      if (!rsvp.eventId) continue;
+
+      const eventIdStr = rsvp.eventId.toString();
+
+      // If individual permission is explicitly false, skip this event
+      if (rsvp.canCreateMeeting === false) {
+        continue;
+      }
+
+      // If individual permission is explicitly true, allow this event
+      if (rsvp.canCreateMeeting === true) {
+        allowedEventIds.push(rsvp.eventId as mongoose.Types.ObjectId);
+        continue;
+      }
+
+      // Check license key-level permission
+      const event = eventMap.get(eventIdStr);
+      if (event && rsvp.eventLicenseKey) {
+        const licenseKey = event.licenseKeys?.find(
+          (lk: any) => lk.key === rsvp.eventLicenseKey
+        );
+
+        // If bulk permission is disabled, skip this event
+        if (licenseKey && licenseKey.allowTeamMeetings === false) {
+          continue;
+        }
+      }
+
+      // No restrictions found, allow this event
+      allowedEventIds.push(rsvp.eventId as mongoose.Types.ObjectId);
+    }
+
+    // Update query to only include leads from allowed events
+    if (allowedEventIds.length > 0) {
+      // If eventId filter is already set, intersect with allowed events
+      if (query.eventId) {
+        const requestedEventId = query.eventId.toString();
+        if (!allowedEventIds.some((id) => id.toString() === requestedEventId)) {
+          // Requested event is not in allowed list - return empty results
+          query._id = null; // This will match no documents
+        }
+        // Otherwise keep the existing eventId filter
+      } else {
+        query.eventId = { $in: allowedEventIds };
+      }
+    } else {
+      // No events allow meeting creation - return empty results
+      query._id = null; // This will match no documents
+    }
   }
 
   // Search in details

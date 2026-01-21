@@ -14,6 +14,10 @@ export interface ILicenseKey {
   usedCount: number;
   usedBy: Types.ObjectId[];
   paymentStatus: "pending" | "completed";
+  // Meeting creation permission control (bulk)
+  allowTeamMeetings?: boolean; // If false, ALL team members can't create meetings (default: true)
+  meetingPermissionUpdatedBy?: Types.ObjectId; // Team manager who updated meeting permission
+  meetingPermissionUpdatedAt?: Date; // When meeting permission was updated
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -144,6 +148,10 @@ const EventSchema = new Schema<IEvent>(
             enum: ["pending", "completed"], 
             default: "pending" 
           },
+          // Meeting creation permission control (bulk)
+          allowTeamMeetings: { type: Boolean, default: true },
+          meetingPermissionUpdatedBy: { type: Schema.Types.ObjectId, ref: "Users" },
+          meetingPermissionUpdatedAt: { type: Date },
         },
         { timestamps: true }
       ),

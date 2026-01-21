@@ -32,6 +32,13 @@ export interface IUser extends Document {
   // Calendar feed subscription (for TEAMMANAGER role)
   calendarFeedToken?: string; // Unique token for calendar feed access
   calendarFeedEnabled?: boolean; // Whether calendar feed is active
+  // Calendar OAuth integration (for TEAMMANAGER role)
+  calendarProvider?: "google" | "outlook" | null; // Connected calendar provider
+  calendarAccessToken?: string; // Encrypted OAuth access token
+  calendarRefreshToken?: string; // Encrypted OAuth refresh token
+  calendarTokenExpiry?: Date; // Access token expiry time
+  calendarConnectedAt?: Date; // When the calendar was connected
+  calendarEmail?: string; // Email of connected calendar account
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -175,6 +182,34 @@ const UserSchema = new Schema<IUser>(
     calendarFeedEnabled: {
       type: Boolean,
       default: false
+    },
+    // Calendar OAuth integration (for TEAMMANAGER role)
+    calendarProvider: {
+      type: String,
+      enum: ["google", "outlook", null],
+      default: null
+    },
+    calendarAccessToken: {
+      type: String,
+      select: false, // Don't include in normal queries for security
+      maxlength: 5000
+    },
+    calendarRefreshToken: {
+      type: String,
+      select: false, // Don't include in normal queries for security
+      maxlength: 5000
+    },
+    calendarTokenExpiry: {
+      type: Date
+    },
+    calendarConnectedAt: {
+      type: Date
+    },
+    calendarEmail: {
+      type: String,
+      maxlength: 255,
+      lowercase: true,
+      trim: true
     },
   },
   {

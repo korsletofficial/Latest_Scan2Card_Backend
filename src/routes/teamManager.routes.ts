@@ -13,6 +13,15 @@ import {
   revokeEventAccess,
   restoreEventAccess,
   getTeamMemberEvents,
+  // Meeting permission controllers
+  revokeMeetingPermission,
+  restoreMeetingPermission,
+  bulkRevokeMeetingPermission,
+  bulkRestoreMeetingPermission,
+  getLicenseKeyMeetingPermissionStatus,
+  // Calendar permission controllers
+  grantCalendarPermission,
+  revokeCalendarPermission,
 } from "../controllers/teamManager.controller";
 import {
   adminDashboardLimiter,
@@ -36,5 +45,22 @@ router.patch("/team/member/:memberId/restore-access", authenticateToken, authori
 router.get("/events", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getMyEvents);
 router.get("/meetings/team", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getTeamMeetings);
 router.get("/license-keys", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLicenseKeys);
+
+// Meeting Permission Management Routes
+// Single team member - revoke/restore meeting permission
+router.patch("/team/member/:memberId/revoke-meeting-permission", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, revokeMeetingPermission);
+router.patch("/team/member/:memberId/restore-meeting-permission", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, restoreMeetingPermission);
+
+// Bulk - revoke/restore meeting permission for all team members by license key
+router.patch("/license-key/bulk-revoke-meeting-permission", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, bulkRevokeMeetingPermission);
+router.patch("/license-key/bulk-restore-meeting-permission", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, bulkRestoreMeetingPermission);
+
+// Get license key meeting permission status
+router.get("/license-key/meeting-permission-status", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getLicenseKeyMeetingPermissionStatus);
+
+// Calendar Permission Management Routes
+// Grant/revoke permission for team member to use their own calendar
+router.patch("/team/member/:memberId/grant-calendar-permission", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, grantCalendarPermission);
+router.patch("/team/member/:memberId/revoke-calendar-permission", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, revokeCalendarPermission);
 
 export default router;

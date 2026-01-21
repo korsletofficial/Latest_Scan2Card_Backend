@@ -14,6 +14,15 @@ export interface IMeeting extends Document {
   location?: string; // Address for offline or meeting link for online
   notifyAttendees: boolean;
   reminderSent: boolean; // Track if reminder notification has been sent
+  // Video conferencing integration
+  videoConferenceLink?: string; // Auto-generated Google Meet or Teams link
+  videoConferenceProvider?: "google_meet" | "teams" | null;
+  // External calendar sync
+  externalCalendarEventId?: string; // Event ID in external calendar (Google/Outlook)
+  externalCalendarProvider?: "google" | "outlook" | null;
+  calendarSyncStatus: "pending" | "synced" | "failed" | "not_applicable";
+  calendarSyncError?: string; // Error message if sync failed
+  calendarSyncedAt?: Date; // Last successful sync time
   isActive: boolean;
   isDeleted: boolean;
 }
@@ -64,6 +73,39 @@ const MeetingSchema = new Schema<IMeeting>(
     },
     notifyAttendees: { type: Boolean, default: false },
     reminderSent: { type: Boolean, default: false },
+    // Video conferencing integration
+    videoConferenceLink: {
+      type: String,
+      maxlength: 500,
+      trim: true
+    },
+    videoConferenceProvider: {
+      type: String,
+      enum: ["google_meet", "teams", null],
+      default: null
+    },
+    // External calendar sync
+    externalCalendarEventId: {
+      type: String,
+      maxlength: 500
+    },
+    externalCalendarProvider: {
+      type: String,
+      enum: ["google", "outlook", null],
+      default: null
+    },
+    calendarSyncStatus: {
+      type: String,
+      enum: ["pending", "synced", "failed", "not_applicable"],
+      default: "not_applicable"
+    },
+    calendarSyncError: {
+      type: String,
+      maxlength: 1000
+    },
+    calendarSyncedAt: {
+      type: Date
+    },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
   },
@@ -76,6 +118,8 @@ const MeetingSchema = new Schema<IMeeting>(
         // Convert undefined/null to empty string for optional fields
         ret.description = ret.description ?? '';
         ret.location = ret.location ?? '';
+        ret.videoConferenceLink = ret.videoConferenceLink ?? '';
+        ret.calendarSyncError = ret.calendarSyncError ?? '';
 
         return ret;
       },

@@ -865,6 +865,8 @@ export const getTeamMemberEvents = async (
   })
     .populate("eventId", "eventName description startDate endDate isActive")
     .populate("revokedBy", "firstName lastName email")
+    .populate("meetingPermissionRevokedBy", "firstName lastName email")
+    .populate("calendarPermissionGrantedBy", "firstName lastName email")
     .lean();
 
   // Format the response
@@ -886,7 +888,395 @@ export const getTeamMemberEvents = async (
       }
       : null,
     licenseKey: rsvp.eventLicenseKey,
+    // Meeting permission info
+    canCreateMeeting: rsvp.canCreateMeeting ?? true,
+    meetingPermissionRevokedAt: rsvp.meetingPermissionRevokedAt,
+    meetingPermissionRevokedBy: rsvp.meetingPermissionRevokedBy
+      ? {
+        _id: rsvp.meetingPermissionRevokedBy._id,
+        firstName: rsvp.meetingPermissionRevokedBy.firstName,
+        lastName: rsvp.meetingPermissionRevokedBy.lastName,
+        email: rsvp.meetingPermissionRevokedBy.email,
+      }
+      : null,
+    // Calendar permission info
+    canUseOwnCalendar: rsvp.canUseOwnCalendar ?? false,
+    calendarPermissionGrantedAt: rsvp.calendarPermissionGrantedAt,
+    calendarPermissionGrantedBy: rsvp.calendarPermissionGrantedBy
+      ? {
+        _id: rsvp.calendarPermissionGrantedBy._id,
+        firstName: rsvp.calendarPermissionGrantedBy.firstName,
+        lastName: rsvp.calendarPermissionGrantedBy.lastName,
+        email: rsvp.calendarPermissionGrantedBy.email,
+      }
+      : null,
   }));
 
   return memberEvents;
+};
+
+// ==========================================
+// MEETING PERMISSION MANAGEMENT
+// ==========================================
+
+// Revoke meeting permission for a SINGLE team member on an event
+export const revokeMeetingPermission = async (
+  teamManagerId: string,
+  memberId: string,
+  eventId: string
+) => {
+  // Verify team manager has access to this event
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event not found or you don't have access to manage this event");
+  }
+
+  // Find the RSVP for this member and event
+  const rsvp = await RsvpModel.findOne({
+    userId: new mongoose.Types.ObjectId(memberId),
+    eventId: new mongoose.Types.ObjectId(eventId),
+    isDeleted: false,
+  });
+
+  if (!rsvp) {
+    throw new Error("RSVP not found for this member and event");
+  }
+
+  // Check if already revoked
+  if (rsvp.canCreateMeeting === false) {
+    throw new Error("Meeting permission is already revoked for this member");
+  }
+
+  // Update RSVP to revoke meeting permission
+  rsvp.canCreateMeeting = false;
+  rsvp.meetingPermissionRevokedBy = new mongoose.Types.ObjectId(teamManagerId);
+  rsvp.meetingPermissionRevokedAt = new Date();
+  await rsvp.save();
+
+  return rsvp;
+};
+
+// Restore meeting permission for a SINGLE team member on an event
+export const restoreMeetingPermission = async (
+  teamManagerId: string,
+  memberId: string,
+  eventId: string
+) => {
+  // Verify team manager has access to this event
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event not found or you don't have access to manage this event");
+  }
+
+  // Find the RSVP for this member and event
+  const rsvp = await RsvpModel.findOne({
+    userId: new mongoose.Types.ObjectId(memberId),
+    eventId: new mongoose.Types.ObjectId(eventId),
+    isDeleted: false,
+  });
+
+  if (!rsvp) {
+    throw new Error("RSVP not found for this member and event");
+  }
+
+  // Check if already has permission (explicitly true)
+  // Note: canCreateMeeting could be false from bulk revoke OR individual revoke
+  // Allow restore in both cases to grant individual exception
+  if (rsvp.canCreateMeeting === true) {
+    throw new Error("Meeting permission is already granted for this member");
+  }
+
+  // Update RSVP to restore meeting permission (this acts as individual exception after bulk revoke)
+  rsvp.canCreateMeeting = true;
+  rsvp.meetingPermissionRevokedBy = undefined;
+  rsvp.meetingPermissionRevokedAt = undefined;
+  await rsvp.save();
+
+  return rsvp;
+};
+
+// Revoke meeting permission for ALL team members on a license key (bulk)
+export const bulkRevokeMeetingPermissionByLicenseKey = async (
+  teamManagerId: string,
+  eventId: string,
+  licenseKey: string
+) => {
+  // Verify team manager owns this license key
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.key": licenseKey.toUpperCase(),
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event or license key not found, or you don't have access");
+  }
+
+  // Find the license key
+  const licenseKeyObj = event.licenseKeys.find(
+    (lk) => lk.key === licenseKey.toUpperCase() && 
+    lk.teamManagerId?.toString() === teamManagerId
+  );
+
+  if (!licenseKeyObj) {
+    throw new Error("License key not found or access denied");
+  }
+
+  // Update the license key's allowTeamMeetings flag
+  await EventModel.updateOne(
+    {
+      _id: eventId,
+      "licenseKeys.key": licenseKey.toUpperCase(),
+    },
+    {
+      $set: {
+        "licenseKeys.$.allowTeamMeetings": false,
+        "licenseKeys.$.meetingPermissionUpdatedBy": new mongoose.Types.ObjectId(teamManagerId),
+        "licenseKeys.$.meetingPermissionUpdatedAt": new Date(),
+      },
+    }
+  );
+
+  // Also bulk update all RSVPs for this license key
+  const result = await RsvpModel.updateMany(
+    {
+      eventId: new mongoose.Types.ObjectId(eventId),
+      eventLicenseKey: licenseKey.toUpperCase(),
+      isDeleted: false,
+      canCreateMeeting: { $ne: false },
+    },
+    {
+      $set: {
+        canCreateMeeting: false,
+        meetingPermissionRevokedBy: new mongoose.Types.ObjectId(teamManagerId),
+        meetingPermissionRevokedAt: new Date(),
+      },
+    }
+  );
+
+  return {
+    modifiedCount: result.modifiedCount,
+    licenseKey: licenseKey.toUpperCase(),
+    message: `Meeting permission revoked for ${result.modifiedCount} team members under license key ${licenseKey.toUpperCase()}`,
+  };
+};
+
+// Restore meeting permission for ALL team members on a license key (bulk)
+export const bulkRestoreMeetingPermissionByLicenseKey = async (
+  teamManagerId: string,
+  eventId: string,
+  licenseKey: string
+) => {
+  // Verify team manager owns this license key
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.key": licenseKey.toUpperCase(),
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event or license key not found, or you don't have access");
+  }
+
+  // Find the license key
+  const licenseKeyObj = event.licenseKeys.find(
+    (lk) => lk.key === licenseKey.toUpperCase() && 
+    lk.teamManagerId?.toString() === teamManagerId
+  );
+
+  if (!licenseKeyObj) {
+    throw new Error("License key not found or access denied");
+  }
+
+  // Update the license key's allowTeamMeetings flag
+  await EventModel.updateOne(
+    {
+      _id: eventId,
+      "licenseKeys.key": licenseKey.toUpperCase(),
+    },
+    {
+      $set: {
+        "licenseKeys.$.allowTeamMeetings": true,
+        "licenseKeys.$.meetingPermissionUpdatedBy": new mongoose.Types.ObjectId(teamManagerId),
+        "licenseKeys.$.meetingPermissionUpdatedAt": new Date(),
+      },
+    }
+  );
+
+  // Also bulk update all RSVPs for this license key
+  const result = await RsvpModel.updateMany(
+    {
+      eventId: new mongoose.Types.ObjectId(eventId),
+      eventLicenseKey: licenseKey.toUpperCase(),
+      isDeleted: false,
+      canCreateMeeting: false,
+    },
+    {
+      $set: {
+        canCreateMeeting: true,
+      },
+      $unset: {
+        meetingPermissionRevokedBy: "",
+        meetingPermissionRevokedAt: "",
+      },
+    }
+  );
+
+  return {
+    modifiedCount: result.modifiedCount,
+    licenseKey: licenseKey.toUpperCase(),
+    message: `Meeting permission restored for ${result.modifiedCount} team members under license key ${licenseKey.toUpperCase()}`,
+  };
+};
+
+// Get license key meeting permission status
+export const getLicenseKeyMeetingPermissionStatus = async (
+  teamManagerId: string,
+  eventId: string,
+  licenseKey: string
+) => {
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.key": licenseKey.toUpperCase(),
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event or license key not found, or you don't have access");
+  }
+
+  const licenseKeyObj = event.licenseKeys.find(
+    (lk) => lk.key === licenseKey.toUpperCase() && 
+    lk.teamManagerId?.toString() === teamManagerId
+  );
+
+  if (!licenseKeyObj) {
+    throw new Error("License key not found or access denied");
+  }
+
+  // Count team members with meeting permission revoked
+  const totalMembers = await RsvpModel.countDocuments({
+    eventId: new mongoose.Types.ObjectId(eventId),
+    eventLicenseKey: licenseKey.toUpperCase(),
+    isDeleted: false,
+  });
+
+  const revokedMembers = await RsvpModel.countDocuments({
+    eventId: new mongoose.Types.ObjectId(eventId),
+    eventLicenseKey: licenseKey.toUpperCase(),
+    isDeleted: false,
+    canCreateMeeting: false,
+  });
+
+  return {
+    licenseKey: licenseKey.toUpperCase(),
+    allowTeamMeetings: licenseKeyObj.allowTeamMeetings ?? true,
+    totalMembers,
+    revokedMembers,
+    activeMembers: totalMembers - revokedMembers,
+    meetingPermissionUpdatedAt: (licenseKeyObj as any).meetingPermissionUpdatedAt,
+  };
+};
+
+/**
+ * Grant calendar permission to a team member
+ * Allows the member to connect and use their own Google/Outlook calendar
+ */
+export const grantCalendarPermission = async (
+  teamManagerId: string,
+  memberId: string,
+  eventId: string
+) => {
+  // Verify team manager has access to this event
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event not found or you don't have team manager access");
+  }
+
+  // Find the RSVP for this member and event
+  const rsvp = await RsvpModel.findOne({
+    userId: memberId,
+    eventId: eventId,
+    isDeleted: false,
+  });
+
+  if (!rsvp) {
+    throw new Error("RSVP not found for this member and event");
+  }
+
+  // Check if already granted
+  if (rsvp.canUseOwnCalendar === true) {
+    throw new Error("Calendar permission is already granted for this member");
+  }
+
+  // Update RSVP to grant calendar permission
+  rsvp.canUseOwnCalendar = true;
+  rsvp.calendarPermissionGrantedBy = new mongoose.Types.ObjectId(teamManagerId);
+  rsvp.calendarPermissionGrantedAt = new Date();
+  await rsvp.save();
+
+  return rsvp;
+};
+
+/**
+ * Revoke calendar permission from a team member
+ * Member will no longer be able to use their own calendar, falls back to team manager's calendar
+ */
+export const revokeCalendarPermission = async (
+  teamManagerId: string,
+  memberId: string,
+  eventId: string
+) => {
+  // Verify team manager has access to this event
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event not found or you don't have team manager access");
+  }
+
+  // Find the RSVP for this member and event
+  const rsvp = await RsvpModel.findOne({
+    userId: memberId,
+    eventId: eventId,
+    isDeleted: false,
+  });
+
+  if (!rsvp) {
+    throw new Error("RSVP not found for this member and event");
+  }
+
+  // Check if already revoked
+  if (rsvp.canUseOwnCalendar === false) {
+    throw new Error("Calendar permission is already revoked for this member");
+  }
+
+  // Update RSVP to revoke calendar permission
+  rsvp.canUseOwnCalendar = false;
+  rsvp.calendarPermissionGrantedBy = undefined;
+  rsvp.calendarPermissionGrantedAt = undefined;
+  await rsvp.save();
+
+  return rsvp;
 };

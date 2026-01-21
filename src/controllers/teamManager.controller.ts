@@ -412,3 +412,377 @@ export const getTeamMemberEvents = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ==========================================
+// MEETING PERMISSION MANAGEMENT CONTROLLERS
+// ==========================================
+
+// Revoke meeting permission for a SINGLE team member
+export const revokeMeetingPermission = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { memberId } = req.params;
+    const { eventId } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required",
+      });
+    }
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    const rsvp = await teamManagerService.revokeMeetingPermission(
+      teamManagerId!,
+      memberId,
+      eventId
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Meeting permission revoked successfully",
+      data: rsvp,
+    });
+  } catch (error: any) {
+    console.error("❌ Revoke meeting permission error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("already revoked")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to revoke meeting permission",
+    });
+  }
+};
+
+// Restore meeting permission for a SINGLE team member
+export const restoreMeetingPermission = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { memberId } = req.params;
+    const { eventId } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required",
+      });
+    }
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    const rsvp = await teamManagerService.restoreMeetingPermission(
+      teamManagerId!,
+      memberId,
+      eventId
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Meeting permission restored successfully",
+      data: rsvp,
+    });
+  } catch (error: any) {
+    console.error("❌ Restore meeting permission error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("not revoked")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to restore meeting permission",
+    });
+  }
+};
+
+// Bulk revoke meeting permission for ALL team members by license key
+export const bulkRevokeMeetingPermission = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { eventId, licenseKey } = req.body;
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    if (!licenseKey) {
+      return res.status(400).json({
+        success: false,
+        message: "License key is required",
+      });
+    }
+
+    const result = await teamManagerService.bulkRevokeMeetingPermissionByLicenseKey(
+      teamManagerId!,
+      eventId,
+      licenseKey
+    );
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Bulk revoke meeting permission error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to bulk revoke meeting permission",
+    });
+  }
+};
+
+// Bulk restore meeting permission for ALL team members by license key
+export const bulkRestoreMeetingPermission = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { eventId, licenseKey } = req.body;
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    if (!licenseKey) {
+      return res.status(400).json({
+        success: false,
+        message: "License key is required",
+      });
+    }
+
+    const result = await teamManagerService.bulkRestoreMeetingPermissionByLicenseKey(
+      teamManagerId!,
+      eventId,
+      licenseKey
+    );
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Bulk restore meeting permission error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to bulk restore meeting permission",
+    });
+  }
+};
+
+// Get license key meeting permission status
+export const getLicenseKeyMeetingPermissionStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { eventId, licenseKey } = req.query;
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    if (!licenseKey) {
+      return res.status(400).json({
+        success: false,
+        message: "License key is required",
+      });
+    }
+
+    const status = await teamManagerService.getLicenseKeyMeetingPermissionStatus(
+      teamManagerId!,
+      eventId as string,
+      licenseKey as string
+    );
+
+    res.status(200).json({
+      success: true,
+      data: status,
+    });
+  } catch (error: any) {
+    console.error("❌ Get license key meeting permission status error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get license key meeting permission status",
+    });
+  }
+};
+
+// ==========================================
+// CALENDAR PERMISSION MANAGEMENT CONTROLLERS
+// ==========================================
+
+// Grant calendar permission to a team member (allows them to use their own calendar)
+export const grantCalendarPermission = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { memberId } = req.params;
+    const { eventId } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required",
+      });
+    }
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    const rsvp = await teamManagerService.grantCalendarPermission(
+      teamManagerId!,
+      memberId,
+      eventId
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Calendar permission granted successfully. Member can now connect their own Google/Outlook calendar.",
+      data: rsvp,
+    });
+  } catch (error: any) {
+    console.error("❌ Grant calendar permission error:", error);
+
+    if (error.message.includes("already granted")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to grant calendar permission",
+    });
+  }
+};
+
+// Revoke calendar permission from a team member
+export const revokeCalendarPermission = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { memberId } = req.params;
+    const { eventId } = req.body;
+
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required",
+      });
+    }
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    const rsvp = await teamManagerService.revokeCalendarPermission(
+      teamManagerId!,
+      memberId,
+      eventId
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Calendar permission revoked successfully. Member's meetings will now sync to your calendar.",
+      data: rsvp,
+    });
+  } catch (error: any) {
+    console.error("❌ Revoke calendar permission error:", error);
+
+    if (error.message.includes("already revoked")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to revoke calendar permission",
+    });
+  }
+};

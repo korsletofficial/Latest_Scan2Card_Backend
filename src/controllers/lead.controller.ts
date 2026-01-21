@@ -271,6 +271,7 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       period, // New: "today" | "weekly" | "earlier"
       timeZone = "Asia/Kolkata", // New: user's timezone
       licenseKey, // New: filter by license key/stall
+      canCreateMeeting, // Filter leads where user can create meetings
     } = req.query;
 
     const result = await leadService.getLeads({
@@ -286,6 +287,7 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       period: period as "today" | "weekly" | "earlier" | undefined,
       timeZone: timeZone as string,
       licenseKey: licenseKey as string,
+      canCreateMeeting: canCreateMeeting as string,
     });
 
     return res.status(200).json({
