@@ -757,8 +757,11 @@ export const resetPasswordWithVerificationToken = async (
   await UserModel.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
 
   // Mark the verification token as fully consumed (expire it)
-  otpRecord.verificationTokenExpiry = new Date(Date.now() - 1000); // Set to past
-  await otpRecord.save();
+  // Use updateOne to bypass Mongoose validation (validator requires future date)
+  await OTPModel.updateOne(
+    { _id: otpRecord._id },
+    { $set: { verificationTokenExpiry: new Date(Date.now() - 1000) } }
+  );
 
   return {
     email: user.email,
