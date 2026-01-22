@@ -41,6 +41,14 @@ interface MeetingReminderEmailData {
   minutesUntil: number;
 }
 
+interface CustomInvitationEmailData {
+  recipientEmail: string;
+  subject: string;
+  message: string;
+  senderName: string;
+  senderCompany?: string;
+}
+
 // Singleton transporter instance (reused across all email sends)
 let transporterInstance: nodemailer.Transporter | null = null;
 let transporterInitialized = false;
@@ -945,6 +953,159 @@ export const sendMeetingReminderEmail = async (data: MeetingReminderEmailData): 
     subject,
     html: generateMeetingReminderEmailHTML(data),
     text: generateMeetingReminderEmailText(data),
+  };
+
+  return await sendEmail(emailOptions);
+};
+
+// Generate HTML email template for custom invitation
+const generateCustomInvitationEmailHTML = (data: CustomInvitationEmailData): string => {
+  // Convert newlines to <br> for HTML display
+  const formattedMessage = data.message.replace(/\n/g, '<br>');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${data.subject}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #854AE6 0%, #6A38B8 100%);
+      color: #ffffff;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .content {
+      padding: 30px;
+    }
+    .message-box {
+      background-color: #f8f9fa;
+      border-left: 4px solid #854AE6;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .sender-info {
+      background-color: #e7f3ff;
+      border-left: 4px solid #0066cc;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .sender-info p {
+      margin: 5px 0;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6c757d;
+      border-top: 1px solid #dee2e6;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        margin: 0;
+        border-radius: 0;
+      }
+      .content {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>📬 You've Received an Invitation</h1>
+    </div>
+
+    <div class="content">
+      <p>Hello,</p>
+
+      <p>You have received a message from <strong>${data.senderName}</strong>${data.senderCompany ? ` at <strong>${data.senderCompany}</strong>` : ''}.</p>
+
+      <div class="message-box">
+        <h3 style="margin-top: 0; color: #854AE6;">📝 Message</h3>
+        <p style="white-space: pre-wrap; margin: 0;">${formattedMessage}</p>
+      </div>
+
+      <div class="sender-info">
+        <h4 style="margin-top: 0; color: #0066cc;">👤 From</h4>
+        <p><strong>Name:</strong> ${data.senderName}</p>
+        ${data.senderCompany ? `<p><strong>Organization:</strong> ${data.senderCompany}</p>` : ''}
+      </div>
+
+      <p style="margin-top: 30px; color: #6c757d; font-size: 14px;">
+        If you have any questions, please contact the sender directly.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p style="margin: 5px 0;">© ${new Date().getFullYear()} Scan2Card. All rights reserved.</p>
+      <p style="margin: 5px 0;">This email was sent via Scan2Card platform.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+};
+
+// Generate plain text version of custom invitation email
+const generateCustomInvitationEmailText = (data: CustomInvitationEmailData): string => {
+  return `
+You've Received an Invitation
+
+Hello,
+
+You have received a message from ${data.senderName}${data.senderCompany ? ` at ${data.senderCompany}` : ''}.
+
+MESSAGE:
+--------
+${data.message}
+
+FROM:
+-----
+Name: ${data.senderName}
+${data.senderCompany ? `Organization: ${data.senderCompany}` : ''}
+
+If you have any questions, please contact the sender directly.
+
+© ${new Date().getFullYear()} Scan2Card. All rights reserved.
+This email was sent via Scan2Card platform.
+  `.trim();
+};
+
+// Send custom invitation email
+export const sendCustomInvitationEmail = async (data: CustomInvitationEmailData): Promise<boolean> => {
+  const emailOptions: EmailOptions = {
+    to: data.recipientEmail,
+    subject: data.subject,
+    html: generateCustomInvitationEmailHTML(data),
+    text: generateCustomInvitationEmailText(data),
   };
 
   return await sendEmail(emailOptions);
