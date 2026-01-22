@@ -12,6 +12,7 @@ interface ILeadDetails {
   website?: string;
   address?: string;
   city?: string;
+  zipcode?: string;
   country?: string;
   notes?: string;
 }
@@ -101,6 +102,7 @@ const LeadSchema = new Schema<ILead>(
       website: { type: String, maxlength: 500 },
       address: { type: String, maxlength: 200 },
       city: { type: String, maxlength: 100 },
+      zipcode: { type: String, maxlength: 20 },
       country: { type: String, maxlength: 100 },
       notes: { type: String, maxlength: 2000 },
     },
@@ -131,6 +133,7 @@ const LeadSchema = new Schema<ILead>(
           ret.details.website = ret.details.website ?? '';
           ret.details.address = ret.details.address ?? '';
           ret.details.city = ret.details.city ?? '';
+          ret.details.zipcode = ret.details.zipcode ?? '';
           ret.details.country = ret.details.country ?? '';
           ret.details.notes = ret.details.notes ?? '';
         }

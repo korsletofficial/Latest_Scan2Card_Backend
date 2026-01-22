@@ -123,7 +123,7 @@ router.post(
 
 // Get catalogs for a specific license key (used when viewing lead details)
 router.get(
-  "/by-license-key/:eventId/:licenseKey",
+  "/by-license-key/:licenseKey",
   authenticateToken,
   authorizeRoles("TEAMMANAGER", "ENDUSER"),
   adminLimiter,

@@ -176,6 +176,14 @@ export const createLead = async (req: AuthRequest, res: Response) => {
         }
       }
 
+      // Validate zipcode length
+      if (details.zipcode && String(details.zipcode).length > 20) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Zipcode too long. Maximum 20 characters allowed.' 
+        });
+      }
+
       // Validate total payload size of details object
       const detailsJson = JSON.stringify(details);
       if (detailsJson.length > 10000) {
@@ -310,9 +318,9 @@ export const getLeadById = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.userId;
 
-    const lead = await leadService.getLeadById(id, userId!);
+    const { lead, licenseKey } = await leadService.getLeadById(id, userId!);
 
-    // Transform response to rename eventId to event and filter fields
+    // Transform response to rename eventId to event and include licenseKey
     const leadData = lead.toJSON();
     const responseData = {
       ...leadData,
@@ -320,6 +328,7 @@ export const getLeadById = async (req: AuthRequest, res: Response) => {
         _id: (leadData.eventId as any)._id,
         eventName: (leadData.eventId as any).eventName,
       } : null,
+      licenseKey: licenseKey,
     };
     delete (responseData as any).eventId;
 

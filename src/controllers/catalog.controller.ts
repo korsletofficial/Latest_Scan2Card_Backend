@@ -467,16 +467,16 @@ export const unassignCatalogFromLicenseKeys = async (req: AuthRequest, res: Resp
 // Get catalogs for a specific license key (used when sending to leads)
 export const getCatalogsForLicenseKey = async (req: AuthRequest, res: Response) => {
   try {
-    const { eventId, licenseKey } = req.params;
+    const { licenseKey } = req.params;
 
-    if (!eventId || !licenseKey) {
+    if (!licenseKey) {
       return res.status(400).json({
         success: false,
-        message: "Event ID and license key are required"
+        message: "License key is required"
       });
     }
 
-    const catalogs = await catalogService.getCatalogsForLicenseKey(eventId, licenseKey);
+    const catalogs = await catalogService.getCatalogsForLicenseKey(licenseKey);
 
     res.status(200).json({
       success: true,

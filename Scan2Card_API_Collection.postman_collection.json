@@ -3044,6 +3044,400 @@
 			"description": "Notification endpoints for managing in-app notifications and Firebase Cloud Messaging push notifications. Includes notification CRUD operations, read/unread tracking, and FCM token management. (Requires authentication)"
 		},
 		{
+			"name": "Catalogs",
+			"item": [
+				{
+					"name": "Get Catalog Categories",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								"categories"
+							]
+						},
+						"description": "Get available catalog categories (product, service, brochure, pricing, other). Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Get Catalog Stats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/stats",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								"stats"
+							]
+						},
+						"description": "Get catalog statistics for team manager dashboard including total catalogs, active/inactive counts, and category breakdown. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Get Available License Keys",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/available-license-keys?catalogId=",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								"available-license-keys"
+							],
+							"query": [
+								{
+									"key": "catalogId",
+									"value": "",
+									"description": "Optional: Catalog ID to check which keys are already assigned"
+								}
+							]
+						},
+						"description": "Get all license keys available for catalog assignment. Optionally pass catalogId to see which keys are already assigned. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Create Catalog",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Product Catalog 2024\",\n  \"description\": \"Our latest product offerings\",\n  \"category\": \"product\",\n  \"docLink\": \"https://example.com/catalog.pdf\",\n  \"whatsappTemplate\": \"Hi {{leadName}},\\n\\nThank you for visiting our booth! Here's our product catalog: {{docLink}}\\n\\nBest regards,\\n{{stallName}}\",\n  \"emailTemplate\": {\n    \"subject\": \"{{catalogName}} - From {{eventName}}\",\n    \"body\": \"Dear {{leadName}},\\n\\nThank you for visiting our booth at {{eventName}}.\\n\\nPlease find our {{catalogName}} here: {{docLink}}\\n\\nBest regards,\\n{{stallName}}\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/catalogs",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs"
+							]
+						},
+						"description": "Create a new catalog with WhatsApp and Email templates. Available placeholders: {{leadName}}, {{leadEmail}}, {{leadCompany}}, {{catalogName}}, {{docLink}}, {{eventName}}, {{stallName}}. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Get All Catalogs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/catalogs?page=1&limit=10&search=&category=",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (default: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Items per page (default: 10, max: 100)"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search by name or description"
+								},
+								{
+									"key": "category",
+									"value": "",
+									"description": "Filter by category (product, service, brochure, pricing, other)"
+								}
+							]
+						},
+						"description": "Get all catalogs for the authenticated team manager with pagination and filters. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Get Catalog by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/:catalogId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								":catalogId"
+							],
+							"variable": [
+								{
+									"key": "catalogId",
+									"value": "",
+									"description": "Catalog ID"
+								}
+							]
+						},
+						"description": "Get a single catalog by ID. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Update Catalog",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Product Catalog\",\n  \"description\": \"Updated description\",\n  \"category\": \"product\",\n  \"docLink\": \"https://example.com/new-catalog.pdf\",\n  \"whatsappTemplate\": \"Hi {{leadName}}, check out our updated catalog: {{docLink}}\",\n  \"emailTemplate\": {\n    \"subject\": \"Updated {{catalogName}}\",\n    \"body\": \"Dear {{leadName}},\\n\\nWe have updated our catalog. View it here: {{docLink}}\"\n  },\n  \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/:catalogId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								":catalogId"
+							],
+							"variable": [
+								{
+									"key": "catalogId",
+									"value": "",
+									"description": "Catalog ID"
+								}
+							]
+						},
+						"description": "Update a catalog. All fields are optional. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Delete Catalog",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/:catalogId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								":catalogId"
+							],
+							"variable": [
+								{
+									"key": "catalogId",
+									"value": "",
+									"description": "Catalog ID"
+								}
+							]
+						},
+						"description": "Soft delete a catalog. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Assign Catalog to License Keys",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"assignments\": [\n    {\n      \"eventId\": \"675f1234567890abcdef1234\",\n      \"licenseKey\": \"ABC123\"\n    },\n    {\n      \"eventId\": \"675f1234567890abcdef5678\",\n      \"licenseKey\": \"XYZ789\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/:catalogId/assign",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								":catalogId",
+								"assign"
+							],
+							"variable": [
+								{
+									"key": "catalogId",
+									"value": "",
+									"description": "Catalog ID"
+								}
+							]
+						},
+						"description": "Assign a catalog to one or more license keys. Team members using these keys can send this catalog to leads. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Unassign Catalog from License Keys",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"assignments\": [\n    {\n      \"eventId\": \"675f1234567890abcdef1234\",\n      \"licenseKey\": \"ABC123\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/:catalogId/unassign",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								":catalogId",
+								"unassign"
+							],
+							"variable": [
+								{
+									"key": "catalogId",
+									"value": "",
+									"description": "Catalog ID"
+								}
+							]
+						},
+						"description": "Remove catalog assignment from one or more license keys. Requires TEAMMANAGER role."
+					}
+				},
+				{
+					"name": "Get Catalogs by License Key",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/by-license-key/:licenseKey",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								"by-license-key",
+								":licenseKey"
+							],
+							"variable": [
+								{
+									"key": "licenseKey",
+									"value": "ABC123",
+									"description": "License key string"
+								}
+							]
+						},
+						"description": "Get all catalogs assigned to a specific license key. Used when viewing lead details to show available catalogs to send. Requires TEAMMANAGER or ENDUSER role."
+					}
+				},
+				{
+					"name": "Preview Template",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"template\": \"Hi {{leadName}}, here's our {{catalogName}}: {{docLink}}\",\n  \"templateType\": \"whatsapp\",\n  \"data\": {\n    \"leadName\": \"John Doe\",\n    \"catalogName\": \"Product Catalog\",\n    \"docLink\": \"https://example.com/catalog.pdf\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/catalogs/preview-template",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"catalogs",
+								"preview-template"
+							]
+						},
+						"description": "Preview a template with sample data. Returns both original and processed templates. Template type must be 'whatsapp' or 'email'. Requires TEAMMANAGER role."
+					}
+				}
+			],
+			"description": "Catalog management for team managers. Create, update, and assign catalogs (with WhatsApp/Email templates) to license keys. Team members can then send catalogs to leads. (Requires TEAMMANAGER role)"
+		},
+		{
 			"name": "Health Check",
 			"request": {
 				"method": "GET",

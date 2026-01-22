@@ -15,6 +15,7 @@ export interface BusinessCardData {
   website?: string;
   address?: string;
   city?: string;
+  zipcode?: string;
   country?: string;
   notes?: string;
 }
@@ -82,6 +83,7 @@ const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
     website: "",
     address: "",
     city: "",
+    zipcode: "",
     country: "",
     notes: "",
   };
@@ -134,6 +136,7 @@ const validateAndCleanData = (data: BusinessCardData): BusinessCardData => {
 
   if (data.address && data.address.trim()) cleaned.address = data.address.trim();
   if (data.city && data.city.trim()) cleaned.city = data.city.trim();
+  if (data.zipcode && data.zipcode.trim()) cleaned.zipcode = data.zipcode.trim();
   if (data.country && data.country.trim()) cleaned.country = data.country.trim();
   if (data.notes && data.notes.trim()) cleaned.notes = data.notes.trim();
 
@@ -153,7 +156,9 @@ CRITICAL: Extract EVERY piece of information from the text below, including:
 - ALL phone numbers
 - ALL email addresses
 - Website
-- Address, City, Country
+- Address, City, Zipcode, Country
+
+IMPORTANT: For Zipcode, also look for terms like "Pin Code", "Postal Code", "ZIP", "Zip Code", and extract the number that follows. For Indian business cards, Pin Code is commonly used for zipcode.
 
 INDIAN LANGUAGE TRANSLATION:
 If text is in Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, Malayalam, Gujarati, Punjabi, Urdu, translate to English.
@@ -179,7 +184,7 @@ EXTRACTION INSTRUCTIONS:
 5. FIND ALL PHONE NUMBERS - Add +91 for Indian numbers: "9876543210" → "+919876543210"
 6. FIND ALL EMAIL ADDRESSES - Look for @ symbol
 7. FIND WEBSITE - Look for www or .com
-8. FIND ADDRESS & CITY - Translate Indian language text
+8. FIND ADDRESS, CITY, ZIPCODE (including Pin Code, Postal Code, ZIP, Zip Code) & COUNTRY - Translate Indian language text
 9. TRANSLATE all Indian language text to English
 
 The OCR text may contain information from BOTH sides of the card - merge everything into ONE contact.
@@ -199,6 +204,7 @@ Output format (return ONLY valid JSON, no markdown):
   "website": "https://example.com",
   "address": "Shop No. 45, MG Road",
   "city": "Mumbai",
+  "zipcode": "400001",
   "country": "India"
 }
 
@@ -287,7 +293,7 @@ const analyzeOCRText = async (ocrText: string): Promise<BusinessCardData> => {
             // Handle string fields
             const stringKeys: (Exclude<keyof BusinessCardData, "emails" | "phoneNumbers">)[] = [
               'firstName', 'lastName', 'company', 'position',
-              'website', 'address', 'city', 'country', 'notes'
+              'website', 'address', 'city', 'zipcode', 'country', 'notes'
             ];
 
             for (const key of stringKeys) {

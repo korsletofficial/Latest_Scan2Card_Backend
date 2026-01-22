@@ -17,6 +17,7 @@ const DEFAULT_RESPONSE = {
   website: "",
   address: "",
   city: "",
+  zipcode: "",
   country: ""
 };
 
@@ -35,13 +36,14 @@ function ensureKeys(obj: any): typeof DEFAULT_RESPONSE {
     website: "",
     address: "",
     city: "",
+    zipcode: "",
     country: ""
   };
 
   if (!obj) return out;
 
   // Handle string fields
-  const stringKeys = ['firstName', 'lastName', 'company', 'position', 'website', 'address', 'city', 'country'];
+  const stringKeys = ['firstName', 'lastName', 'company', 'position', 'website', 'address', 'city', 'zipcode', 'country'];
   for (const k of stringKeys) {
     if (obj[k] && typeof obj[k] === "string" && obj[k].trim() !== "") {
       (out as any)[k] = obj[k].trim();
@@ -96,8 +98,11 @@ CRITICAL: You MUST scan the ENTIRE image carefully and extract EVERY piece of in
 - Website/URL
 - Complete address
 - City
+- Zipcode/Pin Code/Postal Code
 - State
 - Country
+
+IMPORTANT: For Zipcode, also look for terms like "Pin Code", "PIN", "Postal Code", "ZIP", "Zip Code", and extract the number that follows. For Indian business cards, "Pin Code" is commonly used for zipcode (e.g., "Pin Code: 421501" → zipcode: "421501").
 
 🇮🇳 INDIAN LANGUAGE TRANSLATION:
 If you see text in Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, Malayalam, Gujarati, Punjabi, Urdu, or any other Indian language, you MUST:
@@ -135,7 +140,8 @@ STEP-BY-STEP EXTRACTION PROCESS:
 7. FIND WEBSITE - Look for www. or .com
 8. FIND ADDRESS - Street, building, shop number
 9. FIND CITY - City name
-10. TRANSLATE any Indian language text to English
+10. FIND ZIPCODE - Look for "Pin Code", "PIN", "Postal Code", "ZIP" followed by a number (usually 5-6 digits)
+11. TRANSLATE any Indian language text to English
 
 Phone number formatting:
 - Add +91 for Indian numbers: "9876543210" → "+919876543210"
@@ -152,12 +158,14 @@ Output format:
   "website": "https://www.machinerytrading.com",
   "address": "Shop No. 45, MG Road, Andheri West",
   "city": "Mumbai",
+  "zipcode": "400058",
   "country": "India"
 }
 
 CRITICAL REQUIREMENTS:
 - Extract EVERY piece of information you can see on the card
 - The person's name is CRITICAL - don't leave firstName/lastName empty if you see a name
+- For zipcode: Look for "Pin Code", "PIN", "Postal Code", "ZIP" - extract just the number (e.g., "Pin Code :421501" → "421501")
 - Translate ALL Indian language text to English
 - Return ONLY valid JSON (no markdown, no explanations)
 - "emails" and "phoneNumbers" must be arrays of strings

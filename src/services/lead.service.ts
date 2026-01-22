@@ -464,13 +464,27 @@ export const getLeadById = async (id: string, userId: string) => {
     isDeleted: false,
   })
     .populate("eventId", "_id eventName")
-    .populate("userId", "firstName lastName email");
+    .populate("userId", "firstName lastName email phoneNumber companyName profileImage events");
 
   if (!lead) {
     throw new Error("Lead not found");
   }
 
-  return lead;
+  // Fetch license key from RSVP if lead has an event
+  let licenseKey: string | null = null;
+  if (lead.eventId) {
+    const rsvp = await RsvpModel.findOne({
+      userId: lead.userId,
+      eventId: lead.eventId,
+      isDeleted: false,
+    }).select("eventLicenseKey");
+
+    if (rsvp?.eventLicenseKey) {
+      licenseKey = rsvp.eventLicenseKey;
+    }
+  }
+
+  return { lead, licenseKey };
 };
 
 // Update Lead

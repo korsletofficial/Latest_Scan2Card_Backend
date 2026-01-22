@@ -235,11 +235,9 @@ export const unassignCatalogFromLicenseKeys = async (
 
 // Get catalogs assigned to a specific license key
 export const getCatalogsForLicenseKey = async (
-  eventId: string,
   licenseKey: string
 ) => {
   const catalogs = await CatalogModel.find({
-    "assignedLicenseKeys.eventId": new mongoose.Types.ObjectId(eventId),
     "assignedLicenseKeys.licenseKey": licenseKey.toUpperCase(),
     isActive: true,
     isDeleted: false
