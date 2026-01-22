@@ -370,27 +370,45 @@ export const getAvailableLicenseKeysForAssignment = async (
   }
 
   // Build list of available license keys
+  const now = new Date();
   const availableKeys: {
     eventId: string;
     eventName: string;
     licenseKey: string;
     stallName: string;
     isAssigned: boolean;
+    expiresAt: Date | null;
+    isExpired: boolean;
+    createdAt: Date | null;
   }[] = [];
 
   events.forEach((event) => {
     event.licenseKeys.forEach((lk) => {
       if (lk.teamManagerId?.toString() === teamManagerId) {
         const keyIdentifier = `${event._id.toString()}-${lk.key}`;
+        const expiresAt = lk.expiresAt || null;
+        const isExpired = expiresAt ? new Date(expiresAt) < now : false;
+
         availableKeys.push({
           eventId: event._id.toString(),
           eventName: event.eventName,
           licenseKey: lk.key,
           stallName: lk.stallName || "",
-          isAssigned: assignedKeys.has(keyIdentifier)
+          isAssigned: assignedKeys.has(keyIdentifier),
+          expiresAt: expiresAt,
+          isExpired: isExpired,
+          createdAt: lk.createdAt || null
         });
       }
     });
+  });
+
+  // Sort by createdAt descending (newest first), with null dates at the end
+  availableKeys.sort((a, b) => {
+    if (!a.createdAt && !b.createdAt) return 0;
+    if (!a.createdAt) return 1;
+    if (!b.createdAt) return -1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
   return availableKeys;
