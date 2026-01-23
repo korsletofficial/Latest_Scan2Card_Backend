@@ -435,16 +435,55 @@ export const getLeads = async (filter: GetLeadsFilter) => {
 
   // If minimal mode, only select ID and name fields, skip populates
   if (minimal) {
-    options.select = "_id details.firstName details.lastName details.email entryCode";
+    options.select = "_id details.firstName details.lastName details.email entryCode eventId";
   } else {
     // Default mode: return only essential fields without populates
-    options.select = "details isIndependentLead rating isActive isDeleted entryCode createdAt updatedAt";
+    options.select = "details isIndependentLead rating isActive isDeleted entryCode createdAt updatedAt eventId";
   }
 
   const leads = await LeadModel.paginate(query, options);
 
+  // Fetch user's RSVPs for all events in the results to get permissions
+  const eventIdsInResults = leads.docs
+    .filter((lead: any) => lead.eventId)
+    .map((lead: any) => lead.eventId);
+
+  // Get unique event IDs
+  const uniqueEventIds = [...new Set(eventIdsInResults.map((id: any) => id.toString()))];
+
+  // Fetch user's RSVPs for these events
+  const userRsvpsForPermissions = await RsvpModel.find({
+    userId: userId,
+    eventId: { $in: uniqueEventIds },
+    isDeleted: false,
+  }).select("eventId canUseOwnCalendar canCreateMeeting").lean();
+
+  // Create a map of eventId -> permissions
+  const permissionsMap = new Map(
+    userRsvpsForPermissions.map((rsvp) => [
+      rsvp.eventId?.toString(),
+      {
+        canUseOwnCalendar: rsvp.canUseOwnCalendar ?? false,
+        canCreateMeeting: rsvp.canCreateMeeting ?? true,
+      },
+    ])
+  );
+
+  // Add permissions to each lead
+  const leadsWithPermissions = leads.docs.map((lead: any) => {
+    const leadObj = lead.toJSON ? lead.toJSON() : lead;
+    const eventIdStr = leadObj.eventId?.toString();
+    const permissions = eventIdStr ? permissionsMap.get(eventIdStr) : null;
+
+    return {
+      ...leadObj,
+      canUseOwnCalendar: permissions?.canUseOwnCalendar ?? false,
+      canCreateMeeting: permissions?.canCreateMeeting ?? true,
+    };
+  });
+
   return {
-    leads: leads.docs,
+    leads: leadsWithPermissions,
     pagination: {
       total: leads.totalDocs,
       page: leads.page,
