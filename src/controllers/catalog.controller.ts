@@ -2,12 +2,26 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import * as catalogService from "../services/catalog.service";
 import { CatalogCategory } from "../models/catalog.model";
+import { uploadFileToS3 } from "../services/awsS3.service";
 
 // Create a new catalog
 export const createCatalog = async (req: AuthRequest, res: Response) => {
   try {
     const teamManagerId = req.user?.userId;
-    const { name, description, category, docLink, whatsappTemplate, emailTemplate } = req.body;
+    const { name, description, category, whatsappTemplate, emailTemplate } = req.body;
+
+    // Parse emailTemplate if it's a string (from FormData)
+    let parsedEmailTemplate = emailTemplate;
+    if (typeof emailTemplate === "string") {
+      try {
+        parsedEmailTemplate = JSON.parse(emailTemplate);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid email template format"
+        });
+      }
+    }
 
     // Validate required fields
     if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -31,17 +45,11 @@ export const createCatalog = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (!docLink || typeof docLink !== "string") {
+    // Validate file upload
+    if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "Document link is required"
-      });
-    }
-
-    if (!/^https?:\/\/.+/.test(docLink)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid document link URL format"
+        message: "Document file is required"
       });
     }
 
@@ -59,36 +67,48 @@ export const createCatalog = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (!emailTemplate || !emailTemplate.subject || !emailTemplate.body) {
+    if (!parsedEmailTemplate || !parsedEmailTemplate.subject || !parsedEmailTemplate.body) {
       return res.status(400).json({
         success: false,
         message: "Email template with subject and body is required"
       });
     }
 
-    if (emailTemplate.subject.length > 200) {
+    if (parsedEmailTemplate.subject.length > 200) {
       return res.status(400).json({
         success: false,
         message: "Email subject must not exceed 200 characters"
       });
     }
 
-    if (emailTemplate.body.length > 5000) {
+    if (parsedEmailTemplate.body.length > 5000) {
       return res.status(400).json({
         success: false,
         message: "Email body must not exceed 5000 characters"
       });
     }
 
+    // Upload file to S3
+    console.log(`📤 Uploading catalog file: ${req.file.originalname}`);
+    const uploadResult = await uploadFileToS3(req.file, {
+      folder: "catalog-files",
+      makePublic: true
+    });
+    console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
+
     const catalog = await catalogService.createCatalog(teamManagerId!, {
       name: name.trim(),
       description: description?.trim(),
       category,
-      docLink: docLink.trim(),
+      docLink: uploadResult.url,
+      s3Key: uploadResult.key,
+      originalFileName: req.file.originalname,
+      fileSize: req.file.size,
+      contentType: req.file.mimetype,
       whatsappTemplate,
       emailTemplate: {
-        subject: emailTemplate.subject.trim(),
-        body: emailTemplate.body
+        subject: parsedEmailTemplate.subject.trim(),
+        body: parsedEmailTemplate.body
       }
     });
 
@@ -200,13 +220,26 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
   try {
     const teamManagerId = req.user?.userId;
     const { catalogId } = req.params;
-    const { name, description, category, docLink, whatsappTemplate, emailTemplate, isActive } = req.body;
+    const { name, description, category, whatsappTemplate, emailTemplate, isActive } = req.body;
 
     if (!catalogId) {
       return res.status(400).json({
         success: false,
         message: "Catalog ID is required"
       });
+    }
+
+    // Parse emailTemplate if it's a string (from FormData)
+    let parsedEmailTemplate = emailTemplate;
+    if (typeof emailTemplate === "string") {
+      try {
+        parsedEmailTemplate = JSON.parse(emailTemplate);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid email template format"
+        });
+      }
     }
 
     // Build update object with only provided fields
@@ -242,14 +275,20 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
       updateData.category = category;
     }
 
-    if (docLink !== undefined) {
-      if (!/^https?:\/\/.+/.test(docLink)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid document link URL format"
-        });
-      }
-      updateData.docLink = docLink.trim();
+    // Handle file upload if a new file is provided
+    if (req.file) {
+      console.log(`📤 Uploading new catalog file: ${req.file.originalname}`);
+      const uploadResult = await uploadFileToS3(req.file, {
+        folder: "catalog-files",
+        makePublic: true
+      });
+      console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
+
+      updateData.docLink = uploadResult.url;
+      updateData.s3Key = uploadResult.key;
+      updateData.originalFileName = req.file.originalname;
+      updateData.fileSize = req.file.size;
+      updateData.contentType = req.file.mimetype;
     }
 
     if (whatsappTemplate !== undefined) {
@@ -262,28 +301,28 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
       updateData.whatsappTemplate = whatsappTemplate;
     }
 
-    if (emailTemplate !== undefined) {
-      if (!emailTemplate.subject || !emailTemplate.body) {
+    if (parsedEmailTemplate !== undefined) {
+      if (!parsedEmailTemplate.subject || !parsedEmailTemplate.body) {
         return res.status(400).json({
           success: false,
           message: "Email template must have subject and body"
         });
       }
-      if (emailTemplate.subject.length > 200) {
+      if (parsedEmailTemplate.subject.length > 200) {
         return res.status(400).json({
           success: false,
           message: "Email subject must not exceed 200 characters"
         });
       }
-      if (emailTemplate.body.length > 5000) {
+      if (parsedEmailTemplate.body.length > 5000) {
         return res.status(400).json({
           success: false,
           message: "Email body must not exceed 5000 characters"
         });
       }
       updateData.emailTemplate = {
-        subject: emailTemplate.subject.trim(),
-        body: emailTemplate.body
+        subject: parsedEmailTemplate.subject.trim(),
+        body: parsedEmailTemplate.body
       };
     }
 

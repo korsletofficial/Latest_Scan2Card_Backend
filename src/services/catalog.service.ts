@@ -8,6 +8,10 @@ interface CreateCatalogInput {
   description?: string;
   category: CatalogCategory;
   docLink: string;
+  s3Key: string;
+  originalFileName: string;
+  fileSize?: number;
+  contentType?: string;
   whatsappTemplate: string;
   emailTemplate: {
     subject: string;
@@ -21,6 +25,10 @@ interface UpdateCatalogInput {
   description?: string;
   category?: CatalogCategory;
   docLink?: string;
+  s3Key?: string;
+  originalFileName?: string;
+  fileSize?: number;
+  contentType?: string;
   whatsappTemplate?: string;
   emailTemplate?: {
     subject: string;
@@ -40,6 +48,10 @@ export const createCatalog = async (
     description: catalogData.description,
     category: catalogData.category,
     docLink: catalogData.docLink,
+    s3Key: catalogData.s3Key,
+    originalFileName: catalogData.originalFileName,
+    fileSize: catalogData.fileSize,
+    contentType: catalogData.contentType,
     whatsappTemplate: catalogData.whatsappTemplate,
     emailTemplate: catalogData.emailTemplate,
     assignedLicenseKeys: [],

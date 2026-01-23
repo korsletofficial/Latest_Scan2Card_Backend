@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 import { adminLimiter } from "../middleware/rateLimiter.middleware";
 import {
@@ -17,6 +18,15 @@ import {
 } from "../controllers/catalog.controller";
 
 const router = Router();
+
+// Multer configuration for catalog file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+});
 
 // ==========================================
 // TEAM MANAGER CATALOG ROUTES
@@ -65,6 +75,7 @@ router.post(
   authenticateToken,
   authorizeRoles("TEAMMANAGER"),
   adminLimiter,
+  upload.single("file"),
   createCatalog
 );
 
@@ -89,6 +100,7 @@ router.put(
   authenticateToken,
   authorizeRoles("TEAMMANAGER"),
   adminLimiter,
+  upload.single("file"),
   updateCatalog
 );
 

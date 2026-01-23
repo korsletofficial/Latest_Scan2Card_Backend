@@ -3130,15 +3130,48 @@
 							{
 								"key": "Authorization",
 								"value": "Bearer {{authToken}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
 							}
 						],
 						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"name\": \"Product Catalog 2024\",\n  \"description\": \"Our latest product offerings\",\n  \"category\": \"product\",\n  \"docLink\": \"https://example.com/catalog.pdf\",\n  \"whatsappTemplate\": \"Hi {{leadName}},\\n\\nThank you for visiting our booth! Here's our product catalog: {{docLink}}\\n\\nBest regards,\\n{{stallName}}\",\n  \"emailTemplate\": {\n    \"subject\": \"{{catalogName}} - From {{eventName}}\",\n    \"body\": \"Dear {{leadName}},\\n\\nThank you for visiting our booth at {{eventName}}.\\n\\nPlease find our {{catalogName}} here: {{docLink}}\\n\\nBest regards,\\n{{stallName}}\"\n  }\n}"
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "",
+									"description": "Document file to upload (PDF, DOC, DOCX, XLS, XLSX, images - max 10MB)"
+								},
+								{
+									"key": "name",
+									"value": "Product Catalog 2024",
+									"type": "text",
+									"description": "Catalog name (required, max 100 chars)"
+								},
+								{
+									"key": "description",
+									"value": "Our latest product offerings",
+									"type": "text",
+									"description": "Catalog description (optional, max 500 chars)"
+								},
+								{
+									"key": "category",
+									"value": "product",
+									"type": "text",
+									"description": "Category: product, service, brochure, pricing, other"
+								},
+								{
+									"key": "whatsappTemplate",
+									"value": "Hi {{leadName}},\n\nThank you for visiting our booth! Here's our product catalog: {{docLink}}\n\nBest regards,\n{{stallName}}",
+									"type": "text",
+									"description": "WhatsApp message template (required, max 1000 chars)"
+								},
+								{
+									"key": "emailTemplate",
+									"value": "{\"subject\":\"{{catalogName}} - From {{eventName}}\",\"body\":\"Dear {{leadName}},\\n\\nThank you for visiting our booth at {{eventName}}.\\n\\nPlease find our {{catalogName}} here: {{docLink}}\\n\\nBest regards,\\n{{stallName}}\"}",
+									"type": "text",
+									"description": "Email template as JSON string with subject and body"
+								}
+							]
 						},
 						"url": {
 							"raw": "{{baseUrl}}/catalogs",
@@ -3149,7 +3182,7 @@
 								"catalogs"
 							]
 						},
-						"description": "Create a new catalog with WhatsApp and Email templates. Available placeholders: {{leadName}}, {{leadEmail}}, {{leadCompany}}, {{catalogName}}, {{docLink}}, {{eventName}}, {{stallName}}. Requires TEAMMANAGER role."
+						"description": "Create a new catalog with file upload, WhatsApp and Email templates. The file is uploaded to S3 and the URL is stored. Available template placeholders: {{leadName}}, {{leadEmail}}, {{leadCompany}}, {{catalogName}}, {{docLink}}, {{eventName}}, {{stallName}}. Requires TEAMMANAGER role."
 					}
 				},
 				{
@@ -3234,15 +3267,54 @@
 							{
 								"key": "Authorization",
 								"value": "Bearer {{authToken}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
 							}
 						],
 						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"name\": \"Updated Product Catalog\",\n  \"description\": \"Updated description\",\n  \"category\": \"product\",\n  \"docLink\": \"https://example.com/new-catalog.pdf\",\n  \"whatsappTemplate\": \"Hi {{leadName}}, check out our updated catalog: {{docLink}}\",\n  \"emailTemplate\": {\n    \"subject\": \"Updated {{catalogName}}\",\n    \"body\": \"Dear {{leadName}},\\n\\nWe have updated our catalog. View it here: {{docLink}}\"\n  },\n  \"isActive\": true\n}"
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "",
+									"description": "New document file to replace existing (optional)"
+								},
+								{
+									"key": "name",
+									"value": "Updated Product Catalog",
+									"type": "text",
+									"description": "Catalog name (optional)"
+								},
+								{
+									"key": "description",
+									"value": "Updated description",
+									"type": "text",
+									"description": "Catalog description (optional)"
+								},
+								{
+									"key": "category",
+									"value": "product",
+									"type": "text",
+									"description": "Category (optional)"
+								},
+								{
+									"key": "whatsappTemplate",
+									"value": "Hi {{leadName}}, check out our updated catalog: {{docLink}}",
+									"type": "text",
+									"description": "WhatsApp template (optional)"
+								},
+								{
+									"key": "emailTemplate",
+									"value": "{\"subject\":\"Updated {{catalogName}}\",\"body\":\"Dear {{leadName}},\\n\\nWe have updated our catalog. View it here: {{docLink}}\"}",
+									"type": "text",
+									"description": "Email template as JSON string (optional)"
+								},
+								{
+									"key": "isActive",
+									"value": "true",
+									"type": "text",
+									"description": "Active status (optional)"
+								}
+							]
 						},
 						"url": {
 							"raw": "{{baseUrl}}/catalogs/:catalogId",
@@ -3261,7 +3333,7 @@
 								}
 							]
 						},
-						"description": "Update a catalog. All fields are optional. Requires TEAMMANAGER role."
+						"description": "Update a catalog. All fields are optional. Upload a new file to replace the existing document. Requires TEAMMANAGER role."
 					}
 				},
 				{

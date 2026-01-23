@@ -29,6 +29,10 @@ export interface ICatalog extends Document {
   description?: string;
   category: CatalogCategory;
   docLink: string;
+  s3Key: string;
+  originalFileName: string;
+  fileSize?: number;
+  contentType?: string;
   whatsappTemplate: string;
   emailTemplate: IEmailTemplate;
   assignedLicenseKeys: IAssignedLicenseKey[];
@@ -69,14 +73,25 @@ const CatalogSchema = new Schema<ICatalog>(
       type: String,
       required: true,
       trim: true,
-      maxlength: 1000,
-      validate: {
-        validator: function (v: string) {
-          // Allow http or https URLs
-          return /^https?:\/\/.+/.test(v);
-        },
-        message: "Invalid URL format. Must start with http:// or https://"
-      }
+      maxlength: 2000
+    },
+    s3Key: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    originalFileName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 500
+    },
+    fileSize: {
+      type: Number
+    },
+    contentType: {
+      type: String,
+      trim: true
     },
     whatsappTemplate: {
       type: String,
