@@ -437,16 +437,21 @@ export const getLeads = async (filter: GetLeadsFilter) => {
   if (minimal) {
     options.select = "_id details.firstName details.lastName details.email entryCode eventId";
   } else {
-    // Default mode: return only essential fields without populates
-    options.select = "details isIndependentLead rating isActive isDeleted entryCode createdAt updatedAt eventId";
+    // Default mode: return essential fields with populated eventId and userId
+    options.select = "details isIndependentLead rating isActive isDeleted entryCode createdAt updatedAt eventId userId";
+    options.populate = [
+      { path: "eventId", select: "_id eventName type startDate endDate" },
+      { path: "userId", select: "_id firstName lastName email" }
+    ];
   }
 
   const leads = await LeadModel.paginate(query, options);
 
   // Fetch user's RSVPs for all events in the results to get permissions
+  // Note: eventId may be populated (object) or just an ObjectId, handle both cases
   const eventIdsInResults = leads.docs
     .filter((lead: any) => lead.eventId)
-    .map((lead: any) => lead.eventId);
+    .map((lead: any) => lead.eventId._id || lead.eventId);
 
   // Get unique event IDs
   const uniqueEventIds = [...new Set(eventIdsInResults.map((id: any) => id.toString()))];
@@ -469,14 +474,40 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     ])
   );
 
-  // Add permissions to each lead
+  // Add permissions to each lead and filter populated fields
   const leadsWithPermissions = leads.docs.map((lead: any) => {
     const leadObj = lead.toJSON ? lead.toJSON() : lead;
-    const eventIdStr = leadObj.eventId?.toString();
+    // Handle both populated eventId (object with _id) and unpopulated (ObjectId)
+    const eventIdStr = leadObj.eventId?._id?.toString() || leadObj.eventId?.toString();
     const permissions = eventIdStr ? permissionsMap.get(eventIdStr) : null;
+
+    // Filter eventId to only include required fields
+    let filteredEventId = leadObj.eventId;
+    if (leadObj.eventId && typeof leadObj.eventId === 'object' && leadObj.eventId._id) {
+      filteredEventId = {
+        _id: leadObj.eventId._id,
+        eventName: leadObj.eventId.eventName,
+        type: leadObj.eventId.type,
+        startDate: leadObj.eventId.startDate,
+        endDate: leadObj.eventId.endDate,
+      };
+    }
+
+    // Filter userId to only include required fields
+    let filteredUserId = leadObj.userId;
+    if (leadObj.userId && typeof leadObj.userId === 'object' && leadObj.userId._id) {
+      filteredUserId = {
+        _id: leadObj.userId._id,
+        firstName: leadObj.userId.firstName,
+        lastName: leadObj.userId.lastName,
+        email: leadObj.userId.email,
+      };
+    }
 
     return {
       ...leadObj,
+      eventId: filteredEventId,
+      userId: filteredUserId,
       canUseOwnCalendar: permissions?.canUseOwnCalendar ?? false,
       canCreateMeeting: permissions?.canCreateMeeting ?? true,
     };
