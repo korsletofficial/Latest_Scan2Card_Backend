@@ -470,21 +470,26 @@ export const getLeadById = async (id: string, userId: string) => {
     throw new Error("Lead not found");
   }
 
-  // Fetch license key from RSVP if lead has an event
+  // Fetch license key and permissions from RSVP if lead has an event
   let licenseKey: string | null = null;
+  let canUseOwnCalendar: boolean = false;
+  let canCreateMeeting: boolean = true;
+
   if (lead.eventId) {
     const rsvp = await RsvpModel.findOne({
       userId: lead.userId,
       eventId: lead.eventId,
       isDeleted: false,
-    }).select("eventLicenseKey");
+    }).select("eventLicenseKey canUseOwnCalendar canCreateMeeting");
 
-    if (rsvp?.eventLicenseKey) {
-      licenseKey = rsvp.eventLicenseKey;
+    if (rsvp) {
+      licenseKey = rsvp.eventLicenseKey || null;
+      canUseOwnCalendar = rsvp.canUseOwnCalendar ?? false;
+      canCreateMeeting = rsvp.canCreateMeeting ?? true;
     }
   }
 
-  return { lead, licenseKey };
+  return { lead, licenseKey, canUseOwnCalendar, canCreateMeeting };
 };
 
 // Update Lead

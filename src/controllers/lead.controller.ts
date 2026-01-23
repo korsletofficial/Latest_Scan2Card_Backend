@@ -318,9 +318,9 @@ export const getLeadById = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.userId;
 
-    const { lead, licenseKey } = await leadService.getLeadById(id, userId!);
+    const { lead, licenseKey, canUseOwnCalendar, canCreateMeeting } = await leadService.getLeadById(id, userId!);
 
-    // Transform response to rename eventId to event and include licenseKey
+    // Transform response to rename eventId to event and include permissions
     const leadData = lead.toJSON();
     const responseData = {
       ...leadData,
@@ -329,6 +329,8 @@ export const getLeadById = async (req: AuthRequest, res: Response) => {
         eventName: (leadData.eventId as any).eventName,
       } : null,
       licenseKey: licenseKey,
+      canUseOwnCalendar: canUseOwnCalendar,
+      canCreateMeeting: canCreateMeeting,
     };
     delete (responseData as any).eventId;
 
