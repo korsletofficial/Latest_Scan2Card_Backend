@@ -39,6 +39,7 @@ export interface IUser extends Document {
   calendarTokenExpiry?: Date; // Access token expiry time
   calendarConnectedAt?: Date; // When the calendar was connected
   calendarEmail?: string; // Email of connected calendar account
+  address?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -209,6 +210,11 @@ const UserSchema = new Schema<IUser>(
       type: String,
       maxlength: 255,
       lowercase: true,
+      trim: true
+    },
+    address: {
+      type: String,
+      maxlength: 300,
       trim: true
     },
   },

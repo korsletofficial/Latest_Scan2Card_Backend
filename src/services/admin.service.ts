@@ -158,6 +158,8 @@ export const updateExhibitor = async (id: string, data: UpdateExhibitorData) => 
   if (data.phoneNumber) exhibitor.phoneNumber = data.phoneNumber.trim();
   if (data.companyName !== undefined)
     exhibitor.companyName = data.companyName.trim();
+  if (data.address !== undefined)
+    exhibitor.address = data.address.trim();
   if (typeof data.isActive === "boolean") exhibitor.isActive = data.isActive;
   if (data.password) exhibitor.password = await bcrypt.hash(data.password, 10);
 

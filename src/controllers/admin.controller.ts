@@ -266,6 +266,14 @@ export const updateExhibitor = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { firstName, lastName, email, phoneNumber, companyName, password, address, isActive, maxLicenseKeys, maxTotalActivations } = req.body;
 
+    // Validate address if provided
+    if (address && address.length > 300) {
+      return res.status(400).json({
+        success: false,
+        message: 'Address must not exceed 300 characters',
+      });
+    }
+
     const sanitizedData = sanitizeEmptyStrings({
       firstName,
       lastName,
