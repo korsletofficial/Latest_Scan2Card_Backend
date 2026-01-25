@@ -23,6 +23,7 @@ export interface QRContactData {
   address?: string;
   streetName?: string; // Street address (alias for address)
   city?: string;
+  zipcode?: string; // Postal/ZIP code
   country?: string;
   uniqueCode?: string; // Optional entry/unique code (9-15 chars)
 }
@@ -41,6 +42,7 @@ const normalizeContactData = (data: QRContactData): QRContactData => {
     website: data.website || '',
     address: data.address || '',
     city: data.city || '',
+    zipcode: data.zipcode || '',
     country: data.country || '',
     ...data, // Preserve other fields like title, department, etc.
   };
@@ -708,6 +710,7 @@ const parseVCard = (vcardText: string): QRContactData => {
         // addr format: [po-box, extended, street, city, region, postal, country]
         if (addr[2]) contactData.address = addr[2]; // street
         if (addr[3]) contactData.city = addr[3]; // city
+        if (addr[5]) contactData.zipcode = addr[5]; // postal code
         if (addr[6]) contactData.country = addr[6]; // country
       }
     }
@@ -741,15 +744,31 @@ const parseVCard = (vcardText: string): QRContactData => {
 
 /**
  * Extracts contact info from plain text
+ * Handles various formats including pipe-delimited, comma-delimited, and line-based
  */
 const parsePlainText = (text: string): QRContactData => {
   const contactData: QRContactData = {};
 
-  // Extract email
-  contactData.email = extractEmail(text);
+  // Extract all emails
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const emails = text.match(emailRegex);
+  if (emails && emails.length > 0) {
+    contactData.email = emails[0];
+  }
 
-  // Extract phone
-  contactData.phoneNumber = extractPhone(text);
+  // Extract all phone numbers
+  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}[-.\s]?\d{0,4}/g;
+  const phones = text.match(phoneRegex);
+  if (phones) {
+    // Filter valid phone numbers (at least 7 digits)
+    const validPhones = phones.filter(p => {
+      const digits = p.replace(/\D/g, '');
+      return digits.length >= 7 && digits.length <= 15;
+    });
+    if (validPhones.length > 0) {
+      contactData.phoneNumber = validPhones[0].trim();
+    }
+  }
 
   // Extract unique code (optional)
   const uniqueCode = extractUniqueCode(text);
@@ -758,27 +777,109 @@ const parsePlainText = (text: string): QRContactData => {
     console.log(`📌 Extracted unique code from plain text: ${uniqueCode}`);
   }
 
-  // Try to extract name from first line
-  const lines = text.split("\n").filter((line) => line.trim());
-  if (lines.length > 0) {
-    const firstLine = lines[0].trim();
-    // If first line looks like a name (less than 50 chars, no email/phone)
-    if (
-      firstLine.length < 50 &&
-      !firstLine.includes("@") &&
-      !firstLine.match(/\d{3}/)
-    ) {
-      const nameParts = firstLine.split(" ");
-      if (nameParts.length >= 2) {
-        contactData.firstName = nameParts[0];
-        contactData.lastName = nameParts.slice(1).join(" ");
-      } else {
-        contactData.firstName = firstLine;
+  // Check if text is pipe-delimited (common format for QR codes)
+  if (text.includes('|')) {
+    const segments = text.split('|').map(s => s.trim()).filter(s => s.length > 0);
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+
+      // Skip if it's an email (already extracted)
+      if (segment.includes('@')) continue;
+
+      // Skip if it looks like phone numbers (single or multiple)
+      // Check if segment is primarily numeric (phone numbers separated by / or space)
+      const digitCount = segment.replace(/\D/g, '').length;
+      const totalLength = segment.replace(/\s/g, '').length;
+      const digitRatio = digitCount / totalLength;
+
+      // Skip if more than 60% digits (likely phone numbers)
+      if (digitRatio > 0.6 && digitCount >= 7) continue;
+
+      // Also skip if it matches phone pattern with separator (e.g., "8149149003 / 9028842242")
+      if (/^\d[\d\s\/\-\+\(\)]+$/.test(segment) && digitCount >= 7) continue;
+
+      // Skip GST numbers and similar codes
+      if (/^GST\s*:/i.test(segment) || /^[A-Z]{2,5}\s*:/i.test(segment)) continue;
+
+      // First non-phone/email segment is likely the name
+      if (!contactData.firstName && i === 0) {
+        // Handle "Name / Phone" format in first segment
+        const namePart = segment.split('/')[0].trim();
+        if (namePart && !namePart.match(/^\d/) && namePart.length < 50) {
+          const nameParts = namePart.split(/\s+/);
+          if (nameParts.length >= 2) {
+            contactData.firstName = nameParts[0];
+            contactData.lastName = nameParts.slice(1).join(' ');
+          } else {
+            contactData.firstName = namePart;
+          }
+        }
+        continue;
+      }
+
+      // Look for company name (usually contains keywords or is capitalized)
+      if (!contactData.company) {
+        const companyKeywords = ['technologies', 'solutions', 'services', 'pvt', 'ltd', 'inc', 'corp', 'llc', 'partner', 'company'];
+        const lowerSegment = segment.toLowerCase();
+        if (companyKeywords.some(kw => lowerSegment.includes(kw))) {
+          // Extract company name (before any dash or description)
+          const companyPart = segment.split('–')[0].split('-')[0].trim();
+          contactData.company = companyPart;
+
+          // Check for position in the same segment (after dash)
+          const afterDash = segment.includes('–') ? segment.split('–')[1]?.trim() :
+                           segment.includes('-') ? segment.split('-').slice(1).join('-').trim() : '';
+          if (afterDash && !contactData.position) {
+            contactData.position = afterDash;
+          }
+          continue;
+        }
+      }
+
+      // Look for address (contains numbers and keywords)
+      if (!contactData.address) {
+        const addressKeywords = ['plot', 'tower', 'floor', 'building', 'road', 'street', 'lane', 'sector', 'block', 'flat', 'house', 'no.', 'no:', '/'];
+        const lowerSegment = segment.toLowerCase();
+        if (addressKeywords.some(kw => lowerSegment.includes(kw)) || /\d+.*,/.test(segment)) {
+          contactData.address = segment;
+
+          // Try to extract city and zipcode from address
+          const zipMatch = segment.match(/\b(\d{5,6})\b/); // Indian pincode (6 digits) or US zip (5 digits)
+          if (zipMatch) {
+            contactData.zipcode = zipMatch[1];
+            // City is usually before the pincode
+            const beforeZip = segment.substring(0, segment.indexOf(zipMatch[0]));
+            const cityMatch = beforeZip.match(/([A-Za-z]+)\s*$/);
+            if (cityMatch) {
+              contactData.city = cityMatch[1];
+            }
+          }
+          continue;
+        }
+      }
+    }
+  } else {
+    // Fallback: Try to extract name from first line (original logic)
+    const lines = text.split("\n").filter((line) => line.trim());
+    if (lines.length > 0) {
+      const firstLine = lines[0].trim();
+      // If first line looks like a name (less than 50 chars, no email/phone)
+      if (
+        firstLine.length < 50 &&
+        !firstLine.includes("@") &&
+        !firstLine.match(/\d{3}/)
+      ) {
+        const nameParts = firstLine.split(" ");
+        if (nameParts.length >= 2) {
+          contactData.firstName = nameParts[0];
+          contactData.lastName = nameParts.slice(1).join(" ");
+        } else {
+          contactData.firstName = firstLine;
+        }
       }
     }
   }
-
-  // Do not include notes in the response
 
   return contactData;
 };

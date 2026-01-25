@@ -998,6 +998,15 @@ export const getLeadsForExport = async (filter: GetLeadsFilter) => {
 
     const eventIds = exhibitorEvents.map((event) => event._id);
     query.eventId = { $in: eventIds };
+  } else if (userRole === "TEAMMANAGER") {
+    // For team managers, get leads from events they manage
+    const managedEvents = await EventModel.find({
+      "licenseKeys.teamManagerId": userId,
+      isDeleted: false,
+    }).select("_id");
+
+    const eventIds = managedEvents.map((event) => event._id);
+    query.eventId = { $in: eventIds };
   } else {
     // For end users, only show their own leads
     query.userId = userId;
