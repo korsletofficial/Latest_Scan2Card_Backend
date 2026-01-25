@@ -1,7 +1,6 @@
 import VCard from "vcard-parser";
 import puppeteer from "puppeteer-core";
-// Uncomment and configure if you want LLM fallback
-// import OpenAI from "openai";
+import axios from "axios";
 
 // Browserless API configuration
 // Uses WebSocket with Puppeteer (Option 2 from Browserless docs) - recommended by Browserless
@@ -743,10 +742,232 @@ const parseVCard = (vcardText: string): QRContactData => {
 };
 
 /**
- * Extracts contact info from plain text
- * Handles various formats including pipe-delimited, comma-delimited, and line-based
+ * Prompt for analyzing QR code plain text with AI
  */
-const parsePlainText = (text: string): QRContactData => {
+const getQRTextAnalysisPrompt = (): string => {
+  return `Parse this text from a QR code and extract ALL contact information. The text may be pipe-delimited, comma-delimited, or in any other format.
+
+CRITICAL: Extract EVERY piece of information, including:
+- Person's FULL NAME (first name + last name)
+- Job title/Position
+- Company/Business name
+- ALL phone numbers (format with country code, e.g., +919876543210)
+- ALL email addresses
+- Website
+- Full Address
+- City
+- Zipcode/Pin Code/Postal Code
+- Country
+
+IMPORTANT RULES:
+1. For phone numbers: Extract ALL numbers, add +91 for Indian 10-digit numbers
+2. For emails: Extract ALL email addresses found
+3. For address: Look for flat/plot numbers, building names, street names, area names
+4. For zipcode: Look for 5-6 digit codes (Indian pincode is 6 digits)
+5. Skip GST numbers, registration codes, and other business identifiers
+6. If text contains separators like | or , treat each segment as a different field
+
+Output format (return ONLY valid JSON, no markdown):
+{
+  "firstName": "",
+  "lastName": "",
+  "company": "",
+  "position": "",
+  "emails": [],
+  "phoneNumbers": [],
+  "website": "",
+  "address": "",
+  "city": "",
+  "zipcode": "",
+  "country": ""
+}
+
+CRITICAL:
+- "emails" and "phoneNumbers" must be arrays
+- Return ONLY valid JSON (no markdown, no explanations)
+- Extract as much data as possible from the text
+
+Text to Parse:
+`;
+};
+
+/**
+ * Analyzes QR code plain text using OpenAI/Gemini
+ */
+const analyzeQRTextWithAI = async (text: string): Promise<QRContactData> => {
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+  if (!OPENAI_API_KEY && !GEMINI_API_KEY) {
+    console.warn("⚠️ No AI API keys configured, falling back to regex parsing");
+    return {};
+  }
+
+  const prompt = getQRTextAnalysisPrompt();
+
+  // Try OpenAI first (Primary)
+  if (OPENAI_API_KEY) {
+    try {
+      console.log("🤖 Analyzing QR text with OpenAI...");
+      const url = "https://api.openai.com/v1/chat/completions";
+
+      const res = await axios.post(
+        url,
+        {
+          model: "gpt-4o-mini", // Using gpt-4o-mini for cost efficiency on simple text
+          messages: [
+            {
+              role: "system",
+              content: prompt,
+            },
+            {
+              role: "user",
+              content: text,
+            },
+          ],
+          temperature: 0.0,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+          },
+          timeout: 15000,
+        }
+      );
+
+      const responseText = res?.data?.choices?.[0]?.message?.content ?? "";
+      console.log("📝 OpenAI QR analysis response:", responseText);
+
+      const cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log("✅ OpenAI QR analysis succeeded:", JSON.stringify(parsed, null, 2));
+
+        // Convert arrays to single values for QRContactData compatibility
+        const result: QRContactData = {
+          firstName: parsed.firstName || '',
+          lastName: parsed.lastName || '',
+          company: parsed.company || '',
+          position: parsed.position || '',
+          email: Array.isArray(parsed.emails) && parsed.emails.length > 0
+            ? parsed.emails[0]
+            : (parsed.email || ''),
+          phoneNumber: Array.isArray(parsed.phoneNumbers) && parsed.phoneNumbers.length > 0
+            ? parsed.phoneNumbers[0]
+            : (parsed.phoneNumber || ''),
+          website: parsed.website || '',
+          address: parsed.address || '',
+          city: parsed.city || '',
+          zipcode: parsed.zipcode || '',
+          country: parsed.country || '',
+        };
+
+        return result;
+      }
+    } catch (err) {
+      console.warn("⚠️ OpenAI QR analysis failed:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Fallback to Gemini
+  if (GEMINI_API_KEY) {
+    try {
+      console.log("🤖 Analyzing QR text with Gemini (fallback)...");
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+      const res = await axios.post(
+        url,
+        {
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt + text,
+                },
+              ],
+            },
+          ],
+          generationConfig: { temperature: 0.0, maxOutputTokens: 1024 },
+        },
+        {
+          headers: { "Content-Type": "application/json" },
+          timeout: 15000,
+        }
+      );
+
+      const responseText = res?.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      const cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log("✅ Gemini QR analysis succeeded (fallback)");
+
+        // Convert arrays to single values for QRContactData compatibility
+        const result: QRContactData = {
+          firstName: parsed.firstName || '',
+          lastName: parsed.lastName || '',
+          company: parsed.company || '',
+          position: parsed.position || '',
+          email: Array.isArray(parsed.emails) && parsed.emails.length > 0
+            ? parsed.emails[0]
+            : (parsed.email || ''),
+          phoneNumber: Array.isArray(parsed.phoneNumbers) && parsed.phoneNumbers.length > 0
+            ? parsed.phoneNumbers[0]
+            : (parsed.phoneNumber || ''),
+          website: parsed.website || '',
+          address: parsed.address || '',
+          city: parsed.city || '',
+          zipcode: parsed.zipcode || '',
+          country: parsed.country || '',
+        };
+
+        return result;
+      }
+    } catch (err) {
+      console.warn("⚠️ Gemini QR analysis failed:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  console.warn("⚠️ AI analysis returned no data, falling back to regex");
+  return {};
+};
+
+/**
+ * Extracts contact info from plain text
+ * Uses AI for complex formats, falls back to regex for simple cases
+ */
+const parsePlainText = async (text: string): Promise<QRContactData> => {
+  // For complex text (pipe-delimited or multi-line with lots of data), use AI
+  const isComplexText = text.includes('|') ||
+                        (text.split('\n').length > 3) ||
+                        (text.length > 100);
+
+  if (isComplexText) {
+    console.log("📄 Complex plain text detected, using AI analysis...");
+    const aiResult = await analyzeQRTextWithAI(text);
+
+    // If AI returned useful data, use it
+    const hasAIData = aiResult.firstName || aiResult.lastName || aiResult.company ||
+                      aiResult.email || aiResult.phoneNumber || aiResult.address;
+
+    if (hasAIData) {
+      // Extract unique code separately (AI might miss it)
+      const uniqueCode = extractUniqueCode(text);
+      if (uniqueCode) {
+        aiResult.uniqueCode = uniqueCode;
+        console.log(`📌 Extracted unique code from plain text: ${uniqueCode}`);
+      }
+      return aiResult;
+    }
+
+    console.log("⚠️ AI returned no useful data, falling back to regex parsing");
+  }
+
+  // Fallback to regex-based parsing for simple text or when AI fails
   const contactData: QRContactData = {};
 
   // Extract all emails
@@ -777,106 +998,22 @@ const parsePlainText = (text: string): QRContactData => {
     console.log(`📌 Extracted unique code from plain text: ${uniqueCode}`);
   }
 
-  // Check if text is pipe-delimited (common format for QR codes)
-  if (text.includes('|')) {
-    const segments = text.split('|').map(s => s.trim()).filter(s => s.length > 0);
-
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-
-      // Skip if it's an email (already extracted)
-      if (segment.includes('@')) continue;
-
-      // Skip if it looks like phone numbers (single or multiple)
-      // Check if segment is primarily numeric (phone numbers separated by / or space)
-      const digitCount = segment.replace(/\D/g, '').length;
-      const totalLength = segment.replace(/\s/g, '').length;
-      const digitRatio = digitCount / totalLength;
-
-      // Skip if more than 60% digits (likely phone numbers)
-      if (digitRatio > 0.6 && digitCount >= 7) continue;
-
-      // Also skip if it matches phone pattern with separator (e.g., "8149149003 / 9028842242")
-      if (/^\d[\d\s\/\-\+\(\)]+$/.test(segment) && digitCount >= 7) continue;
-
-      // Skip GST numbers and similar codes
-      if (/^GST\s*:/i.test(segment) || /^[A-Z]{2,5}\s*:/i.test(segment)) continue;
-
-      // First non-phone/email segment is likely the name
-      if (!contactData.firstName && i === 0) {
-        // Handle "Name / Phone" format in first segment
-        const namePart = segment.split('/')[0].trim();
-        if (namePart && !namePart.match(/^\d/) && namePart.length < 50) {
-          const nameParts = namePart.split(/\s+/);
-          if (nameParts.length >= 2) {
-            contactData.firstName = nameParts[0];
-            contactData.lastName = nameParts.slice(1).join(' ');
-          } else {
-            contactData.firstName = namePart;
-          }
-        }
-        continue;
-      }
-
-      // Look for company name (usually contains keywords or is capitalized)
-      if (!contactData.company) {
-        const companyKeywords = ['technologies', 'solutions', 'services', 'pvt', 'ltd', 'inc', 'corp', 'llc', 'partner', 'company'];
-        const lowerSegment = segment.toLowerCase();
-        if (companyKeywords.some(kw => lowerSegment.includes(kw))) {
-          // Extract company name (before any dash or description)
-          const companyPart = segment.split('–')[0].split('-')[0].trim();
-          contactData.company = companyPart;
-
-          // Check for position in the same segment (after dash)
-          const afterDash = segment.includes('–') ? segment.split('–')[1]?.trim() :
-                           segment.includes('-') ? segment.split('-').slice(1).join('-').trim() : '';
-          if (afterDash && !contactData.position) {
-            contactData.position = afterDash;
-          }
-          continue;
-        }
-      }
-
-      // Look for address (contains numbers and keywords)
-      if (!contactData.address) {
-        const addressKeywords = ['plot', 'tower', 'floor', 'building', 'road', 'street', 'lane', 'sector', 'block', 'flat', 'house', 'no.', 'no:', '/'];
-        const lowerSegment = segment.toLowerCase();
-        if (addressKeywords.some(kw => lowerSegment.includes(kw)) || /\d+.*,/.test(segment)) {
-          contactData.address = segment;
-
-          // Try to extract city and zipcode from address
-          const zipMatch = segment.match(/\b(\d{5,6})\b/); // Indian pincode (6 digits) or US zip (5 digits)
-          if (zipMatch) {
-            contactData.zipcode = zipMatch[1];
-            // City is usually before the pincode
-            const beforeZip = segment.substring(0, segment.indexOf(zipMatch[0]));
-            const cityMatch = beforeZip.match(/([A-Za-z]+)\s*$/);
-            if (cityMatch) {
-              contactData.city = cityMatch[1];
-            }
-          }
-          continue;
-        }
-      }
-    }
-  } else {
-    // Fallback: Try to extract name from first line (original logic)
-    const lines = text.split("\n").filter((line) => line.trim());
-    if (lines.length > 0) {
-      const firstLine = lines[0].trim();
-      // If first line looks like a name (less than 50 chars, no email/phone)
-      if (
-        firstLine.length < 50 &&
-        !firstLine.includes("@") &&
-        !firstLine.match(/\d{3}/)
-      ) {
-        const nameParts = firstLine.split(" ");
-        if (nameParts.length >= 2) {
-          contactData.firstName = nameParts[0];
-          contactData.lastName = nameParts.slice(1).join(" ");
-        } else {
-          contactData.firstName = firstLine;
-        }
+  // Try to extract name from first line
+  const lines = text.split("\n").filter((line) => line.trim());
+  if (lines.length > 0) {
+    const firstLine = lines[0].trim();
+    // If first line looks like a name (less than 50 chars, no email/phone)
+    if (
+      firstLine.length < 50 &&
+      !firstLine.includes("@") &&
+      !firstLine.match(/\d{3}/)
+    ) {
+      const nameParts = firstLine.split(" ");
+      if (nameParts.length >= 2) {
+        contactData.firstName = nameParts[0];
+        contactData.lastName = nameParts.slice(1).join(" ");
+      } else {
+        contactData.firstName = firstLine;
       }
     }
   }
@@ -1024,7 +1161,7 @@ export const processQRCode = async (
 
     // Treat as plain text
     console.log("📄 Detected plain text in QR code, extracting info...");
-    const rawContactData = parsePlainText(trimmedText);
+    const rawContactData = await parsePlainText(trimmedText);
     const entryCode = rawContactData.uniqueCode || '';
     const contactData = normalizeContactData(rawContactData);
 
