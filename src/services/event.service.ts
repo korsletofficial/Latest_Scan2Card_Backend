@@ -43,6 +43,30 @@ const generateLicenseKey = (): string => {
   return nanoid();
 };
 
+// Helper function to generate random password (8 characters with mix of letters, numbers, and special chars)
+const generateRandomPassword = (): string => {
+  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const special = '@#$%&*!';
+
+  // Ensure at least one of each type
+  let password = '';
+  password += uppercase[Math.floor(Math.random() * uppercase.length)];
+  password += lowercase[Math.floor(Math.random() * lowercase.length)];
+  password += numbers[Math.floor(Math.random() * numbers.length)];
+  password += special[Math.floor(Math.random() * special.length)];
+
+  // Fill remaining 4 characters randomly from all
+  const allChars = uppercase + lowercase + numbers + special;
+  for (let i = 0; i < 4; i++) {
+    password += allChars[Math.floor(Math.random() * allChars.length)];
+  }
+
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+};
+
 // Helper function to validate license key restrictions
 const validateLicenseKeyRestrictions = async (
   exhibitorId: string,
@@ -110,7 +134,7 @@ const createTeamManagerForLicense = async (
   exhibitorId: string,
   firstName?: string,
   lastName?: string
-) => {
+): Promise<{ teamManagerId: any; password: string; isNewUser: boolean }> => {
   try {
     // Get TEAMMANAGER role first (needed for validation)
     const teamManagerRole = await RoleModel.findOne({ name: "TEAMMANAGER" });
@@ -121,10 +145,10 @@ const createTeamManagerForLicense = async (
     // Check if user already exists
     const existingUser = await UserModel.findOne({ email, isDeleted: false }).populate('role');
     if (existingUser) {
-      // If user exists and is already a TEAMMANAGER, return their ID
+      // If user exists and is already a TEAMMANAGER, return their ID (no new password generated)
       if (existingUser.role && (existingUser.role as any).name === "TEAMMANAGER") {
         console.log(`ℹ️  TeamManager already exists: ${email}`);
-        return existingUser._id;
+        return { teamManagerId: existingUser._id, password: "", isNewUser: false };
       }
 
       // If user exists with a different role (ENDUSER, EXHIBITOR, SUPERADMIN), throw error
@@ -139,8 +163,9 @@ const createTeamManagerForLicense = async (
     const defaultFirstName = firstName || emailUsername.split(".")[0] || "Team";
     const defaultLastName = lastName || emailUsername.split(".")[1] || "Manager";
 
-    // Create password (same as email for testing)
-    const hashedPassword = await bcrypt.hash(email, 10);
+    // Generate random password
+    const plainPassword = generateRandomPassword();
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     // Create team manager user (auto-verified since created by exhibitor)
     const teamManager = await UserModel.create({
@@ -155,8 +180,8 @@ const createTeamManagerForLicense = async (
       isVerified: true, // Auto-verify team managers created by exhibitor
     });
 
-    console.log(`✅ Team Manager created and auto-verified: ${email} (Password: ${email})`);
-    return teamManager._id;
+    console.log(`✅ Team Manager created and auto-verified: ${email}`);
+    return { teamManagerId: teamManager._id, password: plainPassword, isNewUser: true };
   } catch (error: any) {
     console.error("❌ Create team manager error:", error);
     throw error;
@@ -366,7 +391,7 @@ export const generateLicenseKeyForEvent = async (
   const licenseKey = generateLicenseKey();
 
   // Create team manager account
-  const teamManagerId = await createTeamManagerForLicense(data.email, exhibitorId);
+  const { teamManagerId, password, isNewUser } = await createTeamManagerForLicense(data.email, exhibitorId);
 
   // Add to event's licenseKeys array
   event.licenseKeys.push({
@@ -387,20 +412,22 @@ export const generateLicenseKeyForEvent = async (
   // Update exhibitor's license key counts
   await updateExhibitorLicenseKeyCounts(exhibitorId, 1, maxActivations);
 
-  // Send email with credentials
-  try {
-    await sendLicenseKeyEmail({
-      email: data.email,
-      password: data.email,
-      licenseKey,
-      stallName: data.stallName,
-      eventName: event.eventName,
-      expiresAt: data.expiresAt,
-    });
-    console.log(`✅ License key email sent to ${data.email}`);
-  } catch (emailError: any) {
-    console.error(`❌ Failed to send email to ${data.email}:`, emailError.message);
-    // Don't throw error - license key is still created even if email fails
+  // Send email with credentials (only for new users)
+  if (isNewUser && password) {
+    try {
+      await sendLicenseKeyEmail({
+        email: data.email,
+        password: password,
+        licenseKey,
+        stallName: data.stallName,
+        eventName: event.eventName,
+        expiresAt: data.expiresAt,
+      });
+      console.log(`✅ License key email sent to ${data.email}`);
+    } catch (emailError: any) {
+      console.error(`❌ Failed to send email to ${data.email}:`, emailError.message);
+      // Don't throw error - license key is still created even if email fails
+    }
   }
 
   return {
@@ -410,10 +437,13 @@ export const generateLicenseKeyForEvent = async (
     expiresAt: data.expiresAt,
     maxActivations: data.maxActivations,
     teamManagerId,
-    credentials: {
+    credentials: isNewUser ? {
       email: data.email,
-      password: data.email,
-      note: "Password is same as email for testing purposes",
+      password: password,
+      note: "Random password generated for team manager account",
+    } : {
+      email: data.email,
+      note: "User already exists - use existing password",
     },
   };
 };
@@ -513,7 +543,7 @@ export const bulkGenerateLicenseKeys = async (
       const licenseKey = generateLicenseKey();
 
       // Create team manager account
-      const teamManagerId = await createTeamManagerForLicense(email, exhibitorId);
+      const { teamManagerId, password, isNewUser } = await createTeamManagerForLicense(email, exhibitorId);
 
       // Add to event's licenseKeys array
       event.licenseKeys.push({
@@ -536,25 +566,30 @@ export const bulkGenerateLicenseKeys = async (
         expiresAt: expirationDate,
         maxActivations,
         teamManagerId,
-        credentials: {
+        credentials: isNewUser ? {
           email,
-          password: email,
+          password,
+        } : {
+          email,
+          note: "User already exists - use existing password",
         },
       });
 
-      // Send email with credentials (non-blocking)
-      sendLicenseKeyEmail({
-        email,
-        password: email,
-        licenseKey,
-        stallName,
-        eventName: event.eventName,
-        expiresAt: expirationDate,
-      })
-        .then(() => console.log(`✅ License key email sent to ${email}`))
-        .catch((emailError: any) =>
-          console.error(`❌ Failed to send email to ${email}:`, emailError.message)
-        );
+      // Send email with credentials (non-blocking, only for new users)
+      if (isNewUser && password) {
+        sendLicenseKeyEmail({
+          email,
+          password,
+          licenseKey,
+          stallName,
+          eventName: event.eventName,
+          expiresAt: expirationDate,
+        })
+          .then(() => console.log(`✅ License key email sent to ${email}`))
+          .catch((emailError: any) =>
+            console.error(`❌ Failed to send email to ${email}:`, emailError.message)
+          );
+      }
     } catch (error: any) {
       errors.push({ row: i + 1, error: error.message, email });
     }
