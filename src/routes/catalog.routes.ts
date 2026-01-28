@@ -75,7 +75,7 @@ router.post(
   authenticateToken,
   authorizeRoles("TEAMMANAGER"),
   adminLimiter,
-  upload.array("files", 10), // Allow up to 10 files
+  upload.single("file"),
   createCatalog
 );
 
@@ -100,7 +100,7 @@ router.put(
   authenticateToken,
   authorizeRoles("TEAMMANAGER"),
   adminLimiter,
-  upload.array("files", 10), // Allow up to 10 files
+  upload.single("file"),
   updateCatalog
 );
 

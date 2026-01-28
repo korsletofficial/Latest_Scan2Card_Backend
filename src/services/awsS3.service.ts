@@ -33,11 +33,6 @@ export const ALLOWED_FILE_TYPES = {
   'image/gif': ['.gif'],
   'image/webp': ['.webp'],
 
-  // Audio (for lead notes)
-  'audio/mpeg': ['.mp3'],
-  'audio/mp4': ['.m4a'],
-  'audio/webm': ['.webm'], // Browser recording format
-
   // Documents
   'application/pdf': ['.pdf'],
   'application/msword': ['.doc'],

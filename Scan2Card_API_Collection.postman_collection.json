@@ -1554,7 +1554,7 @@
 								},
 								{
 									"key": "details",
-									"value": "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"emails\":[\"john.doe@example.com\"],\"phoneNumbers\":[\"+1234567890\"],\"company\":\"Acme Corp\",\"position\":\"CEO\",\"website\":\"https://acme.com\",\"address\":\"123 Business St\",\"city\":\"San Francisco\",\"country\":\"USA\",\"notes\":{\"text\":\"Met at conference booth, interested in enterprise plan\"}}",
+									"value": "{\"firstName\":\"John\",\"lastName\":\"Doe\",\"email\":\"john.doe@example.com\",\"phoneNumber\":\"+1234567890\",\"company\":\"Acme Corp\",\"position\":\"CEO\",\"website\":\"https://acme.com\",\"address\":\"123 Business St\",\"city\":\"San Francisco\",\"country\":\"USA\"}",
 									"type": "text",
 									"description": "Contact details JSON"
 								},
@@ -1592,15 +1592,6 @@
 										"/path/to/image3.jpg"
 									],
 									"disabled": true
-								},
-								{
-									"key": "noteAudio",
-									"type": "file",
-									"src": [
-										"/path/to/audio-note.mp3"
-									],
-									"description": "Audio note file (MP3, M4A, or WebM, max 10MB)",
-									"disabled": true
 								}
 							]
 						},
@@ -1613,7 +1604,7 @@
 								"leads"
 							]
 						},
-						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card or scan-qr endpoints first to extract data.\n\n**Request Body (multipart/form-data):**\n- `eventId` (optional): Event ID to associate lead with\n- `isIndependentLead` (optional, boolean): Whether lead is independent of events\n- `leadType` (required): Type of lead capture\n  - `full_scan`: Scanned business card with image\n  - `entry_code`: Digital business card with entry code\n  - `manual`: Manually entered lead\n- `entryCode` (optional): Entry code from organizational QR cards\n- `ocrText` (optional): Extracted OCR text from card\n- `details` (optional, JSON string): Contact information object\n  - Available fields: firstName, lastName, company, position, **emails** (array), **phoneNumbers** (array), website, address, city, country, **notes** (object)\n- `rating` (optional, number): Lead quality rating (1-5)\n- `images` (optional, file[]): Business card images (max 3 images)\n- `noteAudio` (optional, file): Audio note recording (MP3 or M4A only, max 10MB)\n- `allowDuplicate` (optional, boolean): Skip duplicate check (default: false)\n\n**Notes Field Format:**\nThe `notes` field in details supports both text and audio:\n```json\n{\n  \"notes\": {\n    \"text\": \"Optional text note about the lead\",\n    \"audioUrl\": \"S3 URL (auto-populated when noteAudio file is uploaded)\"\n  }\n}\n```\nYou can provide text notes in the details JSON, and/or upload an audio file via the `noteAudio` field. The audio URL will be automatically added to notes.audioUrl.\n\n**Duplicate Detection:**\nSystem checks for existing leads matching **ANY email** OR **ANY phone** OR **entryCode** within the same event. If found, returns 409 Conflict.\n\n**Note:** While the QR/card scanning endpoints don't return a `rating` field (you rate leads manually), the lead model itself still supports the `rating` field for tracking lead quality.\n\n**Trial Event Limit:**\nIf creating a lead with a trial event, users are limited to 5 leads. After reaching this limit, they must join a regular event with a license key to continue creating leads. Check trial status with GET /leads/trial-status."
+						"description": "Create a new lead (ENDUSER or EXHIBITOR). Use scan-card or scan-qr endpoints first to extract data.\n\n**Request Body (multipart/form-data):**\n- `eventId` (optional): Event ID to associate lead with\n- `isIndependentLead` (optional, boolean): Whether lead is independent of events\n- `leadType` (required): Type of lead capture\n  - `full_scan`: Scanned business card with image\n  - `entry_code`: Digital business card with entry code\n  - `manual`: Manually entered lead\n- `entryCode` (optional): Entry code from organizational QR cards\n- `ocrText` (optional): Extracted OCR text from card\n- `details` (optional, JSON string): Contact information object\n  - Available fields: firstName, lastName, company, position, **emails** (array), **phoneNumbers** (array), website, address, city, country\n- `rating` (optional, number): Lead quality rating (1-5)\n- `images` (optional, file[]): Business card images (max 3 images)\n- `allowDuplicate` (optional, boolean): Skip duplicate check (default: false)\n\n**Duplicate Detection:**\nSystem checks for existing leads matching **ANY email** OR **ANY phone** OR **entryCode** within the same event. If found, returns 409 Conflict.\n\n**Fields NOT Supported in Contact Details:**\n- `notes`: Removed from details schema\n- `fax`: Not supported\n- `zipCode`: Not supported\n\n**Note:** While the QR/card scanning endpoints don't return a `rating` field (you rate leads manually), the lead model itself still supports the `rating` field for tracking lead quality.\n\n**Trial Event Limit:**\nIf creating a lead with a trial event, users are limited to 5 leads. After reaching this limit, they must join a regular event with a license key to continue creating leads. Check trial status with GET /leads/trial-status."
 					}
 				},
 				{
@@ -3145,10 +3136,10 @@
 							"mode": "formdata",
 							"formdata": [
 								{
-									"key": "files",
+									"key": "file",
 									"type": "file",
 									"src": "",
-									"description": "Document files to upload - supports multiple files (PDF, DOC, DOCX, XLS, XLSX, images - max 10MB per file, up to 10 files)"
+									"description": "Document file to upload (PDF, DOC, DOCX, XLS, XLSX, images - max 10MB)"
 								},
 								{
 									"key": "name",
@@ -3191,7 +3182,7 @@
 								"catalogs"
 							]
 						},
-						"description": "Create a new catalog with multiple file uploads, WhatsApp and Email templates. Files are uploaded to S3 and the URLs are stored. Supports up to 10 files per catalog. Available template placeholders: {{leadName}}, {{leadEmail}}, {{leadCompany}}, {{catalogName}}, {{docLink}}, {{eventName}}, {{stallName}}. Requires TEAMMANAGER role."
+						"description": "Create a new catalog with file upload, WhatsApp and Email templates. The file is uploaded to S3 and the URL is stored. Available template placeholders: {{leadName}}, {{leadEmail}}, {{leadCompany}}, {{catalogName}}, {{docLink}}, {{eventName}}, {{stallName}}. Requires TEAMMANAGER role."
 					}
 				},
 				{
@@ -3282,16 +3273,10 @@
 							"mode": "formdata",
 							"formdata": [
 								{
-									"key": "files",
+									"key": "file",
 									"type": "file",
 									"src": "",
-									"description": "New document files to add (optional, supports multiple files - max 10MB per file, up to 10 files total)"
-								},
-								{
-									"key": "existingFiles",
-									"value": "[{\"docLink\":\"https://...\",\"s3Key\":\"...\",\"originalFileName\":\"file.pdf\",\"fileSize\":1024,\"contentType\":\"application/pdf\"}]",
-									"type": "text",
-									"description": "JSON array of existing files to keep (optional). Pass empty array [] to remove all existing files. Get current files from GET catalog endpoint."
+									"description": "New document file to replace existing (optional)"
 								},
 								{
 									"key": "name",
@@ -3348,7 +3333,7 @@
 								}
 							]
 						},
-						"description": "Update a catalog. All fields are optional. Upload new files to add to catalog, and use existingFiles to specify which existing files to keep. If existingFiles is provided without new files, only the files in existingFiles array will be kept. At least one file (new or existing) is required. Requires TEAMMANAGER role."
+						"description": "Update a catalog. All fields are optional. Upload a new file to replace the existing document. Requires TEAMMANAGER role."
 					}
 				},
 				{

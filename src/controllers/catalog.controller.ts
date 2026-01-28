@@ -46,11 +46,10 @@ export const createCatalog = async (req: AuthRequest, res: Response) => {
     }
 
     // Validate file upload
-    const files = req.files as Express.Multer.File[];
-    if (!files || files.length === 0) {
+    if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "At least one document file is required"
+        message: "Document file is required"
       });
     }
 
@@ -89,31 +88,23 @@ export const createCatalog = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Upload files to S3
-    console.log(`📤 Uploading ${files.length} catalog file(s)`);
-    const uploadedFiles = await Promise.all(
-      files.map(async (file) => {
-        console.log(`📤 Uploading: ${file.originalname}`);
-        const uploadResult = await uploadFileToS3(file, {
-          folder: "catalog-files",
-          makePublic: true
-        });
-        console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
-        return {
-          docLink: uploadResult.url,
-          s3Key: uploadResult.key,
-          originalFileName: file.originalname,
-          fileSize: file.size,
-          contentType: file.mimetype
-        };
-      })
-    );
+    // Upload file to S3
+    console.log(`📤 Uploading catalog file: ${req.file.originalname}`);
+    const uploadResult = await uploadFileToS3(req.file, {
+      folder: "catalog-files",
+      makePublic: true
+    });
+    console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
 
     const catalog = await catalogService.createCatalog(teamManagerId!, {
       name: name.trim(),
       description: description?.trim(),
       category,
-      files: uploadedFiles,
+      docLink: uploadResult.url,
+      s3Key: uploadResult.key,
+      originalFileName: req.file.originalname,
+      fileSize: req.file.size,
+      contentType: req.file.mimetype,
       whatsappTemplate,
       emailTemplate: {
         subject: parsedEmailTemplate.subject.trim(),
@@ -284,63 +275,20 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
       updateData.category = category;
     }
 
-    // Handle file upload if new files are provided
-    const files = req.files as Express.Multer.File[];
+    // Handle file upload if a new file is provided
+    if (req.file) {
+      console.log(`📤 Uploading new catalog file: ${req.file.originalname}`);
+      const uploadResult = await uploadFileToS3(req.file, {
+        folder: "catalog-files",
+        makePublic: true
+      });
+      console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
 
-    // Parse existingFiles from the request body if provided (to keep existing files)
-    let existingFilesToKeep: any[] = [];
-    if (req.body.existingFiles) {
-      try {
-        existingFilesToKeep = JSON.parse(req.body.existingFiles);
-      } catch {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid existingFiles format"
-        });
-      }
-    }
-
-    // If new files are uploaded or existing files are modified
-    if ((files && files.length > 0) || req.body.existingFiles !== undefined) {
-      const uploadedFiles = [];
-
-      // Add existing files that should be kept
-      if (existingFilesToKeep && existingFilesToKeep.length > 0) {
-        uploadedFiles.push(...existingFilesToKeep);
-      }
-
-      // Upload new files if any
-      if (files && files.length > 0) {
-        console.log(`📤 Uploading ${files.length} new catalog file(s)`);
-        const newUploadedFiles = await Promise.all(
-          files.map(async (file) => {
-            console.log(`📤 Uploading: ${file.originalname}`);
-            const uploadResult = await uploadFileToS3(file, {
-              folder: "catalog-files",
-              makePublic: true
-            });
-            console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
-            return {
-              docLink: uploadResult.url,
-              s3Key: uploadResult.key,
-              originalFileName: file.originalname,
-              fileSize: file.size,
-              contentType: file.mimetype
-            };
-          })
-        );
-        uploadedFiles.push(...newUploadedFiles);
-      }
-
-      // Validate that at least one file exists
-      if (uploadedFiles.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "At least one file is required"
-        });
-      }
-
-      updateData.files = uploadedFiles;
+      updateData.docLink = uploadResult.url;
+      updateData.s3Key = uploadResult.key;
+      updateData.originalFileName = req.file.originalname;
+      updateData.fileSize = req.file.size;
+      updateData.contentType = req.file.mimetype;
     }
 
     if (whatsappTemplate !== undefined) {

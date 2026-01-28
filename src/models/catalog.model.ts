@@ -22,22 +22,17 @@ interface IAssignedLicenseKey {
   licenseKey: string;
 }
 
-// Catalog File Interface
-export interface ICatalogFile {
-  docLink: string;
-  s3Key: string;
-  originalFileName: string;
-  fileSize?: number;
-  contentType?: string;
-}
-
 // Catalog Interface
 export interface ICatalog extends Document {
   teamManagerId: Types.ObjectId;
   name: string;
   description?: string;
   category: CatalogCategory;
-  files: ICatalogFile[];
+  docLink: string;
+  s3Key: string;
+  originalFileName: string;
+  fileSize?: number;
+  contentType?: string;
   whatsappTemplate: string;
   emailTemplate: IEmailTemplate;
   assignedLicenseKeys: IAssignedLicenseKey[];
@@ -74,32 +69,30 @@ const CatalogSchema = new Schema<ICatalog>(
       required: true,
       default: CatalogCategory.PRODUCT
     },
-    files: [{
-      docLink: {
-        type: String,
-        required: true,
-        trim: true,
-        maxlength: 2000
-      },
-      s3Key: {
-        type: String,
-        required: true,
-        trim: true
-      },
-      originalFileName: {
-        type: String,
-        required: true,
-        trim: true,
-        maxlength: 500
-      },
-      fileSize: {
-        type: Number
-      },
-      contentType: {
-        type: String,
-        trim: true
-      }
-    }],
+    docLink: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 2000
+    },
+    s3Key: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    originalFileName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 500
+    },
+    fileSize: {
+      type: Number
+    },
+    contentType: {
+      type: String,
+      trim: true
+    },
     whatsappTemplate: {
       type: String,
       required: true,
@@ -150,7 +143,6 @@ const CatalogSchema = new Schema<ICatalog>(
         // Convert undefined/null to empty string for optional fields
         ret.description = ret.description ?? '';
         ret.assignedLicenseKeys = ret.assignedLicenseKeys ?? [];
-        ret.files = ret.files ?? [];
 
         return ret;
       }

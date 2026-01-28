@@ -1,12 +1,6 @@
 import { Schema, Document, model, Types, PaginateModel } from "mongoose";
 import mongoosePaginate from "mongoose-paginate-v2";
 
-// Notes Interface - supports text, audio, or both
-interface ILeadNotes {
-  text?: string;
-  audioUrl?: string; // S3 URL for audio recording
-}
-
 // Lead Details Interface
 interface ILeadDetails {
   firstName?: string;
@@ -20,7 +14,7 @@ interface ILeadDetails {
   city?: string;
   zipcode?: string;
   country?: string;
-  notes?: ILeadNotes; // Can contain text, audio URL, or both
+  notes?: string;
 }
 
 // Lead Interface
@@ -110,10 +104,7 @@ const LeadSchema = new Schema<ILead>(
       city: { type: String, maxlength: 100 },
       zipcode: { type: String, maxlength: 20 },
       country: { type: String, maxlength: 100 },
-      notes: {
-        text: { type: String, maxlength: 2000 },
-        audioUrl: { type: String, maxlength: 500 }, // S3 URL for audio recording
-      },
+      notes: { type: String, maxlength: 2000 },
     },
     rating: { type: Number, min: 1, max: 5 },
     isActive: { type: Boolean, default: true },
@@ -144,15 +135,7 @@ const LeadSchema = new Schema<ILead>(
           ret.details.city = ret.details.city ?? '';
           ret.details.zipcode = ret.details.zipcode ?? '';
           ret.details.country = ret.details.country ?? '';
-          // Handle notes as object with text and audioUrl
-          if (!ret.details.notes || typeof ret.details.notes !== 'object') {
-            ret.details.notes = { text: '', audioUrl: '' };
-          } else {
-            ret.details.notes = {
-              text: ret.details.notes.text ?? '',
-              audioUrl: ret.details.notes.audioUrl ?? '',
-            };
-          }
+          ret.details.notes = ret.details.notes ?? '';
         }
 
         return ret;

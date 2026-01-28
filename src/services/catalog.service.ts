@@ -1,4 +1,4 @@
-import CatalogModel, { ICatalog, CatalogCategory, ICatalogFile } from "../models/catalog.model";
+import CatalogModel, { ICatalog, CatalogCategory } from "../models/catalog.model";
 import EventModel from "../models/event.model";
 import mongoose from "mongoose";
 
@@ -7,7 +7,11 @@ interface CreateCatalogInput {
   name: string;
   description?: string;
   category: CatalogCategory;
-  files: ICatalogFile[];
+  docLink: string;
+  s3Key: string;
+  originalFileName: string;
+  fileSize?: number;
+  contentType?: string;
   whatsappTemplate: string;
   emailTemplate: {
     subject: string;
@@ -20,7 +24,11 @@ interface UpdateCatalogInput {
   name?: string;
   description?: string;
   category?: CatalogCategory;
-  files?: ICatalogFile[];
+  docLink?: string;
+  s3Key?: string;
+  originalFileName?: string;
+  fileSize?: number;
+  contentType?: string;
   whatsappTemplate?: string;
   emailTemplate?: {
     subject: string;
@@ -39,7 +47,11 @@ export const createCatalog = async (
     name: catalogData.name,
     description: catalogData.description,
     category: catalogData.category,
-    files: catalogData.files,
+    docLink: catalogData.docLink,
+    s3Key: catalogData.s3Key,
+    originalFileName: catalogData.originalFileName,
+    fileSize: catalogData.fileSize,
+    contentType: catalogData.contentType,
     whatsappTemplate: catalogData.whatsappTemplate,
     emailTemplate: catalogData.emailTemplate,
     assignedLicenseKeys: [],

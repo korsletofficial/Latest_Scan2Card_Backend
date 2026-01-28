@@ -14,7 +14,7 @@ import {
   getTrialStatus,
 } from "../controllers/lead.controller";
 import multer from 'multer';
-const leadUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 4 } });
+const leadUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 3 } });
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
 import {
   scanLimiter,
@@ -34,11 +34,7 @@ router.post("/scan-qr", scanLimiter, scanQRCode);
 
 // Lead CRUD routes
 // Create lead (with file upload) - Moderate limit (100/min per user)
-// Accepts: images (max 3) and noteAudio (max 1 audio file for notes)
-router.post("/", leadWriteLimiter, leadUpload.fields([
-  { name: 'images', maxCount: 3 },
-  { name: 'noteAudio', maxCount: 1 }
-]), createLead);
+router.post("/", leadWriteLimiter, leadUpload.array('images', 3), createLead);
 
 // Read operations - Standard limit (200/min per user)
 router.get("/", readLimiter, getLeads);
