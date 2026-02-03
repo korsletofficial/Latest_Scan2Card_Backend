@@ -412,22 +412,21 @@ export const generateLicenseKeyForEvent = async (
   // Update exhibitor's license key counts
   await updateExhibitorLicenseKeyCounts(exhibitorId, 1, maxActivations);
 
-  // Send email with credentials (only for new users)
-  if (isNewUser && password) {
-    try {
-      await sendLicenseKeyEmail({
-        email: data.email,
-        password: password,
-        licenseKey,
-        stallName: data.stallName,
-        eventName: event.eventName,
-        expiresAt: data.expiresAt,
-      });
-      console.log(`✅ License key email sent to ${data.email}`);
-    } catch (emailError: any) {
-      console.error(`❌ Failed to send email to ${data.email}:`, emailError.message);
-      // Don't throw error - license key is still created even if email fails
-    }
+  // Send email with license key details (for both new and existing users)
+  try {
+    await sendLicenseKeyEmail({
+      email: data.email,
+      password: isNewUser ? password : undefined, // Only include password for new users
+      licenseKey,
+      stallName: data.stallName,
+      eventName: event.eventName,
+      expiresAt: data.expiresAt,
+      isExistingUser: !isNewUser,
+    });
+    console.log(`✅ License key email sent to ${data.email}${isNewUser ? ' (new user)' : ' (existing user)'}`);
+  } catch (emailError: any) {
+    console.error(`❌ Failed to send email to ${data.email}:`, emailError.message);
+    // Don't throw error - license key is still created even if email fails
   }
 
   return {
