@@ -1816,15 +1816,38 @@
 							{
 								"key": "Authorization",
 								"value": "Bearer {{authToken}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
 							}
 						],
 						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"details\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john.doe@newemail.com\",\n    \"company\": \"Updated Company Inc\",\n    \"phoneNumber\": \"+1234567890\",\n    \"position\": \"CTO\",\n    \"website\": \"https://example.com\",\n    \"address\": \"123 Main St\",\n    \"city\": \"San Francisco\",\n    \"country\": \"USA\"\n  },\n  \"rating\": 4,\n  \"isActive\": true\n}"
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "details",
+									"value": "{\"firstName\": \"John\", \"lastName\": \"Doe\", \"email\": \"john.doe@newemail.com\", \"company\": \"Updated Company Inc\", \"phoneNumber\": \"+1234567890\", \"position\": \"CTO\", \"notes\": {\"text\": \"Updated note text\"}}",
+									"description": "JSON string of contact details",
+									"type": "text"
+								},
+								{
+									"key": "rating",
+									"value": "4",
+									"description": "Lead quality rating (1-5)",
+									"type": "text"
+								},
+								{
+									"key": "noteAudio",
+									"type": "file",
+									"src": [],
+									"description": "Audio note file (MP3, M4A, AAC, WebM, WAV, OGG, 3GP, AMR - supports mobile recordings, max 10MB)",
+									"disabled": true
+								},
+								{
+									"key": "removeAudio",
+									"value": "true",
+									"description": "Set to 'true' to remove existing audio note (ignored if noteAudio file is provided)",
+									"type": "text",
+									"disabled": true
+								}
+							]
 						},
 						"url": {
 							"raw": "{{baseUrl}}/leads/:id",
@@ -1842,7 +1865,7 @@
 								}
 							]
 						},
-						"description": "Update lead information.\n\n**IMPORTANT: Contact fields must be nested inside `details` object!**\n\n**Request Body (all fields optional):**\n\n**Top-level fields:**\n- `eventId` (string): Event ID to associate lead with\n- `isIndependentLead` (boolean): Whether lead is independent\n- `leadType` (string): Type of lead (full_scan, entry_code, manual)\n- `entryCode` (string): Entry code\n- `rating` (number): Lead quality rating (1-5)\n- `isActive` (boolean): Whether lead is active\n- `images` (array): Array of S3 image URLs (max 3)\n\n**Contact details (nested inside `details` object):**\n- `details.firstName` (string): First name\n- `details.lastName` (string): Last name\n- `details.company` (string): Company name\n- `details.position` (string): Job position\n- `details.email` (string): Email address\n- `details.phoneNumber` (string): Phone number\n- `details.website` (string): Website URL\n- `details.address` (string): Street address\n- `details.city` (string): City\n- `details.country` (string): Country\n\n**Example - Update only phone number:**\n```json\n{\n  \"details\": {\n    \"phoneNumber\": \"+1234567890\"\n  }\n}\n```\n\n**Example - Update rating and contact info:**\n```json\n{\n  \"details\": {\n    \"email\": \"newemail@example.com\",\n    \"company\": \"New Company Inc\"\n  },\n  \"rating\": 5\n}\n```\n\n**Note:** The following fields are no longer supported:\n- `notes`: Removed from lead details\n- `fax`: Not supported\n- `zipCode`: Not supported"
+						"description": "Update lead information. Supports both JSON and multipart/form-data.\n\n**IMPORTANT: Contact fields must be nested inside `details` object!**\n\n**Request Body (multipart/form-data - all fields optional):**\n\n**Top-level fields:**\n- `eventId` (string): Event ID to associate lead with\n- `isIndependentLead` (boolean): Whether lead is independent\n- `leadType` (string): Type of lead (full_scan, entry_code, manual)\n- `entryCode` (string): Entry code\n- `rating` (number): Lead quality rating (1-5)\n- `isActive` (boolean): Whether lead is active\n- `images` (array): Array of S3 image URLs (max 3)\n- `noteAudio` (file): Audio note file to upload (replaces existing audio)\n- `removeAudio` (boolean): Set to 'true' to remove existing audio note\n\n**Audio Note Management:**\n- To **add/replace** audio: Upload a file via `noteAudio` field\n- To **remove** existing audio: Set `removeAudio=true` (without uploading a file)\n- To **keep** existing audio: Don't include either field\n\n**Supported Audio Formats:** MP3, M4A, AAC, WebM, WAV, OGG, 3GP, AMR (max 10MB)\n\n**Contact details (nested inside `details` JSON string):**\n- `details.firstName` (string): First name\n- `details.lastName` (string): Last name\n- `details.company` (string): Company name\n- `details.position` (string): Job position\n- `details.email` (string): Email address\n- `details.phoneNumber` (string): Phone number\n- `details.website` (string): Website URL\n- `details.address` (string): Street address\n- `details.city` (string): City\n- `details.country` (string): Country\n- `details.notes` (object): { text: string, audioUrl: string }\n\n**Example - Update with new audio:**\n```\nPUT /leads/:id\nContent-Type: multipart/form-data\n\ndetails: {\"firstName\": \"John\", \"notes\": {\"text\": \"Voice note attached\"}}\nnoteAudio: [audio file]\n```\n\n**Example - Remove existing audio:**\n```\nPUT /leads/:id\nContent-Type: multipart/form-data\n\ndetails: {\"notes\": {\"text\": \"Audio removed\"}}\nremoveAudio: true\n```"
 					}
 				},
 				{

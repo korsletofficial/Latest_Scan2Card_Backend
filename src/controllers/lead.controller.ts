@@ -396,10 +396,65 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
       images,
       entryCode,
       ocrText,
-      details,
+      details: detailsRaw,
       rating,
       isActive,
+      removeAudio, // Flag to remove existing audio
     } = req.body;
+
+    // Parse details if it's a JSON string (from multipart/form-data)
+    let details: any;
+    if (detailsRaw) {
+      try {
+        details = typeof detailsRaw === 'string' ? JSON.parse(detailsRaw) : detailsRaw;
+      } catch (e) {
+        return res.status(400).json({ success: false, message: 'Invalid details format' });
+      }
+    }
+
+    // Handle audio file upload for notes
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    if (files?.noteAudio && files.noteAudio.length > 0) {
+      const audioFile = files.noteAudio[0];
+      // Validate audio file type (common mobile and browser formats)
+      const allowedAudioTypes = [
+        'audio/mpeg',      // MP3
+        'audio/mp4',       // M4A/AAC (iOS default)
+        'audio/webm',      // WebM (browser recording)
+        'audio/aac',       // AAC
+        'audio/3gpp',      // 3GP (Android)
+        'audio/amr',       // AMR (Android voice)
+        'audio/wav',       // WAV
+        'audio/x-m4a',     // M4A alternate MIME type
+        'audio/ogg',       // OGG (Android)
+      ];
+      if (!allowedAudioTypes.includes(audioFile.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid audio format. Supported formats: MP3, M4A, AAC, WebM, WAV, OGG, 3GP, AMR.',
+        });
+      }
+      // Upload audio to S3
+      const audioResult = await uploadFileToS3(audioFile, { folder: 'lead-notes-audio', makePublic: true });
+      // Initialize notes object if not exists
+      if (!details) details = {};
+      if (!details.notes) details.notes = {};
+      if (typeof details.notes === 'string') {
+        // Convert legacy string notes to new format
+        details.notes = { text: details.notes, audioUrl: audioResult.url };
+      } else {
+        details.notes.audioUrl = audioResult.url;
+      }
+    } else if (removeAudio === 'true' || removeAudio === true) {
+      // Remove audio from notes
+      if (!details) details = {};
+      if (!details.notes) details.notes = {};
+      if (typeof details.notes === 'string') {
+        details.notes = { text: details.notes, audioUrl: '' };
+      } else {
+        details.notes = { ...details.notes, audioUrl: '' };
+      }
+    }
 
     // Validate images array if provided
     if (images) {
