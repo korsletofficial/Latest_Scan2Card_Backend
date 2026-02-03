@@ -706,15 +706,34 @@ const getRatingLabel = (rating: number | string | undefined): string => {
 
 // Helper: Generate Full Data CSV
 const generateFullDataCSV = (leads: any[]): string => {
+  // Determine the max number of emails and phone numbers across all leads
+  let maxEmails = 0;
+  let maxPhones = 0;
+
+  leads.forEach((lead) => {
+    const emails = Array.isArray(lead.details?.emails) ? lead.details.emails : [];
+    const phones = Array.isArray(lead.details?.phoneNumbers) ? lead.details.phoneNumbers : [];
+    maxEmails = Math.max(maxEmails, emails.length);
+    maxPhones = Math.max(maxPhones, phones.length);
+  });
+
+  // Ensure at least 1 column for each if there's any data
+  maxEmails = Math.max(maxEmails, 1);
+  maxPhones = Math.max(maxPhones, 1);
+
+  // Build dynamic headers
   const headers = [
     "Entry Code",
     "First Name",
     "Last Name",
     "Company",
     "Position",
-    "Email",
-    "Phone Number",
+    // Dynamic email columns
+    ...Array.from({ length: maxEmails }, (_, i) => `Email ${i + 1}`),
+    // Dynamic phone columns
+    ...Array.from({ length: maxPhones }, (_, i) => `Phone ${i + 1}`),
     "Website",
+    "Address",
     "City",
     "Country",
     "Notes",
@@ -738,15 +757,35 @@ const generateFullDataCSV = (leads: any[]): string => {
       }
     }
 
+    // Get emails array
+    const emails = Array.isArray(lead.details?.emails)
+      ? lead.details.emails
+      : (lead.details?.email ? [lead.details.email] : []);
+
+    // Get phone numbers array
+    const phones = Array.isArray(lead.details?.phoneNumbers)
+      ? lead.details.phoneNumbers
+      : (lead.details?.phoneNumber ? [lead.details.phoneNumber] : []);
+
+    // Create email columns (pad with empty strings if fewer emails than max)
+    const emailColumns = Array.from({ length: maxEmails }, (_, i) => emails[i] || "");
+
+    // Create phone columns (pad with empty strings if fewer phones than max)
+    // Use formatAsExcelText to prevent scientific notation in Excel
+    const phoneColumns = Array.from({ length: maxPhones }, (_, i) =>
+      phones[i] ? formatAsExcelText(phones[i]) : ""
+    );
+
     return [
       lead.entryCode || "",
       lead.details?.firstName || "",
       lead.details?.lastName || "",
       lead.details?.company || "",
       lead.details?.position || "",
-      (Array.isArray(lead.details?.emails) ? lead.details.emails.join(", ") : (lead.details?.email || "")),
-      (Array.isArray(lead.details?.phoneNumbers) ? lead.details.phoneNumbers.join(", ") : (lead.details?.phoneNumber || "")),
+      ...emailColumns,
+      ...phoneColumns,
       lead.details?.website || "",
+      lead.details?.address || "",
       lead.details?.city || "",
       lead.details?.country || "",
       // Handle notes as object or legacy string
@@ -768,6 +807,13 @@ const generateCSV = (headers: string[], rows: string[][]): string => {
     ...rows.map((row) => row.map(escapeCSVValue).join(",")),
   ];
   return csvRows.join("\n");
+};
+
+// Helper: Format value as Excel text to prevent scientific notation
+const formatAsExcelText = (value: string): string => {
+  if (!value || value.trim() === "") return "";
+  // Wrap in ="value" format to force Excel to treat as text
+  return `="${value}"`;
 };
 
 // Helper: Escape CSV Value
