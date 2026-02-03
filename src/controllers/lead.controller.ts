@@ -109,7 +109,7 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.userId;
 
     // Parse details if it's a JSON string (from multipart/form-data)
-    let details;
+    let details: any;
     if (detailsRaw) {
       try {
         details = typeof detailsRaw === 'string' ? JSON.parse(detailsRaw) : detailsRaw;
@@ -122,22 +122,11 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
     if (files?.noteAudio && files.noteAudio.length > 0) {
       const audioFile = files.noteAudio[0];
-      // Validate audio file type (common mobile and browser formats)
-      const allowedAudioTypes = [
-        'audio/mpeg',      // MP3
-        'audio/mp4',       // M4A/AAC (iOS default)
-        'audio/webm',      // WebM (browser recording)
-        'audio/aac',       // AAC
-        'audio/3gpp',      // 3GP (Android)
-        'audio/amr',       // AMR (Android voice)
-        'audio/wav',       // WAV
-        'audio/x-m4a',     // M4A alternate MIME type
-        'audio/ogg',       // OGG (Android)
-      ];
-      if (!allowedAudioTypes.includes(audioFile.mimetype)) {
+      // Validate audio file type (MP3, M4A, WebM for browser recording)
+      if (!['audio/mpeg', 'audio/mp4', 'audio/webm'].includes(audioFile.mimetype)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid audio format. Supported formats: MP3, M4A, AAC, WebM, WAV, OGG, 3GP, AMR.',
+          message: 'Invalid audio format. Only MP3, M4A, and WebM are allowed.',
         });
       }
       // Upload audio to S3
@@ -232,12 +221,13 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     // Validation based on lead type
     // Handle up to 3 image uploads (card/QR + additional)
     let imageUrls: string[] = [];
-    if (req.files && Array.isArray(req.files)) {
-      if (req.files.length > 3) {
+    const imageFiles = files?.images;
+    if (imageFiles && imageFiles.length > 0) {
+      if (imageFiles.length > 3) {
         return res.status(400).json({ success: false, message: 'Maximum 3 images allowed.' });
       }
       // Upload all images to S3 (leads folder)
-      const uploadPromises = req.files.map(file => uploadFileToS3(file, { folder: 'leads', makePublic: true }));
+      const uploadPromises = imageFiles.map(file => uploadFileToS3(file, { folder: 'leads', makePublic: true }));
       const results = await Promise.all(uploadPromises);
       imageUrls = results.map(r => r.url);
     }
@@ -855,7 +845,8 @@ const generateFullDataCSV = (leads: any[]): string => {
       lead.details?.city || "",
       lead.details?.zipcode || "",
       lead.details?.country || "",
-      lead.details?.notes || "",
+      // Handle notes as object or legacy string
+      typeof lead.details?.notes === 'object' ? (lead.details?.notes?.text || "") : (lead.details?.notes || ""),
       lead.eventName || (lead.isIndependentLead ? "Independent" : ""),
       lead.leadType || "",
       getRatingLabel(lead.rating),
