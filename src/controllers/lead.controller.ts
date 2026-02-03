@@ -735,6 +735,7 @@ const generateFullDataCSV = (leads: any[]): string => {
     "Website",
     "Address",
     "City",
+    "Zipcode",
     "Country",
     "Notes",
     "Event",
@@ -787,6 +788,7 @@ const generateFullDataCSV = (leads: any[]): string => {
       lead.details?.website || "",
       lead.details?.address || "",
       lead.details?.city || "",
+      lead.details?.zipcode || "",
       lead.details?.country || "",
       // Handle notes as object or legacy string
       typeof lead.details?.notes === 'object' ? (lead.details?.notes?.text || "") : (lead.details?.notes || ""),
