@@ -11,13 +11,14 @@ interface EmailOptions {
 
 interface LicenseKeyEmailData {
   email: string;
-  password: string;
+  password?: string; // Optional - not sent for existing users
   licenseKey: string;
   stallName?: string;
   eventName?: string;
   expiresAt: Date;
   qrCodeDataUrl?: string;
   qrContent?: string;
+  isExistingUser?: boolean; // Flag to indicate if user already exists
 }
 
 interface ExhibitorWelcomeEmailData {
@@ -300,10 +301,17 @@ const generateLicenseKeyEmailHTML = (data: LicenseKeyEmailData): string => {
           <span class="credential-value">${data.email}</span>
         </div>
 
+        ${data.password ? `
         <div class="credential-item">
           <span class="credential-label">Password:</span>
           <span class="credential-value">${data.password}</span>
         </div>
+        ` : `
+        <div class="credential-item">
+          <span class="credential-label">Password:</span>
+          <span class="credential-value" style="font-style: italic; color: #6c757d;">Use your existing password</span>
+        </div>
+        `}
 
         <div class="credential-item">
           <span class="credential-label">Expires At:</span>
@@ -598,7 +606,7 @@ Your Credentials:
 -----------------
 License Key: ${formatLicenseKey(data.licenseKey)}
 Email: ${data.email}
-Password: ${data.password}
+Password: ${data.password || 'Use your existing password'}
 Expires At: ${new Date(data.expiresAt).toLocaleDateString()}
 
 QR Code (Original): ${data.qrContent || data.licenseKey}

@@ -118,6 +118,41 @@ export const createLead = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Handle audio file upload for notes
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    if (files?.noteAudio && files.noteAudio.length > 0) {
+      const audioFile = files.noteAudio[0];
+      // Validate audio file type (common mobile and browser formats)
+      const allowedAudioTypes = [
+        'audio/mpeg',      // MP3
+        'audio/mp4',       // M4A/AAC (iOS default)
+        'audio/webm',      // WebM (browser recording)
+        'audio/aac',       // AAC
+        'audio/3gpp',      // 3GP (Android)
+        'audio/amr',       // AMR (Android voice)
+        'audio/wav',       // WAV
+        'audio/x-m4a',     // M4A alternate MIME type
+        'audio/ogg',       // OGG (Android)
+      ];
+      if (!allowedAudioTypes.includes(audioFile.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid audio format. Supported formats: MP3, M4A, AAC, WebM, WAV, OGG, 3GP, AMR.',
+        });
+      }
+      // Upload audio to S3
+      const audioResult = await uploadFileToS3(audioFile, { folder: 'lead-notes-audio', makePublic: true });
+      // Initialize notes object if not exists
+      if (!details) details = {};
+      if (!details.notes) details.notes = {};
+      if (typeof details.notes === 'string') {
+        // Convert legacy string notes to new format
+        details.notes = { text: details.notes, audioUrl: audioResult.url };
+      } else {
+        details.notes.audioUrl = audioResult.url;
+      }
+    }
+
     // VALIDATE DETAILS FIELDS
     if (details) {
       // Validate email format, count, and length
@@ -360,10 +395,65 @@ export const updateLead = async (req: AuthRequest, res: Response) => {
       images,
       entryCode,
       ocrText,
-      details,
+      details: detailsRaw,
       rating,
       isActive,
+      removeAudio, // Flag to remove existing audio
     } = req.body;
+
+    // Parse details if it's a JSON string (from multipart/form-data)
+    let details: any;
+    if (detailsRaw) {
+      try {
+        details = typeof detailsRaw === 'string' ? JSON.parse(detailsRaw) : detailsRaw;
+      } catch (e) {
+        return res.status(400).json({ success: false, message: 'Invalid details format' });
+      }
+    }
+
+    // Handle audio file upload for notes
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    if (files?.noteAudio && files.noteAudio.length > 0) {
+      const audioFile = files.noteAudio[0];
+      // Validate audio file type (common mobile and browser formats)
+      const allowedAudioTypes = [
+        'audio/mpeg',      // MP3
+        'audio/mp4',       // M4A/AAC (iOS default)
+        'audio/webm',      // WebM (browser recording)
+        'audio/aac',       // AAC
+        'audio/3gpp',      // 3GP (Android)
+        'audio/amr',       // AMR (Android voice)
+        'audio/wav',       // WAV
+        'audio/x-m4a',     // M4A alternate MIME type
+        'audio/ogg',       // OGG (Android)
+      ];
+      if (!allowedAudioTypes.includes(audioFile.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid audio format. Supported formats: MP3, M4A, AAC, WebM, WAV, OGG, 3GP, AMR.',
+        });
+      }
+      // Upload audio to S3
+      const audioResult = await uploadFileToS3(audioFile, { folder: 'lead-notes-audio', makePublic: true });
+      // Initialize notes object if not exists
+      if (!details) details = {};
+      if (!details.notes) details.notes = {};
+      if (typeof details.notes === 'string') {
+        // Convert legacy string notes to new format
+        details.notes = { text: details.notes, audioUrl: audioResult.url };
+      } else {
+        details.notes.audioUrl = audioResult.url;
+      }
+    } else if (removeAudio === 'true' || removeAudio === true) {
+      // Remove audio from notes
+      if (!details) details = {};
+      if (!details.notes) details.notes = {};
+      if (typeof details.notes === 'string') {
+        details.notes = { text: details.notes, audioUrl: '' };
+      } else {
+        details.notes = { ...details.notes, audioUrl: '' };
+      }
+    }
 
     // Validate images array if provided
     if (images) {
@@ -681,16 +771,36 @@ const getRatingLabel = (rating: number | string | undefined): string => {
 
 // Helper: Generate Full Data CSV
 const generateFullDataCSV = (leads: any[]): string => {
+  // Determine the max number of emails and phone numbers across all leads
+  let maxEmails = 0;
+  let maxPhones = 0;
+
+  leads.forEach((lead) => {
+    const emails = Array.isArray(lead.details?.emails) ? lead.details.emails : [];
+    const phones = Array.isArray(lead.details?.phoneNumbers) ? lead.details.phoneNumbers : [];
+    maxEmails = Math.max(maxEmails, emails.length);
+    maxPhones = Math.max(maxPhones, phones.length);
+  });
+
+  // Ensure at least 1 column for each if there's any data
+  maxEmails = Math.max(maxEmails, 1);
+  maxPhones = Math.max(maxPhones, 1);
+
+  // Build dynamic headers
   const headers = [
     "Entry Code",
     "First Name",
     "Last Name",
     "Company",
     "Position",
-    "Email",
-    "Phone Number",
+    // Dynamic email columns
+    ...Array.from({ length: maxEmails }, (_, i) => `Email ${i + 1}`),
+    // Dynamic phone columns
+    ...Array.from({ length: maxPhones }, (_, i) => `Phone ${i + 1}`),
     "Website",
+    "Address",
     "City",
+    "Zipcode",
     "Country",
     "Notes",
     "Event",
@@ -713,16 +823,37 @@ const generateFullDataCSV = (leads: any[]): string => {
       }
     }
 
+    // Get emails array
+    const emails = Array.isArray(lead.details?.emails)
+      ? lead.details.emails
+      : (lead.details?.email ? [lead.details.email] : []);
+
+    // Get phone numbers array
+    const phones = Array.isArray(lead.details?.phoneNumbers)
+      ? lead.details.phoneNumbers
+      : (lead.details?.phoneNumber ? [lead.details.phoneNumber] : []);
+
+    // Create email columns (pad with empty strings if fewer emails than max)
+    const emailColumns = Array.from({ length: maxEmails }, (_, i) => emails[i] || "");
+
+    // Create phone columns (pad with empty strings if fewer phones than max)
+    // Use formatAsExcelText to prevent scientific notation in Excel
+    const phoneColumns = Array.from({ length: maxPhones }, (_, i) =>
+      phones[i] ? formatAsExcelText(phones[i]) : ""
+    );
+
     return [
       lead.entryCode || "",
       lead.details?.firstName || "",
       lead.details?.lastName || "",
       lead.details?.company || "",
       lead.details?.position || "",
-      (Array.isArray(lead.details?.emails) ? lead.details.emails.join(", ") : (lead.details?.email || "")),
-      (Array.isArray(lead.details?.phoneNumbers) ? lead.details.phoneNumbers.join(", ") : (lead.details?.phoneNumber || "")),
+      ...emailColumns,
+      ...phoneColumns,
       lead.details?.website || "",
+      lead.details?.address || "",
       lead.details?.city || "",
+      lead.details?.zipcode || "",
       lead.details?.country || "",
       lead.details?.notes || "",
       lead.eventName || (lead.isIndependentLead ? "Independent" : ""),
@@ -742,6 +873,13 @@ const generateCSV = (headers: string[], rows: string[][]): string => {
     ...rows.map((row) => row.map(escapeCSVValue).join(",")),
   ];
   return csvRows.join("\n");
+};
+
+// Helper: Format value as Excel text to prevent scientific notation
+const formatAsExcelText = (value: string): string => {
+  if (!value || value.trim() === "") return "";
+  // Wrap in ="value" format to force Excel to treat as text
+  return `="${value}"`;
 };
 
 // Helper: Escape CSV Value

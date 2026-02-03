@@ -46,7 +46,10 @@ router.get("/export", readLimiter, exportLeads);
 router.get("/:id", readLimiter, getLeadById);
 
 // Update/Delete - Moderate limit (100/min per user)
-router.put("/:id", leadWriteLimiter, updateLead);
+// Update lead (with optional audio file upload for notes)
+router.put("/:id", leadWriteLimiter, leadUpload.fields([
+  { name: 'noteAudio', maxCount: 1 }
+]), updateLead);
 router.delete("/:id", leadWriteLimiter, deleteLead);
 
 export default router;
