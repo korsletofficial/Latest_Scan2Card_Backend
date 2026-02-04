@@ -226,7 +226,8 @@ export const getAllLeadsForManager = async (
   memberId?: string,
   page: number = 1,
   limit: number = 10,
-  search: string = ""
+  search: string = "",
+  licenseKey: string = ""
 ) => {
   // Find all events managed by this team manager
   const managedEvents = await EventModel.find({
@@ -263,6 +264,39 @@ export const getAllLeadsForManager = async (
   }
 
   if (memberId) query.userId = memberId;
+
+  // License key (stall) filtering
+  if (licenseKey) {
+    // Find all RSVPs with this license key
+    const rsvps = await RsvpModel.find({
+      eventLicenseKey: licenseKey,
+      isDeleted: false,
+    }).select("userId");
+
+    // Get all user IDs from these RSVPs
+    const userIds = rsvps.map((rsvp) => rsvp.userId);
+
+    // Filter leads to only show those from users who used this license key
+    if (userIds.length > 0) {
+      // If memberId is already set, intersect with license key users
+      if (query.userId) {
+        query.userId = { $in: userIds.filter((id) => id.toString() === query.userId) };
+      } else {
+        query.userId = { $in: userIds };
+      }
+    } else {
+      // No users found with this license key, return empty
+      return {
+        leads: [],
+        pagination: {
+          total: 0,
+          page,
+          pages: 0,
+          limit,
+        },
+      };
+    }
+  }
 
   // Add search filter
   if (search) {

@@ -549,10 +549,15 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
     throw new Error("Email or phone number is required");
   }
 
-  const user = await UserModel.findOne(query);
+  // Populate role to check user type
+  const user = await UserModel.findOne(query).populate("role");
   if (!user) {
     throw new Error("User with this email or phone number does not exist");
   }
+
+  // Determine if user is an end user (phone-first) or admin/exhibitor/team manager (email-first)
+  const roleName = (user.role as any)?.name?.toUpperCase() || "";
+  const isEndUser = roleName === "ENDUSER";
 
   // Generate OTP
   let otp: string;
@@ -564,39 +569,79 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
     otp = config.DUMMY_OTP;
     console.log(`🔐 TESTING MODE: Using dummy OTP for forgot password: ${otp}`);
     otpSentStatus = true;
-    if (user.phoneNumber) {
-      sentTo = user.phoneNumber;
-      sentVia = "phoneNumber";
-    } else if (user.email) {
-      sentTo = user.email;
-      sentVia = "email";
+    // For end users: prioritize phone, for others: prioritize email
+    if (isEndUser) {
+      if (user.phoneNumber) {
+        sentTo = user.phoneNumber;
+        sentVia = "phoneNumber";
+      } else if (user.email) {
+        sentTo = user.email;
+        sentVia = "email";
+      } else {
+        throw new Error("User does not have a valid phone number or email");
+      }
     } else {
-      throw new Error("User does not have a valid phone number or email");
+      if (user.email) {
+        sentTo = user.email;
+        sentVia = "email";
+      } else if (user.phoneNumber) {
+        sentTo = user.phoneNumber;
+        sentVia = "phoneNumber";
+      } else {
+        throw new Error("User does not have a valid email or phone number");
+      }
     }
   } else {
     otp = generateOTP(config.OTP_LENGTH);
 
-    // Prioritize phone number, fall back to email
-    if (user.phoneNumber) {
-      otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
-      if (otpSentStatus) {
-        console.log(`✅ Forgot Password OTP sent to phone ${user.phoneNumber}: ${otp}`);
+    // For ENDUSER: prioritize phone number, fall back to email
+    // For EXHIBITOR, TEAMMANAGER, SUPERADMIN: prioritize email, fall back to phone
+    if (isEndUser) {
+      // End user: phone first, email fallback
+      if (user.phoneNumber) {
+        otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
+        if (otpSentStatus) {
+          console.log(`✅ Forgot Password OTP sent to phone ${user.phoneNumber}: ${otp}`);
+        } else {
+          console.error(`❌ Failed to send OTP to phone ${user.phoneNumber}`);
+        }
+        sentTo = user.phoneNumber;
+        sentVia = "phoneNumber";
+      } else if (user.email) {
+        otpSentStatus = await sendOTPViaEmail(user.email, otp);
+        if (otpSentStatus) {
+          console.log(`✅ Forgot Password OTP sent to email ${user.email}: ${otp}`);
+        } else {
+          console.error(`❌ Failed to send OTP to email ${user.email}`);
+        }
+        sentTo = user.email;
+        sentVia = "email";
       } else {
-        console.error(`❌ Failed to send OTP to phone ${user.phoneNumber}`);
+        throw new Error("User does not have a valid phone number or email");
       }
-      sentTo = user.phoneNumber;
-      sentVia = "phoneNumber";
-    } else if (user.email) {
-      otpSentStatus = await sendOTPViaEmail(user.email, otp);
-      if (otpSentStatus) {
-        console.log(`✅ Forgot Password OTP sent to email ${user.email}: ${otp}`);
-      } else {
-        console.error(`❌ Failed to send OTP to email ${user.email}`);
-      }
-      sentTo = user.email;
-      sentVia = "email";
     } else {
-      throw new Error("User does not have a valid phone number or email");
+      // Admin/Exhibitor/Team Manager: email first, phone fallback
+      if (user.email) {
+        otpSentStatus = await sendOTPViaEmail(user.email, otp);
+        if (otpSentStatus) {
+          console.log(`✅ Forgot Password OTP sent to email ${user.email}: ${otp}`);
+        } else {
+          console.error(`❌ Failed to send OTP to email ${user.email}`);
+        }
+        sentTo = user.email;
+        sentVia = "email";
+      } else if (user.phoneNumber) {
+        otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
+        if (otpSentStatus) {
+          console.log(`✅ Forgot Password OTP sent to phone ${user.phoneNumber}: ${otp}`);
+        } else {
+          console.error(`❌ Failed to send OTP to phone ${user.phoneNumber}`);
+        }
+        sentTo = user.phoneNumber;
+        sentVia = "phoneNumber";
+      } else {
+        throw new Error("User does not have a valid email or phone number");
+      }
     }
   }
 

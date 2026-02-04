@@ -39,7 +39,7 @@ export const getTeamMeetings = async (req: AuthRequest, res: Response) => {
 export const getAllLeadsForManager = async (req: AuthRequest, res: Response) => {
   try {
     const teamManagerId = req.user?.userId;
-    const { eventId, memberId, page = 1, limit = 10, search = "" } = req.query;
+    const { eventId, memberId, page = 1, limit = 10, search = "", licenseKey = "" } = req.query;
 
     const result = await teamManagerService.getAllLeadsForManager(
       teamManagerId!,
@@ -47,7 +47,8 @@ export const getAllLeadsForManager = async (req: AuthRequest, res: Response) => 
       memberId as string,
       Number(page),
       Number(limit),
-      search as string
+      search as string,
+      licenseKey as string
     );
 
     res.status(200).json({

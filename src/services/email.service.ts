@@ -1118,3 +1118,444 @@ export const sendCustomInvitationEmail = async (data: CustomInvitationEmailData)
 
   return await sendEmail(emailOptions);
 };
+
+// ============================================
+// Event Update Email Templates
+// ============================================
+
+interface EventUpdateEmailData {
+  recipientEmail: string;
+  recipientName: string;
+  eventName: string;
+  eventId: string;
+  stallName?: string;
+  changes: { field: string; oldValue: string; newValue: string }[];
+  updatedBy: string;
+}
+
+// Generate HTML email template for event update notification
+const generateEventUpdateEmailHTML = (data: EventUpdateEmailData): string => {
+  const changesHTML = data.changes.map(change => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #555;">
+        ${change.field}
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #dee2e6; color: #dc3545; text-decoration: line-through;">
+        ${change.oldValue || '-'}
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #dee2e6; color: #28a745; font-weight: 600;">
+        ${change.newValue || '-'}
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Updated - ${data.eventName}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: #854AE6;
+      color: #ffffff;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .content {
+      padding: 30px;
+    }
+    .changes-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    .changes-table th {
+      background-color: #f8f9fa;
+      padding: 12px;
+      text-align: left;
+      border-bottom: 2px solid #854AE6;
+      color: #333;
+    }
+    .info-box {
+      background-color: #f8f9fa;
+      border-left: 4px solid #854AE6;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6c757d;
+      border-top: 1px solid #dee2e6;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #854AE6;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        margin: 0;
+        border-radius: 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .changes-table th, .changes-table td {
+        padding: 8px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>📢 Event Updated</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>${data.recipientName}</strong>,</p>
+      <p>The event <strong>"${data.eventName}"</strong> has been updated by the organizer. Below are the changes that were made:</p>
+
+      ${data.stallName ? `<div class="info-box"><strong>Your Stall:</strong> ${data.stallName}</div>` : ''}
+
+      <table class="changes-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Previous Value</th>
+            <th>New Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${changesHTML}
+        </tbody>
+      </table>
+
+      <div class="info-box">
+        <strong>Updated by:</strong> ${data.updatedBy}
+      </div>
+
+      <p style="margin-top: 30px;">
+        <a href="https://stag-dashboard.scan2card.com/" class="button">Go to Dashboard</a>
+      </p>
+
+      <p style="margin-top: 30px; color: #6c757d; font-size: 14px;">
+        If you have any questions about these changes, please contact the event organizer.
+      </p>
+    </div>
+    <div class="footer">
+      <p style="margin: 5px 0;">&copy; ${new Date().getFullYear()} Scan2Card. All rights reserved.</p>
+      <p style="margin: 5px 0;">This is an automated notification. Please do not reply.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+};
+
+// Generate plain text version of event update email
+const generateEventUpdateEmailText = (data: EventUpdateEmailData): string => {
+  const changesText = data.changes.map(change =>
+    `  - ${change.field}: "${change.oldValue || '-'}" → "${change.newValue || '-'}"`
+  ).join('\n');
+
+  return `
+Event Updated - ${data.eventName}
+
+Hello ${data.recipientName},
+
+The event "${data.eventName}" has been updated by the organizer.
+
+${data.stallName ? `Your Stall: ${data.stallName}` : ''}
+
+Changes Made:
+${changesText}
+
+Updated by: ${data.updatedBy}
+
+If you have any questions about these changes, please contact the event organizer.
+
+© ${new Date().getFullYear()} Scan2Card. All rights reserved.
+This is an automated notification. Please do not reply.
+  `.trim();
+};
+
+// Send event update notification email
+export const sendEventUpdateEmail = async (data: EventUpdateEmailData): Promise<boolean> => {
+  const subject = `Event Updated: ${data.eventName}`;
+
+  const emailOptions: EmailOptions = {
+    to: data.recipientEmail,
+    subject,
+    html: generateEventUpdateEmailHTML(data),
+    text: generateEventUpdateEmailText(data),
+  };
+
+  return await sendEmail(emailOptions);
+};
+
+// ============================================
+// License Key Update Email Templates
+// ============================================
+
+interface LicenseKeyUpdateEmailData {
+  recipientEmail: string;
+  recipientName: string;
+  licenseKey: string;
+  eventName: string;
+  stallName?: string;
+  changes: { field: string; oldValue: string; newValue: string }[];
+  updatedBy: string;
+}
+
+// Generate HTML email template for license key update notification
+const generateLicenseKeyUpdateEmailHTML = (data: LicenseKeyUpdateEmailData): string => {
+  const changesHTML = data.changes.map(change => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #555;">
+        ${change.field}
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #dee2e6; color: #dc3545; text-decoration: line-through;">
+        ${change.oldValue || '-'}
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #dee2e6; color: #28a745; font-weight: 600;">
+        ${change.newValue || '-'}
+      </td>
+    </tr>
+  `).join('');
+
+  const formattedLicenseKey = data.licenseKey.match(/.{1,3}/g)?.join('-') || data.licenseKey;
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Key Updated</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background: #854AE6;
+      color: #ffffff;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .content {
+      padding: 30px;
+    }
+    .license-box {
+      background-color: #f8f9fa;
+      border-left: 4px solid #854AE6;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .license-key {
+      font-family: 'Courier New', monospace;
+      font-size: 18px;
+      font-weight: bold;
+      color: #854AE6;
+      background-color: #ffffff;
+      padding: 10px 15px;
+      border-radius: 4px;
+      border: 1px solid #dee2e6;
+      display: inline-block;
+    }
+    .changes-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    .changes-table th {
+      background-color: #f8f9fa;
+      padding: 12px;
+      text-align: left;
+      border-bottom: 2px solid #854AE6;
+      color: #333;
+    }
+    .info-box {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6c757d;
+      border-top: 1px solid #dee2e6;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #854AE6;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        margin: 0;
+        border-radius: 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .changes-table th, .changes-table td {
+        padding: 8px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>🔑 License Key Updated</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>${data.recipientName}</strong>,</p>
+      <p>Your license key for the event <strong>"${data.eventName}"</strong> has been updated.</p>
+
+      <div class="license-box">
+        <p style="margin: 0 0 10px 0; color: #555;"><strong>License Key:</strong></p>
+        <span class="license-key">${formattedLicenseKey}</span>
+        ${data.stallName ? `<p style="margin: 15px 0 0 0;"><strong>Stall:</strong> ${data.stallName}</p>` : ''}
+      </div>
+
+      <h3 style="color: #854AE6; margin-top: 25px;">Changes Made:</h3>
+      <table class="changes-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Previous Value</th>
+            <th>New Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${changesHTML}
+        </tbody>
+      </table>
+
+      <div class="info-box">
+        <strong>Please Note:</strong> These changes are effective immediately. Please review the updated details and contact the organizer if you have any questions.
+      </div>
+
+      <p style="margin-top: 20px; color: #6c757d; font-size: 14px;">
+        Updated by: ${data.updatedBy}
+      </p>
+
+      <p style="margin-top: 30px;">
+        <a href="https://stag-dashboard.scan2card.com/" class="button">Go to Dashboard</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p style="margin: 5px 0;">&copy; ${new Date().getFullYear()} Scan2Card. All rights reserved.</p>
+      <p style="margin: 5px 0;">This is an automated notification. Please do not reply.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+};
+
+// Generate plain text version of license key update email
+const generateLicenseKeyUpdateEmailText = (data: LicenseKeyUpdateEmailData): string => {
+  const formattedLicenseKey = data.licenseKey.match(/.{1,3}/g)?.join('-') || data.licenseKey;
+  const changesText = data.changes.map(change =>
+    `  - ${change.field}: "${change.oldValue || '-'}" → "${change.newValue || '-'}"`
+  ).join('\n');
+
+  return `
+License Key Updated
+
+Hello ${data.recipientName},
+
+Your license key for the event "${data.eventName}" has been updated.
+
+License Key: ${formattedLicenseKey}
+${data.stallName ? `Stall: ${data.stallName}` : ''}
+
+Changes Made:
+${changesText}
+
+PLEASE NOTE: These changes are effective immediately. Please review the updated details and contact the organizer if you have any questions.
+
+Updated by: ${data.updatedBy}
+
+© ${new Date().getFullYear()} Scan2Card. All rights reserved.
+This is an automated notification. Please do not reply.
+  `.trim();
+};
+
+// Send license key update notification email
+export const sendLicenseKeyUpdateEmail = async (data: LicenseKeyUpdateEmailData): Promise<boolean> => {
+  const subject = `License Key Updated - ${data.eventName}`;
+
+  const emailOptions: EmailOptions = {
+    to: data.recipientEmail,
+    subject,
+    html: generateLicenseKeyUpdateEmailHTML(data),
+    text: generateLicenseKeyUpdateEmailText(data),
+  };
+
+  return await sendEmail(emailOptions);
+};
