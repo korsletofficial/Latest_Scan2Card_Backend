@@ -22,6 +22,8 @@ import {
   // Calendar permission controllers
   grantCalendarPermission,
   revokeCalendarPermission,
+  // License key usage details
+  getLicenseKeyUsageDetails,
 } from "../controllers/teamManager.controller";
 import {
   adminDashboardLimiter,
@@ -57,6 +59,9 @@ router.patch("/license-key/bulk-restore-meeting-permission", authenticateToken, 
 
 // Get license key meeting permission status
 router.get("/license-key/meeting-permission-status", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getLicenseKeyMeetingPermissionStatus);
+
+// Get license key usage details (who is using the key and their lead counts)
+router.get("/license-key/usage-details", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getLicenseKeyUsageDetails);
 
 // Calendar Permission Management Routes
 // Grant/revoke permission for team member to use their own calendar
