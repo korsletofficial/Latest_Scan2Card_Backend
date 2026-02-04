@@ -122,11 +122,22 @@ export const createLead = async (req: AuthRequest, res: Response) => {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
     if (files?.noteAudio && files.noteAudio.length > 0) {
       const audioFile = files.noteAudio[0];
-      // Validate audio file type (MP3, M4A, WebM for browser recording)
-      if (!['audio/mpeg', 'audio/mp4', 'audio/webm'].includes(audioFile.mimetype)) {
+      // Validate audio file type (common mobile and browser formats)
+      const allowedAudioTypes = [
+        'audio/mpeg',      // MP3
+        'audio/mp4',       // M4A/AAC (iOS default)
+        'audio/webm',      // WebM (browser recording)
+        'audio/aac',       // AAC
+        'audio/3gpp',      // 3GP (Android)
+        'audio/amr',       // AMR (Android voice)
+        'audio/wav',       // WAV
+        'audio/x-m4a',     // M4A alternate MIME type
+        'audio/ogg',       // OGG (Android)
+      ];
+      if (!allowedAudioTypes.includes(audioFile.mimetype)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid audio format. Only MP3, M4A, and WebM are allowed.',
+          message: 'Invalid audio format. Supported formats: MP3, M4A, AAC, WebM, WAV, OGG, 3GP, AMR.',
         });
       }
       // Upload audio to S3
