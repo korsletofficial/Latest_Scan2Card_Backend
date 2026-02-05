@@ -7,7 +7,7 @@ import RsvpModel from "../models/rsvp.model";
 import mongoose from "mongoose";
 import { customAlphabet } from "nanoid";
 import bcrypt from "bcryptjs";
-import { sendLicenseKeyEmail } from "./email.service";
+import { sendLicenseKeyEmail, sendEventUpdateEmail, sendLicenseKeyUpdateEmail } from "./email.service";
 
 
 interface CreateEventData {
@@ -126,6 +126,41 @@ const updateExhibitorLicenseKeyCounts = async (
     },
     { new: true }
   );
+};
+
+// Helper function to format date for display in emails
+const formatDateForEmail = (date: Date): string => {
+  return new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Helper function to format field name for display
+const formatFieldName = (field: string): string => {
+  const fieldNames: Record<string, string> = {
+    eventName: 'Event Name',
+    description: 'Description',
+    type: 'Event Type',
+    startDate: 'Start Date',
+    endDate: 'End Date',
+    location: 'Location',
+    isActive: 'Active Status',
+    stallName: 'Stall Name',
+    maxActivations: 'Max Activations',
+    expiresAt: 'Expiration Date'
+  };
+  return fieldNames[field] || field;
+};
+
+// Helper function to format location for comparison
+const formatLocation = (location: any): string => {
+  if (!location) return '-';
+  const parts = [location.venue, location.address, location.city].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : '-';
 };
 
 // Helper function to create team manager for license
@@ -305,11 +340,22 @@ export const updateEvent = async (
     _id: id,
     exhibitorId,
     isDeleted: false,
-  });
+  }).populate("exhibitorId", "firstName lastName email companyName");
 
   if (!event) {
     throw new Error("Event not found");
   }
+
+  // Capture old values for comparison
+  const oldValues = {
+    eventName: event.eventName,
+    description: event.description,
+    type: event.type,
+    startDate: event.startDate,
+    endDate: event.endDate,
+    location: event.location,
+    isActive: event.isActive,
+  };
 
   // Validate dates if provided
   if (data.startDate || data.endDate) {
@@ -321,18 +367,118 @@ export const updateEvent = async (
     }
   }
 
-  // Update fields
-  if (data.eventName) event.eventName = data.eventName;
-  if (data.description !== undefined) event.description = data.description;
-  if (data.type !== undefined) event.type = data.type;
-  if (data.startDate) event.startDate = data.startDate;
-  if (data.endDate) event.endDate = data.endDate;
-  if (data.location) event.location = data.location;
-  if (typeof data.isActive === "boolean") event.isActive = data.isActive;
+  // Track changes for notification
+  const changes: { field: string; oldValue: string; newValue: string }[] = [];
+
+  // Update fields and track changes
+  if (data.eventName && data.eventName !== oldValues.eventName) {
+    changes.push({
+      field: formatFieldName('eventName'),
+      oldValue: oldValues.eventName,
+      newValue: data.eventName
+    });
+    event.eventName = data.eventName;
+  }
+
+  if (data.description !== undefined && data.description !== oldValues.description) {
+    changes.push({
+      field: formatFieldName('description'),
+      oldValue: oldValues.description || '-',
+      newValue: data.description || '-'
+    });
+    event.description = data.description;
+  }
+
+  if (data.type !== undefined && data.type !== oldValues.type) {
+    changes.push({
+      field: formatFieldName('type'),
+      oldValue: oldValues.type,
+      newValue: data.type
+    });
+    event.type = data.type;
+  }
+
+  if (data.startDate && data.startDate.getTime() !== oldValues.startDate.getTime()) {
+    changes.push({
+      field: formatFieldName('startDate'),
+      oldValue: formatDateForEmail(oldValues.startDate),
+      newValue: formatDateForEmail(data.startDate)
+    });
+    event.startDate = data.startDate;
+  }
+
+  if (data.endDate && data.endDate.getTime() !== oldValues.endDate.getTime()) {
+    changes.push({
+      field: formatFieldName('endDate'),
+      oldValue: formatDateForEmail(oldValues.endDate),
+      newValue: formatDateForEmail(data.endDate)
+    });
+    event.endDate = data.endDate;
+  }
+
+  if (data.location) {
+    const oldLocation = formatLocation(oldValues.location);
+    const newLocation = formatLocation(data.location);
+    if (oldLocation !== newLocation) {
+      changes.push({
+        field: formatFieldName('location'),
+        oldValue: oldLocation,
+        newValue: newLocation
+      });
+    }
+    event.location = data.location;
+  }
+
+  if (typeof data.isActive === "boolean" && data.isActive !== oldValues.isActive) {
+    changes.push({
+      field: formatFieldName('isActive'),
+      oldValue: oldValues.isActive ? 'Active' : 'Inactive',
+      newValue: data.isActive ? 'Active' : 'Inactive'
+    });
+    event.isActive = data.isActive;
+  }
 
   await event.save();
 
-  await event.populate("exhibitorId", "firstName lastName email companyName");
+  // Send email notifications to ALL team managers if there are changes
+  if (changes.length > 0 && event.licenseKeys.length > 0) {
+    const exhibitor = event.exhibitorId as any;
+    const updatedByName = exhibitor
+      ? `${exhibitor.firstName} ${exhibitor.lastName}${exhibitor.companyName ? ` (${exhibitor.companyName})` : ''}`
+      : 'Event Organizer';
+
+    // Send emails to all active team managers (non-blocking)
+    event.licenseKeys
+      .filter(lk => lk.email && lk.isActive)
+      .forEach(async (licenseKey) => {
+        try {
+          // Get team manager name from User model
+          let recipientName = 'Team Manager';
+          if (licenseKey.teamManagerId) {
+            const teamManager = await UserModel.findById(licenseKey.teamManagerId).select('firstName lastName');
+            if (teamManager) {
+              recipientName = `${teamManager.firstName} ${teamManager.lastName}`;
+            }
+          }
+
+          sendEventUpdateEmail({
+            recipientEmail: licenseKey.email,
+            recipientName,
+            eventName: event.eventName,
+            eventId: event._id.toString(),
+            stallName: licenseKey.stallName,
+            changes,
+            updatedBy: updatedByName,
+          })
+            .then(() => console.log(`✅ Event update email sent to ${licenseKey.email}`))
+            .catch((emailError: any) =>
+              console.error(`❌ Failed to send event update email to ${licenseKey.email}:`, emailError.message)
+            );
+        } catch (error: any) {
+          console.error(`❌ Error preparing event update email for ${licenseKey.email}:`, error.message);
+        }
+      });
+  }
 
   return event;
 };
@@ -647,7 +793,7 @@ export const updateLicenseKey = async (
     _id: eventId,
     exhibitorId,
     isDeleted: false,
-  });
+  }).populate("exhibitorId", "firstName lastName email companyName");
 
   if (!event) {
     throw new Error("Event not found");
@@ -661,6 +807,13 @@ export const updateLicenseKey = async (
   if (!licenseKey) {
     throw new Error("License key not found");
   }
+
+  // Capture old values for comparison
+  const oldValues = {
+    stallName: licenseKey.stallName,
+    maxActivations: licenseKey.maxActivations,
+    expiresAt: licenseKey.expiresAt,
+  };
 
   // Validate that license key expiration date is not before event start date
   if (data.expiresAt) {
@@ -677,25 +830,50 @@ export const updateLicenseKey = async (
     }
   }
 
-  // Update the license key fields
-  if (data.stallName !== undefined) {
+  // Track changes for notification
+  const changes: { field: string; oldValue: string; newValue: string }[] = [];
+
+  // Update the license key fields and track changes
+  if (data.stallName !== undefined && data.stallName !== oldValues.stallName) {
+    changes.push({
+      field: formatFieldName('stallName'),
+      oldValue: oldValues.stallName || '-',
+      newValue: data.stallName || '-'
+    });
     licenseKey.stallName = data.stallName;
   }
-  
+
   let activationsDifference = 0;
-  if (data.maxActivations !== undefined) {
+  if (data.maxActivations !== undefined && data.maxActivations !== oldValues.maxActivations) {
     // Check if new maxActivations is less than usedCount
     if (data.maxActivations < licenseKey.usedCount) {
       throw new Error(
         `maxActivations (${data.maxActivations}) cannot be less than the current usage count (${licenseKey.usedCount})`
       );
     }
-    
+
+    changes.push({
+      field: formatFieldName('maxActivations'),
+      oldValue: String(oldValues.maxActivations),
+      newValue: String(data.maxActivations)
+    });
+
     // Calculate the difference to update organiser's currentTotalActivations
     activationsDifference = data.maxActivations - licenseKey.maxActivations;
     licenseKey.maxActivations = data.maxActivations;
   }
+
   if (data.expiresAt !== undefined) {
+    const oldExpiry = oldValues.expiresAt ? oldValues.expiresAt.getTime() : 0;
+    const newExpiry = data.expiresAt.getTime();
+
+    if (oldExpiry !== newExpiry) {
+      changes.push({
+        field: formatFieldName('expiresAt'),
+        oldValue: oldValues.expiresAt ? formatDateForEmail(oldValues.expiresAt) : '-',
+        newValue: formatDateForEmail(data.expiresAt)
+      });
+    }
     licenseKey.expiresAt = data.expiresAt;
   }
 
@@ -707,6 +885,43 @@ export const updateLicenseKey = async (
       exhibitorId,
       { $inc: { currentTotalActivations: activationsDifference } }
     );
+  }
+
+  // Send email notification to the SPECIFIC team manager if there are changes
+  if (changes.length > 0 && licenseKey.email) {
+    const exhibitor = event.exhibitorId as any;
+    const updatedByName = exhibitor
+      ? `${exhibitor.firstName} ${exhibitor.lastName}${exhibitor.companyName ? ` (${exhibitor.companyName})` : ''}`
+      : 'Event Organizer';
+
+    // Get team manager name (non-blocking)
+    (async () => {
+      try {
+        let recipientName = 'Team Manager';
+        if (licenseKey.teamManagerId) {
+          const teamManager = await UserModel.findById(licenseKey.teamManagerId).select('firstName lastName');
+          if (teamManager) {
+            recipientName = `${teamManager.firstName} ${teamManager.lastName}`;
+          }
+        }
+
+        sendLicenseKeyUpdateEmail({
+          recipientEmail: licenseKey.email,
+          recipientName,
+          licenseKey: licenseKey.key,
+          eventName: event.eventName,
+          stallName: licenseKey.stallName,
+          changes,
+          updatedBy: updatedByName,
+        })
+          .then(() => console.log(`✅ License key update email sent to ${licenseKey.email}`))
+          .catch((emailError: any) =>
+            console.error(`❌ Failed to send license key update email to ${licenseKey.email}:`, emailError.message)
+          );
+      } catch (error: any) {
+        console.error(`❌ Error preparing license key update email for ${licenseKey.email}:`, error.message);
+      }
+    })();
   }
 
   return {

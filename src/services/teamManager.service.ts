@@ -226,7 +226,8 @@ export const getAllLeadsForManager = async (
   memberId?: string,
   page: number = 1,
   limit: number = 10,
-  search: string = ""
+  search: string = "",
+  licenseKey: string = ""
 ) => {
   // Find all events managed by this team manager
   const managedEvents = await EventModel.find({
@@ -263,6 +264,39 @@ export const getAllLeadsForManager = async (
   }
 
   if (memberId) query.userId = memberId;
+
+  // License key (stall) filtering
+  if (licenseKey) {
+    // Find all RSVPs with this license key
+    const rsvps = await RsvpModel.find({
+      eventLicenseKey: licenseKey,
+      isDeleted: false,
+    }).select("userId");
+
+    // Get all user IDs from these RSVPs
+    const userIds = rsvps.map((rsvp) => rsvp.userId);
+
+    // Filter leads to only show those from users who used this license key
+    if (userIds.length > 0) {
+      // If memberId is already set, intersect with license key users
+      if (query.userId) {
+        query.userId = { $in: userIds.filter((id) => id.toString() === query.userId) };
+      } else {
+        query.userId = { $in: userIds };
+      }
+    } else {
+      // No users found with this license key, return empty
+      return {
+        leads: [],
+        pagination: {
+          total: 0,
+          page,
+          pages: 0,
+          limit,
+        },
+      };
+    }
+  }
 
   // Add search filter
   if (search) {
@@ -1279,4 +1313,111 @@ export const revokeCalendarPermission = async (
   await rsvp.save();
 
   return rsvp;
+};
+
+/**
+ * Get license key usage details - shows who is using the license key and their lead counts
+ */
+export const getLicenseKeyUsageDetails = async (
+  teamManagerId: string,
+  eventId: string,
+  licenseKey: string
+) => {
+  // Verify team manager owns this license key
+  const event = await EventModel.findOne({
+    _id: eventId,
+    "licenseKeys.key": licenseKey.toUpperCase(),
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  });
+
+  if (!event) {
+    throw new Error("Event or license key not found, or you don't have access");
+  }
+
+  // Find the license key details
+  const licenseKeyObj = event.licenseKeys.find(
+    (lk) =>
+      lk.key === licenseKey.toUpperCase() &&
+      lk.teamManagerId?.toString() === teamManagerId
+  );
+
+  if (!licenseKeyObj) {
+    throw new Error("License key not found or access denied");
+  }
+
+  // Find all RSVPs that used this license key
+  const rsvps = await RsvpModel.find({
+    eventId: new mongoose.Types.ObjectId(eventId),
+    eventLicenseKey: licenseKey.toUpperCase(),
+    isDeleted: false,
+  }).select("userId createdAt");
+
+  if (rsvps.length === 0) {
+    return {
+      licenseKey: licenseKey.toUpperCase(),
+      eventId,
+      eventName: event.eventName,
+      stallName: licenseKeyObj.stallName,
+      totalUsers: 0,
+      totalLeads: 0,
+      users: [],
+    };
+  }
+
+  const userIds = rsvps.map((rsvp) => rsvp.userId);
+
+  // Get user details
+  const users = await UserModel.find({
+    _id: { $in: userIds },
+  }).select("firstName lastName email phoneNumber isActive isDeleted createdAt");
+
+  // Create a map for quick RSVP lookup
+  const rsvpMap = new Map(
+    rsvps.map((rsvp) => [rsvp.userId.toString(), rsvp])
+  );
+
+  // Get lead count for each user in this event
+  const usersWithLeads = await Promise.all(
+    users.map(async (user) => {
+      const leadCount = await LeadsModel.countDocuments({
+        userId: user._id,
+        eventId: new mongoose.Types.ObjectId(eventId),
+        isDeleted: false,
+      });
+
+      const rsvp = rsvpMap.get(user._id.toString());
+
+      return {
+        _id: user._id,
+        firstName: user.isDeleted ? "Scan2Card" : user.firstName,
+        lastName: user.isDeleted ? "User" : user.lastName,
+        email: user.isDeleted ? "deleted@user.com" : user.email,
+        phoneNumber: user.isDeleted ? null : user.phoneNumber,
+        isActive: user.isActive,
+        isDeleted: user.isDeleted,
+        leadCount,
+        joinedAt: rsvp?.createdAt || user.createdAt,
+      };
+    })
+  );
+
+  // Sort by lead count descending
+  usersWithLeads.sort((a, b) => b.leadCount - a.leadCount);
+
+  // Calculate total leads
+  const totalLeads = usersWithLeads.reduce((sum, user) => sum + user.leadCount, 0);
+
+  return {
+    licenseKey: licenseKey.toUpperCase(),
+    eventId,
+    eventName: event.eventName,
+    stallName: licenseKeyObj.stallName,
+    expiresAt: licenseKeyObj.expiresAt,
+    usedCount: licenseKeyObj.usedCount,
+    maxActivations: licenseKeyObj.maxActivations,
+    totalUsers: usersWithLeads.length,
+    totalLeads,
+    users: usersWithLeads,
+  };
 };

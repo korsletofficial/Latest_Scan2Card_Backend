@@ -39,7 +39,7 @@ export const getTeamMeetings = async (req: AuthRequest, res: Response) => {
 export const getAllLeadsForManager = async (req: AuthRequest, res: Response) => {
   try {
     const teamManagerId = req.user?.userId;
-    const { eventId, memberId, page = 1, limit = 10, search = "" } = req.query;
+    const { eventId, memberId, page = 1, limit = 10, search = "", licenseKey = "" } = req.query;
 
     const result = await teamManagerService.getAllLeadsForManager(
       teamManagerId!,
@@ -47,7 +47,8 @@ export const getAllLeadsForManager = async (req: AuthRequest, res: Response) => 
       memberId as string,
       Number(page),
       Number(limit),
-      search as string
+      search as string,
+      licenseKey as string
     );
 
     res.status(200).json({
@@ -783,6 +784,53 @@ export const revokeCalendarPermission = async (req: AuthRequest, res: Response) 
     res.status(500).json({
       success: false,
       message: error.message || "Failed to revoke calendar permission",
+    });
+  }
+};
+
+// Get license key usage details (who is using it and their lead counts)
+export const getLicenseKeyUsageDetails = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const { eventId, licenseKey } = req.query;
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required",
+      });
+    }
+
+    if (!licenseKey) {
+      return res.status(400).json({
+        success: false,
+        message: "License key is required",
+      });
+    }
+
+    const usageDetails = await teamManagerService.getLicenseKeyUsageDetails(
+      teamManagerId!,
+      eventId as string,
+      licenseKey as string
+    );
+
+    res.status(200).json({
+      success: true,
+      data: usageDetails,
+    });
+  } catch (error: any) {
+    console.error("❌ Get license key usage details error:", error);
+
+    if (error.message.includes("not found") || error.message.includes("access denied")) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get license key usage details",
     });
   }
 };
