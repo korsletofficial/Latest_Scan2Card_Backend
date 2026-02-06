@@ -20,6 +20,7 @@ export interface RegisterUserDTO {
   lastName: string;
   email?: string;
   phoneNumber?: string;
+  countryCode?: string;
   companyName?: string;
   password: string;
   roleName: "SUPERADMIN" | "EXHIBITOR" | "TEAMMANAGER" | "ENDUSER";
@@ -32,6 +33,7 @@ export interface RegisterUserDTO {
 interface LoginData {
   email?: string;
   phoneNumber?: string;
+  countryCode?: string;
   password: string;
   skipPasswordCheck?: boolean;
 }
@@ -91,6 +93,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
     lastName: data.lastName,
     email: data.email,
     phoneNumber: data.phoneNumber,
+    countryCode: data.countryCode,
     password: hashedPassword,
     role: role._id,
     companyName: data.companyName,
@@ -135,6 +138,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
       lastName: newUser.lastName,
       email: newUser.email,
       phoneNumber: newUser.phoneNumber,
+      countryCode: newUser.countryCode,
       role: (newUser.role as any).name, // Just return role name
       companyName: newUser.companyName,
       isVerified: newUser.isVerified,
@@ -261,6 +265,7 @@ export const loginUser = async (data: LoginData) => {
       lastName: user.lastName,
       email: user.email,
       phoneNumber: user.phoneNumber,
+      countryCode: user.countryCode,
       role: (user.role as any).name, // Just return role name
       companyName: user.companyName,
       twoFactorEnabled: user.twoFactorEnabled,
@@ -300,6 +305,7 @@ export const getUserById = async (userId: string) => {
     lastName: user.lastName,
     email: user.email,
     phoneNumber: user.phoneNumber,
+    countryCode: user.countryCode,
     role: (user.role as any).name, // Just return role name
     companyName: user.companyName,
     isActive: user.isActive,
@@ -529,6 +535,7 @@ export const refreshAccessToken = async (refreshToken: string) => {
       lastName: user.lastName,
       email: user.email,
       phoneNumber: user.phoneNumber,
+      countryCode: user.countryCode,
       role: (user.role as any).name,
       companyName: user.companyName,
       twoFactorEnabled: user.twoFactorEnabled,
@@ -603,6 +610,7 @@ export const verifyOTPUnified = async (
           lastName: user.lastName,
           email: user.email,
           phoneNumber: user.phoneNumber,
+          countryCode: user.countryCode,
           role: (user.role as any).name,
           companyName: user.companyName,
           twoFactorEnabled: user.twoFactorEnabled,
@@ -676,6 +684,7 @@ export const verifyOTPUnified = async (
           lastName: user.lastName,
           email: user.email,
           phoneNumber: user.phoneNumber,
+          countryCode: user.countryCode,
           role: (user.role as any).name,
           companyName: user.companyName,
           twoFactorEnabled: user.twoFactorEnabled,
