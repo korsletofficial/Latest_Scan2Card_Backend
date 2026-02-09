@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import axios from "axios";
+import readline from "readline";
 import { scanBusinessCard, BusinessCardData } from "../src/services/businessCardScanner.service";
 
 const TEAM_MANAGER_ID = "6978579a7fa760ea62df23b1";
@@ -94,11 +95,36 @@ function compareDetails(
   return rows;
 }
 
+// Prompt user for input
+function prompt(question: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+// Find phone numbers in scanned data that are not in DB
+function findMissingPhoneNumbers(dbPhones: string[], scannedPhones: string[]): string[] {
+  const normalizePhone = (p: string) => p.replace(/[\s\-\(\)\.]/g, "");
+  const dbNormalized = new Set(dbPhones.map(normalizePhone));
+  return scannedPhones.filter((p) => !dbNormalized.has(normalizePhone(p)));
+}
+
 // Print comparison table
 function printTable(rows: { field: string; dbValue: string; scannedValue: string; status: string }[]) {
-  const colWidths = { field: 14, db: 30, scan: 30, status: 18 };
+  // Calculate dynamic column widths based on content
+  const minWidths = { field: 14, db: 10, scan: 10, status: 18 };
+  const colWidths = {
+    field: minWidths.field,
+    db: Math.max(minWidths.db, ...rows.map((r) => r.dbValue.length), "DB Value".length),
+    scan: Math.max(minWidths.scan, ...rows.map((r) => r.scannedValue.length), "Scanned Value".length),
+    status: minWidths.status,
+  };
 
-  const pad = (s: string, w: number) => s.length > w ? s.substring(0, w - 2) + ".." : s.padEnd(w);
+  const pad = (s: string, w: number) => s.padEnd(w);
 
   console.log(
     `  ${pad("Field", colWidths.field)} | ${pad("DB Value", colWidths.db)} | ${pad("Scanned Value", colWidths.scan)} | ${pad("Status", colWidths.status)}`
@@ -197,6 +223,7 @@ async function main() {
     let totalMissingInDb = 0;
     let totalDifferent = 0;
     let failedScans = 0;
+    let totalPhonesAdded = 0;
 
     // Step 4: Rescan each lead
     for (let i = 0; i < leads.length; i++) {
@@ -259,6 +286,45 @@ async function main() {
         totalMissingInDb += missingInDb.length;
         totalDifferent += different.length;
       }
+
+      // Check for missing phone numbers and prompt to add
+      const dbPhones: string[] = lead.details?.phoneNumbers || [];
+      const scannedPhones: string[] = mergedScan.phoneNumbers || [];
+      const missingPhones = findMissingPhoneNumbers(dbPhones, scannedPhones);
+
+      if (missingPhones.length > 0) {
+        console.log(`\n  📞 ${missingPhones.length} phone number(s) found in scan but NOT in DB:`);
+        console.log(`  DB has:     [${dbPhones.join(", ")}]`);
+        console.log(`  Scan found: [${scannedPhones.join(", ")}]`);
+        console.log(`  Missing:    [${missingPhones.join(", ")}]\n`);
+
+        const phonesToAdd: string[] = [];
+
+        for (let p = 0; p < missingPhones.length; p++) {
+          const phone = missingPhones[p];
+          const answer = await prompt(`  [${p + 1}/${missingPhones.length}] ${phone} — Press ENTER to add, or 's' to skip: `);
+          if (answer.toLowerCase() === "s") {
+            console.log(`    ⏭ Skipped`);
+          } else {
+            phonesToAdd.push(phone);
+            console.log(`    ✔ Queued for adding`);
+          }
+        }
+
+        if (phonesToAdd.length > 0) {
+          const updatedPhones = [...dbPhones, ...phonesToAdd];
+          await db.collection("leads").updateOne(
+            { _id: lead._id },
+            { $set: { "details.phoneNumbers": updatedPhones } }
+          );
+          totalPhonesAdded += phonesToAdd.length;
+          console.log(`\n  ✅ Added ${phonesToAdd.length} phone number(s) to DB: [${updatedPhones.join(", ")}]`);
+        } else {
+          console.log(`\n  ⏭ No phones added for this lead`);
+        }
+      } else {
+        console.log(`\n  ✓ No missing phone numbers`);
+      }
     }
 
     // Summary
@@ -271,6 +337,7 @@ async function main() {
     console.log(`Leads with differences:      ${leadsWithDifferences}`);
     console.log(`Total fields missing in DB:  ${totalMissingInDb}`);
     console.log(`Total fields different:       ${totalDifferent}`);
+    console.log(`Phone numbers added to DB:   ${totalPhonesAdded}`);
     console.log(`${"=".repeat(80)}`);
 
     await mongoose.disconnect();
