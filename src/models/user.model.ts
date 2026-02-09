@@ -7,6 +7,7 @@ export interface IUser extends Document {
   lastName: string;
   email?: string;
   phoneNumber?: string;
+  countryCode?: string;
   password: string;
   role: mongoose.Types.ObjectId;
   companyName?: string;
@@ -88,6 +89,18 @@ const UserSchema = new Schema<IUser>(
           return phoneRegex.test(v);
         },
         message: 'Invalid phone format'
+      }
+    },
+    countryCode: {
+      type: String,
+      maxlength: 5,
+      trim: true,
+      validate: {
+        validator: function (v: string) {
+          if (!v) return true; // Allow null/undefined
+          return /^\+\d{1,4}$/.test(v);
+        },
+        message: 'Invalid country code format (e.g., +91, +1, +44)'
       }
     },
     password: { 
@@ -226,6 +239,7 @@ const UserSchema = new Schema<IUser>(
 
         // Convert undefined/null to empty string for optional fields
         ret.phoneNumber = ret.phoneNumber ?? '';
+        ret.countryCode = ret.countryCode ?? '';
         ret.companyName = ret.companyName ?? '';
         ret.profileImage = ret.profileImage ?? '';
         ret.events = ret.events ?? [];

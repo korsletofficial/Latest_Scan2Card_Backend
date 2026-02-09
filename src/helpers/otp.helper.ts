@@ -19,8 +19,10 @@ export const generateOTP = (length: number = 6): string => {
 
 /**
  * Format phone number with country code
+ * @param phoneNumber - The phone number to format
+ * @param countryCode - The country dial code (e.g., "+91", "+1"). Defaults to "+91" for backward compatibility.
  */
-const formatPhoneNumber = (phoneNumber: string): string => {
+const formatPhoneNumber = (phoneNumber: string, countryCode?: string): string => {
   // Remove any spaces, dashes, or special characters
   let cleaned = phoneNumber.replace(/[\s\-\(\)]/g, "");
 
@@ -29,9 +31,12 @@ const formatPhoneNumber = (phoneNumber: string): string => {
     cleaned = cleaned.substring(1);
   }
 
-  // If it's a 10-digit number (Indian format without country code), add 91
-  if (cleaned.length === 10 && !cleaned.startsWith("91")) {
-    cleaned = "91" + cleaned;
+  // Get the dial code digits (strip the "+" prefix)
+  const dialCode = countryCode ? countryCode.replace("+", "") : "91";
+
+  // If the number doesn't already start with the dial code, prepend it
+  if (!cleaned.startsWith(dialCode)) {
+    cleaned = dialCode + cleaned;
   }
 
   return cleaned;
@@ -40,7 +45,7 @@ const formatPhoneNumber = (phoneNumber: string): string => {
 /**
  * Send OTP via TextPe SMS API with retry logic
  */
-const sendOTPViaSMS = async (phoneNumber: string, otp: string, retries = 3): Promise<boolean> => {
+const sendOTPViaSMS = async (phoneNumber: string, otp: string, countryCode?: string, retries = 3): Promise<boolean> => {
   const apiKey = config.SMARTPING_API;
 
   // Check if API key is configured
@@ -51,7 +56,7 @@ const sendOTPViaSMS = async (phoneNumber: string, otp: string, retries = 3): Pro
   }
 
   // Format phone number with country code
-  const formattedNumber = formatPhoneNumber(phoneNumber);
+  const formattedNumber = formatPhoneNumber(phoneNumber, countryCode);
 
   const senderId = config.SMS_SENDER_ID;
   const channel = config.SMS_CHANNEL;
@@ -286,7 +291,7 @@ export const handleSendVerificationCode = async ({
       if (!user.phoneNumber) {
         throw new Error("User phone number not available");
       }
-      otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
+      otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp, user.countryCode);
       if (otpSentStatus) {
         console.log(`✅ OTP sent successfully to phone ${user.phoneNumber}: ${otp}`);
       } else {
@@ -432,7 +437,7 @@ export const handleSendLoginOTP = async (userId: string) => {
 
     // Prioritize phone number, fall back to email
     if (user.phoneNumber) {
-      otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
+      otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp, user.countryCode);
       if (otpSentStatus) {
         console.log(`✅ 2FA OTP sent to phone ${user.phoneNumber}: ${otp}`);
       } else {
@@ -599,7 +604,7 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
     if (isEndUser) {
       // End user: phone first, email fallback
       if (user.phoneNumber) {
-        otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
+        otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp, user.countryCode);
         if (otpSentStatus) {
           console.log(`✅ Forgot Password OTP sent to phone ${user.phoneNumber}: ${otp}`);
         } else {
@@ -631,7 +636,7 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
         sentTo = user.email;
         sentVia = "email";
       } else if (user.phoneNumber) {
-        otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp);
+        otpSentStatus = await sendOTPViaSMS(user.phoneNumber, otp, user.countryCode);
         if (otpSentStatus) {
           console.log(`✅ Forgot Password OTP sent to phone ${user.phoneNumber}: ${otp}`);
         } else {

@@ -6,7 +6,7 @@ import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 // Register new user
 export const register = async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, email, phoneNumber, password, roleName, companyName, exhibitorId } = req.body;
+    const { firstName, lastName, email, phoneNumber, countryCode, password, roleName, companyName, exhibitorId } = req.body;
 
     // Validation - Required fields
     if (!firstName || !lastName || !password || !roleName) {
@@ -72,6 +72,21 @@ export const register = async (req: Request, res: Response) => {
           message: "Invalid phone format (use digits, spaces, dashes, plus, or parentheses)",
         });
       }
+
+      // Country code is required when phone number is provided
+      if (!countryCode) {
+        return res.status(400).json({
+          success: false,
+          message: "countryCode is required when phoneNumber is provided (e.g., +91, +1)",
+        });
+      }
+      const countryCodeRegex = /^\+\d{1,4}$/;
+      if (!countryCodeRegex.test(String(countryCode))) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid country code format (e.g., +91, +1, +44)",
+        });
+      }
     }
 
     // Password validation (minimum 8 characters, max 255)
@@ -111,6 +126,7 @@ export const register = async (req: Request, res: Response) => {
       lastName,
       email,
       phoneNumber,
+      countryCode,
       password,
       roleName,
       companyName,
@@ -136,7 +152,7 @@ export const register = async (req: Request, res: Response) => {
 // Login user
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, phoneNumber, password } = req.body;
+    const { email, phoneNumber, countryCode, password } = req.body;
 
     // Validation - at least one of email or phoneNumber must be provided
     if ((!email && !phoneNumber) || !password) {
@@ -146,7 +162,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.loginUser({ email, phoneNumber, password });
+    const result = await authService.loginUser({ email, phoneNumber, countryCode, password });
 
     res.status(200).json({
       success: true,
