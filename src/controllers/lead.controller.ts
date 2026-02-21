@@ -643,7 +643,7 @@ export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
 // Export Leads to CSV
 export const exportLeads = async (req: AuthRequest, res: Response) => {
   try {
-    const { type, eventId, search, rating, licenseKey } = req.query;
+    const { type, eventId, search, rating, licenseKey, memberId } = req.query;
     const userId = req.user?.userId;
     const userRole = req.user?.role;
 
@@ -675,6 +675,10 @@ export const exportLeads = async (req: AuthRequest, res: Response) => {
 
     if (licenseKey) {
       queryParams.licenseKey = licenseKey;
+    }
+
+    if (memberId) {
+      queryParams.memberId = memberId;
     }
 
     // Get leads data with all fields for export

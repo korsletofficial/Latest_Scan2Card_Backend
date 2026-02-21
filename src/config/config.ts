@@ -25,6 +25,22 @@ export const config = {
   SMS_DCS: "0",
   SMS_FLASH: "0",
   SMS_ROUTE: "clickhere",
+
+  // Zoho CRM Integration
+  ZOHO_CLIENT_ID: process.env.ZOHO_CLIENT_ID || "",
+  ZOHO_CLIENT_SECRET: process.env.ZOHO_CLIENT_SECRET || "",
+  ZOHO_REDIRECT_URI: process.env.ZOHO_REDIRECT_URI || "http://localhost:5001/api/crm/zoho/callback",
+  ZOHO_API_DOMAIN: process.env.ZOHO_API_DOMAIN || "https://www.zohoapis.in",
+  ZOHO_ACCOUNTS_URL: process.env.ZOHO_ACCOUNTS_URL || "https://accounts.zoho.in",
+
+  // Salesforce CRM Integration
+  SALESFORCE_CLIENT_ID: process.env.SALESFORCE_CLIENT_ID || "",
+  SALESFORCE_CLIENT_SECRET: process.env.SALESFORCE_CLIENT_SECRET || "",
+  SALESFORCE_REDIRECT_URI: process.env.SALESFORCE_REDIRECT_URI || "http://localhost:5001/api/crm/salesforce/callback",
+  SALESFORCE_LOGIN_URL: process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com",
+
+  // Frontend URL (for redirecting after OAuth)
+  FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:5173",
 };
 
 // Log configuration status on startup
