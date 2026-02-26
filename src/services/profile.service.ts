@@ -6,6 +6,7 @@ interface UpdateProfileData {
   lastName?: string;
   phoneNumber?: string;
   profileImage?: string;
+  country?: string;
 }
 
 // Update user profile
@@ -18,6 +19,7 @@ export const updateUserProfile = async (
   if (data.lastName) updateData.lastName = data.lastName;
   if (data.phoneNumber !== undefined) updateData.phoneNumber = data.phoneNumber;
   if (data.profileImage !== undefined) updateData.profileImage = data.profileImage;
+  if (data.country !== undefined) updateData.country = data.country;
 
   const user = await UserModel.findByIdAndUpdate(userId, updateData, {
     new: true,

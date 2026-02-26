@@ -87,7 +87,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phoneNumber\": \"1234567890\",\n  \"countryCode\": \"+91\",\n  \"password\": \"password123\",\n  \"roleName\": \"EXHIBITOR\",\n  \"companyName\": \"Tech Corp\"\n}"
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phoneNumber\": \"1234567890\",\n  \"countryCode\": \"+91\",\n  \"country\": \"India\",\n  \"password\": \"password123\",\n  \"roleName\": \"EXHIBITOR\",\n  \"companyName\": \"Tech Corp\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/register",
@@ -2222,7 +2222,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phoneNumber\": \"+1234567890\",\n  \"companyName\": \"Tech Corp\",\n  \"address\": \"123 Business St, City, Country\"\n}"
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phoneNumber\": \"+1234567890\",\n  \"country\": \"India\",\n  \"companyName\": \"Tech Corp\",\n  \"address\": \"123 Business St, City, Country\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/profile",
@@ -2272,6 +2272,12 @@
 									"value": "Tech Corp",
 									"type": "text",
 									"description": "Company name"
+								},
+								{
+									"key": "country",
+									"value": "India",
+									"type": "text",
+									"description": "Country (optional)"
 								},
 								{
 									"key": "profileImage",

@@ -6,7 +6,7 @@ import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 // Register new user
 export const register = async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, email, phoneNumber, countryCode, password, roleName, companyName, exhibitorId } = req.body;
+    const { firstName, lastName, email, phoneNumber, countryCode, country, password, roleName, companyName, exhibitorId } = req.body;
 
     // Validation - Required fields
     if (!firstName || !lastName || !password || !roleName) {
@@ -104,6 +104,14 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
+    // Country validation (optional, max 100)
+    if (country && String(country).length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Country must not exceed 100 characters",
+      });
+    }
+
     // Company name validation (max 200)
     if (companyName && String(companyName).length > 200) {
       return res.status(400).json({
@@ -127,6 +135,7 @@ export const register = async (req: Request, res: Response) => {
       email,
       phoneNumber,
       countryCode,
+      country,
       password,
       roleName,
       companyName,

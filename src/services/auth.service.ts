@@ -21,6 +21,7 @@ export interface RegisterUserDTO {
   email?: string;
   phoneNumber?: string;
   countryCode?: string;
+  country?: string;
   companyName?: string;
   password: string;
   roleName: "SUPERADMIN" | "EXHIBITOR" | "TEAMMANAGER" | "ENDUSER";
@@ -94,6 +95,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
     email: data.email,
     phoneNumber: data.phoneNumber,
     countryCode: data.countryCode,
+    country: data.country,
     password: hashedPassword,
     role: role._id,
     companyName: data.companyName,
@@ -139,6 +141,7 @@ export const registerUser = async (data: RegisterUserDTO) => {
       email: newUser.email,
       phoneNumber: newUser.phoneNumber,
       countryCode: newUser.countryCode,
+      country: newUser.country,
       role: (newUser.role as any).name, // Just return role name
       companyName: newUser.companyName,
       isVerified: newUser.isVerified,
@@ -266,6 +269,7 @@ export const loginUser = async (data: LoginData) => {
       email: user.email,
       phoneNumber: user.phoneNumber,
       countryCode: user.countryCode,
+      country: user.country,
       role: (user.role as any).name, // Just return role name
       companyName: user.companyName,
       twoFactorEnabled: user.twoFactorEnabled,
@@ -306,6 +310,7 @@ export const getUserById = async (userId: string) => {
     email: user.email,
     phoneNumber: user.phoneNumber,
     countryCode: user.countryCode,
+    country: user.country,
     role: (user.role as any).name, // Just return role name
     companyName: user.companyName,
     isActive: user.isActive,
