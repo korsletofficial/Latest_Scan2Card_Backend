@@ -187,12 +187,14 @@ export const loginUser = async (data: LoginData) => {
         query.role = requestedRole._id;
       }
     } else {
-      // No activeRole provided — detect collision early with a helpful error
-      const count = await UserModel.countDocuments({ email: data.email, isDeleted: false });
-      if (count > 1) {
-        throw new Error(
-          "Multiple accounts found for this email. Please provide activeRole (e.g. TEAMMANAGER or ENDUSER) to specify which account to log into."
-        );
+      // No activeRole provided — detect collision early, return available roles for picker
+      const accounts = await UserModel.find({ email: data.email, isDeleted: false }).populate("role");
+      if (accounts.length > 1) {
+        const availableRoles = accounts.map(getRoleName).filter(Boolean);
+        const error: any = new Error("Multiple accounts found for this email. Please select a role to continue.");
+        error.requiresRoleSelection = true;
+        error.availableRoles = availableRoles;
+        throw error;
       }
     }
   } else if (data.phoneNumber) {

@@ -179,6 +179,19 @@ export const login = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error: any) {
+    // Special handling for multi-role selection
+    if (error.requiresRoleSelection) {
+      return res.status(200).json({
+        success: true,
+        requiresRoleSelection: true,
+        message: error.message,
+        data: {
+          requiresRoleSelection: true,
+          availableRoles: error.availableRoles,
+        },
+      });
+    }
+
     // Special handling for 2FA
     if (error.requires2FA || (error.message && error.message.includes("2FA"))) {
       // Determine where OTP was sent based on error data
