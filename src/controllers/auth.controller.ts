@@ -349,9 +349,9 @@ export const verifyUserOTP = async (req: Request, res: Response) => {
 // Forgot password - Send OTP
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
-    const { email, phoneNumber } = req.body;
+    const { email, phoneNumber, activeRole } = req.body;
 
-    console.log("Forgot password request received:", { email, phoneNumber });
+    console.log("Forgot password request received:", { email, phoneNumber, activeRole });
 
     // Validate that at least one identifier is provided
     if (!email && !phoneNumber) {
@@ -361,7 +361,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.sendForgotPasswordOTP(email, phoneNumber);
+    const result = await authService.sendForgotPasswordOTP(email, phoneNumber, activeRole);
 
     res.status(200).json({
       success: true,

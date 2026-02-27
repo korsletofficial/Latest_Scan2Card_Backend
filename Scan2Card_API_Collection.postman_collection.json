@@ -249,7 +249,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+							"raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"activeRole\": \"ENDUSER\",\n  \"phoneNumber\": \"\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/auth/forgot-password",
@@ -261,7 +261,7 @@
 								"forgot-password"
 							]
 						},
-						"description": "**Step 1 of Forgot Password Flow** - Initiate password reset and send OTP.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `email` (required, string): User's registered email address\n\n**Process Flow:**\n1. System verifies email exists in database\n2. Generates 6-digit OTP and sends via SMS to user's registered phone\n3. Returns userId needed for subsequent steps\n4. OTP expires after 10 minutes\n\n**Rate Limiting:**\n- 5 requests per hour per email (otpSendResourceLimiter)\n- 500 requests per hour per IP (otpSendIPLimiter)\n\n**Response:**\n- Success: Returns `userId` and confirmation message\n- Error 400: Invalid email format\n- Error 404: Email not found in system\n- Error 429: Rate limit exceeded (too many attempts)\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is 000000\n- No actual SMS sent in development mode\n\n**Next Steps:**\n1. **Step 2:** Call `/verify-otp` with `{ userId, otp, type: \"forgot_password\" }` to get `verificationToken`\n2. **Step 3:** Call `/reset-password` with `{ userId, verificationToken, newPassword }` to complete reset"
+						"description": "**Step 1 of Forgot Password Flow** - Initiate password reset and send OTP.\n\n**Authentication Required:** None (Public endpoint)\n\n**Request Body:**\n- `email` (string): User's registered email address\n- `phoneNumber` (string): User's registered phone number (alternative to email)\n- `activeRole` (optional, string): `SUPERADMIN` | `EXHIBITOR` | `TEAMMANAGER` | `ENDUSER` — required when same email is registered under multiple roles\n\n**Multi-role disambiguation (same as login):**\nIf the same email exists under multiple roles (e.g., TEAMMANAGER and ENDUSER), pass `activeRole` to target the correct account. Without it, the first matching account is used.\n\n**Mobile (ENDUSER) usage:**\n```json\n{\n  \"email\": \"user@example.com\",\n  \"activeRole\": \"ENDUSER\"\n}\n```\n\n**Web dashboard (TEAMMANAGER/EXHIBITOR) usage:**\n```json\n{\n  \"email\": \"manager@example.com\"\n}\n```\n`activeRole` can be omitted when the email belongs to only one account.\n\n**Phone-based (ENDUSER):**\n```json\n{\n  \"phoneNumber\": \"9876543210\",\n  \"activeRole\": \"ENDUSER\"\n}\n```\n\n**Process Flow:**\n1. System finds the correct user account (scoped by `activeRole` if provided)\n2. Generates 6-digit OTP and sends via email or SMS\n3. Returns `userId` needed for subsequent steps\n4. OTP expires after 10 minutes\n\n**Rate Limiting:**\n- 5 requests per hour per email/phone (otpSendResourceLimiter)\n- 500 requests per hour per IP (otpSendIPLimiter)\n\n**Response:**\n- Success: Returns `userId` and confirmation message\n- Error 400: Invalid email format or missing identifier\n- Error 404: User not found\n- Error 429: Rate limit exceeded\n\n**Development Mode:**\n- When `USE_DUMMY_OTP=true`, test OTP is `000000`\n- No actual SMS/email sent in development mode\n\n**Next Steps:**\n1. **Step 2:** Call `/verify-otp` with `{ userId, otp, type: \"forgot_password\" }` → returns `verificationToken`\n2. **Step 3:** Call `/reset-password` with `{ userId, verificationToken, newPassword }` → password reset complete"
 					}
 				},
 				{

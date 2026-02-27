@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { config } from "../config/config";
 import OTPModel from "../models/otp.model";
 import UserModel from "../models/user.model";
+import RoleModel from "../models/role.model";
 import { sendEmail } from "../services/email.service";
 
 /**
@@ -539,12 +540,11 @@ export const handleVerifyLoginOTP = async (userId: string, code: string) => {
 /**
  * Send OTP for forgot password
  */
-export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: string) => {
+export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: string, activeRole?: string) => {
   // Build query to find user by email or phone number
   const query: any = { isDeleted: false };
 
   if (email && phoneNumber) {
-    // If both provided, find by either
     query.$or = [{ email }, { phoneNumber }];
   } else if (email) {
     query.email = email;
@@ -552,6 +552,12 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
     query.phoneNumber = phoneNumber;
   } else {
     throw new Error("Email or phone number is required");
+  }
+
+  // Scope to the requested role when provided (same pattern as login)
+  if (activeRole) {
+    const role = await RoleModel.findOne({ name: activeRole, isDeleted: false });
+    if (role) query.role = role._id;
   }
 
   const user = await UserModel.findOne(query).populate("role");

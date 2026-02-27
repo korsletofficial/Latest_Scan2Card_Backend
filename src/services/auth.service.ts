@@ -408,10 +408,10 @@ export const verifyUserOTP = async (userId: string, otp: string) => {
 };
 
 // Forgot Password - Send OTP
-export const sendForgotPasswordOTP = async (email?: string, phoneNumber?: string) => {
+export const sendForgotPasswordOTP = async (email?: string, phoneNumber?: string, activeRole?: string) => {
   await connectToMongooseDatabase();
 
-  const result = await handleSendForgotPasswordOTP(email, phoneNumber);
+  const result = await handleSendForgotPasswordOTP(email, phoneNumber, activeRole);
 
   return result;
 };
