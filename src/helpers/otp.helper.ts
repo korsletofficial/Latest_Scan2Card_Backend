@@ -554,15 +554,13 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
     throw new Error("Email or phone number is required");
   }
 
-  // Populate role to check user type
   const user = await UserModel.findOne(query).populate("role");
   if (!user) {
     throw new Error("User with this email or phone number does not exist");
   }
 
-  // Determine if user is an end user (phone-first) or admin/exhibitor/team manager (email-first)
-  const roleName = (user.role as any)?.name?.toUpperCase() || "";
-  const isEndUser = roleName === "ENDUSER";
+  // Determine if this is an ENDUSER account (phone-first OTP) or other role (email-first)
+  const isEndUser = (user.role as any)?.name?.toUpperCase() === "ENDUSER";
 
   // Generate OTP
   let otp: string;

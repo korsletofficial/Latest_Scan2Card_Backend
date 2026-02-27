@@ -36,8 +36,39 @@ interface LoginData {
   phoneNumber?: string;
   countryCode?: string;
   password: string;
+  activeRole?: string;
   skipPasswordCheck?: boolean;
 }
+
+// Helper: build JWT access + refresh token pair
+const buildTokens = (user: any, roleName: string) => {
+  const jwtSecret = process.env.JWT_SECRET || "scan2card_secret";
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || "scan2card_refresh_secret";
+
+  const token = jwt.sign(
+    {
+      userId: user._id.toString(),
+      email: user.email,
+      activeRole: roleName,
+    },
+    jwtSecret,
+    { expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h") as any }
+  );
+
+  const refreshToken = jwt.sign(
+    { userId: user._id.toString(), type: "refresh" },
+    refreshSecret,
+    { expiresIn: (process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || "7d") as any }
+  );
+
+  return { token, refreshToken };
+};
+
+// Helper: get the role name from a populated user
+const getRoleName = (user: IUser): string => {
+  const r = user.role as any;
+  return r?.name || r?.toString() || "";
+};
 
 // Register new user
 export const registerUser = async (data: RegisterUserDTO) => {
@@ -48,31 +79,31 @@ export const registerUser = async (data: RegisterUserDTO) => {
     throw new Error("At least one of email or phoneNumber must be provided");
   }
 
-  // Check if user already exists with the same email
+  // Email uniqueness is enforced per-role. The same email can coexist as separate
+  // independent accounts across different roles (e.g. TEAMMANAGER + ENDUSER).
   if (data.email) {
-    const existingUserByEmail = await UserModel.findOne({
-      email: data.email,
-      isDeleted: false,
-    });
-
-    if (existingUserByEmail) {
-      throw new Error("User with this email already exists");
+    const roleForCheck = await RoleModel.findOne({ name: data.roleName, isDeleted: false });
+    if (roleForCheck) {
+      const existingWithSameRole = await UserModel.findOne({
+        email: data.email,
+        role: roleForCheck._id,
+        isDeleted: false,
+      });
+      if (existingWithSameRole) {
+        throw new Error("User with this email already exists");
+      }
     }
   }
 
-  // Check phone number uniqueness ONLY for ENDUSER role
-  // For other roles (SUPERADMIN, EXHIBITOR, TEAMMANAGER), phone is just contact info
+  // Phone number uniqueness scoped to ENDUSER only
   if (data.phoneNumber && data.roleName === "ENDUSER") {
-    // Find role first to get its ID
     const endUserRole = await RoleModel.findOne({ name: "ENDUSER", isDeleted: false });
-
     if (endUserRole) {
       const existingUserByPhone = await UserModel.findOne({
         phoneNumber: data.phoneNumber,
         role: endUserRole._id,
         isDeleted: false,
       });
-
       if (existingUserByPhone) {
         throw new Error("User with this phone number already exists");
       }
@@ -88,7 +119,6 @@ export const registerUser = async (data: RegisterUserDTO) => {
   // Hash password
   const hashedPassword = await bcrypt.hash(data.password, 10);
 
-  // Create user
   const newUser = await UserModel.create({
     firstName: data.firstName,
     lastName: data.lastName,
@@ -101,37 +131,27 @@ export const registerUser = async (data: RegisterUserDTO) => {
     companyName: data.companyName,
     isActive: true,
     isDeleted: false,
-    isVerified: data.skipVerification ? true : false, // Auto-verify if skipVerification is true
+    isVerified: data.skipVerification ? true : false,
     ...(data.maxLicenseKeys !== undefined && { maxLicenseKeys: data.maxLicenseKeys }),
     ...(data.maxTotalActivations !== undefined && { maxTotalActivations: data.maxTotalActivations }),
   });
 
-  // Populate role to get role name
   await newUser.populate("role");
 
-  // Only send verification OTP if skipVerification is false (for ENDUSER)
+  // Send verification OTP unless skipped
   if (!data.skipVerification) {
-    // Send verification OTP automatically after registration (NON-BLOCKING)
-    // Fire-and-forget pattern: don't wait for OTP to send before returning response
     const source = newUser.phoneNumber ? "phoneNumber" : "email";
-
-    // Send OTP asynchronously without blocking registration response
-    handleSendVerificationCode({
-      userId: newUser._id.toString(),
-      source,
-    })
-      .then(() => {
-        console.log(`✅ Verification OTP sent to new user ${newUser.email || newUser.phoneNumber}`);
-      })
-      .catch((error: any) => {
-        console.error(`❌ Failed to send verification OTP to ${newUser.email || newUser.phoneNumber}:`, error.message);
-        // OTP sending failure is logged but doesn't block registration
-      });
+    handleSendVerificationCode({ userId: newUser._id.toString(), source })
+      .then(() => console.log(`✅ Verification OTP sent to ${newUser.email || newUser.phoneNumber}`))
+      .catch((error: any) => console.error(`❌ Failed to send OTP:`, error.message));
   }
 
   const message = data.skipVerification
     ? "Registration successful. Account is automatically verified."
-    : "Registration successful. Please verify your account with the OTP sent to your " + (newUser.phoneNumber ? "phoneNumber" : "email");
+    : "Registration successful. Please verify your account with the OTP sent to your " +
+      (newUser.phoneNumber ? "phoneNumber" : "email");
+
+  const roleName = getRoleName(newUser);
 
   return {
     user: {
@@ -142,7 +162,8 @@ export const registerUser = async (data: RegisterUserDTO) => {
       phoneNumber: newUser.phoneNumber,
       countryCode: newUser.countryCode,
       country: newUser.country,
-      role: (newUser.role as any).name, // Just return role name
+      role: roleName,
+      activeRole: roleName,
       companyName: newUser.companyName,
       isVerified: newUser.isVerified,
     },
@@ -154,51 +175,49 @@ export const registerUser = async (data: RegisterUserDTO) => {
 export const loginUser = async (data: LoginData) => {
   await connectToMongooseDatabase();
 
-  // Build query - find by email or phoneNumber
+  // Build DB query
   const query: any = { isDeleted: false };
   if (data.email) {
     query.email = data.email;
-  } else if (data.phoneNumber) {
-    // Phone number login is ONLY for ENDUSER role (mobile app)
-    // Find ENDUSER role and add to query to ensure we only find ENDUSER accounts
-    const endUserRole = await RoleModel.findOne({ name: "ENDUSER", isDeleted: false });
-    if (!endUserRole) {
-      throw new Error("Invalid credentials");
+    // Same email can exist as multiple role-scoped accounts (e.g. TEAMMANAGER + ENDUSER).
+    // Use activeRole to route to the correct account when logging in.
+    if (data.activeRole) {
+      const requestedRole = await RoleModel.findOne({ name: data.activeRole, isDeleted: false });
+      if (requestedRole) {
+        query.role = requestedRole._id;
+      }
+    } else {
+      // No activeRole provided — detect collision early with a helpful error
+      const count = await UserModel.countDocuments({ email: data.email, isDeleted: false });
+      if (count > 1) {
+        throw new Error(
+          "Multiple accounts found for this email. Please provide activeRole (e.g. TEAMMANAGER or ENDUSER) to specify which account to log into."
+        );
+      }
     }
+  } else if (data.phoneNumber) {
+    // Phone login is ENDUSER-only (mobile app)
+    const endUserRole = await RoleModel.findOne({ name: "ENDUSER", isDeleted: false });
+    if (!endUserRole) throw new Error("Invalid credentials");
     query.phoneNumber = data.phoneNumber;
-    query.role = endUserRole._id; // Only search for ENDUSER role
+    query.role = endUserRole._id;
   } else {
     throw new Error("Email or phone number must be provided");
   }
 
-  // Find user with password
-  const user = await UserModel.findOne(query)
-    .select("+password")
-    .populate("role");
+  const user = await UserModel.findOne(query).select("+password").populate("role");
+  if (!user) throw new Error("Invalid credentials");
 
-  if (!user) {
-    throw new Error("Invalid credentials");
-  }
+  if (!user.isActive) throw new Error("Your account has been deactivated");
 
-  // Check if user is active
-  if (!user.isActive) {
-    throw new Error("Your account has been deactivated");
-  }
-
-  // Compare password (skip if this is after OTP verification)
   if (!data.skipPasswordCheck) {
     const isPasswordValid = await bcrypt.compare(data.password, user.password);
-    if (!isPasswordValid) {
-      throw new Error("Invalid credentials");
-    }
+    if (!isPasswordValid) throw new Error("Invalid credentials");
   }
 
-  // Check if 2FA is enabled - if yes, send OTP and require verification
+  // 2FA check
   if (user.twoFactorEnabled && !data.skipPasswordCheck) {
-    // Send 2FA OTP
     const otpResult = await handleSendLoginOTP(user._id.toString());
-
-    // Throw error with special flag to indicate 2FA is required
     const destination = otpResult.sentVia === "phoneNumber" ? "mobile number" : "email";
     const error: any = new Error(`2FA required. OTP has been sent to your ${destination}.`);
     error.requires2FA = true;
@@ -213,55 +232,19 @@ export const loginUser = async (data: LoginData) => {
     throw error;
   }
 
-  // Generate JWT tokens (access + refresh)
-  const jwtSecret = process.env.JWT_SECRET || "scan2card_secret";
-  const refreshSecret = process.env.JWT_REFRESH_SECRET || "scan2card_refresh_secret";
+  const roleName = getRoleName(user);
+  const { token, refreshToken } = buildTokens(user, roleName);
 
-  // Access token (short-lived: 1 hour default, backward compatible as 'token')
-  const token = jwt.sign(
-    {
-      userId: user._id.toString(),
-      email: user.email,
-      role: (user.role as any).name,
-    },
-    jwtSecret,
-    {
-      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h') as any,
-    }
-  );
-
-  // Refresh token (long-lived: 7 days default)
-  const refreshToken = jwt.sign(
-    {
-      userId: user._id.toString(),
-      type: 'refresh',
-    },
-    refreshSecret,
-    {
-      expiresIn: (process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || '7d') as any,
-    }
-  );
-
-  // Calculate refresh token expiry date
   const refreshTokenExpiry = new Date();
-  const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace('d', '') || '7');
+  const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace("d", "") || "7");
   refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + expiryDays);
 
-  // Store refresh token in database using updateOne to avoid full document validation
-  await UserModel.updateOne(
-    { _id: user._id },
-    { 
-      $set: { 
-        refreshToken: refreshToken,
-        refreshTokenExpiry: refreshTokenExpiry 
-      }
-    }
-  );
+  await UserModel.updateOne({ _id: user._id }, { $set: { refreshToken, refreshTokenExpiry } });
 
   return {
-    token, // Access token (backward compatible key name)
-    refreshToken, // NEW: Refresh token for session renewal
-    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h', // NEW: Token expiry time
+    token,
+    refreshToken,
+    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h",
     user: {
       _id: user._id,
       firstName: user.firstName,
@@ -270,12 +253,12 @@ export const loginUser = async (data: LoginData) => {
       phoneNumber: user.phoneNumber,
       countryCode: user.countryCode,
       country: user.country,
-      role: (user.role as any).name, // Just return role name
+      role: roleName,
+      activeRole: roleName,
       companyName: user.companyName,
       twoFactorEnabled: user.twoFactorEnabled,
       isVerified: user.isVerified,
       profileImage: user.profileImage || null,
-      // License key restrictions (for EXHIBITOR role)
       maxLicenseKeys: user.maxLicenseKeys,
       maxTotalActivations: user.maxTotalActivations,
       currentLicenseKeyCount: user.currentLicenseKeyCount,
@@ -303,6 +286,8 @@ export const getUserById = async (userId: string) => {
     throw new Error("User not found");
   }
 
+  const roleName = getRoleName(user);
+
   return {
     _id: user._id,
     firstName: user.firstName,
@@ -311,13 +296,13 @@ export const getUserById = async (userId: string) => {
     phoneNumber: user.phoneNumber,
     countryCode: user.countryCode,
     country: user.country,
-    role: (user.role as any).name, // Just return role name
+    role: roleName,
+    activeRole: roleName,
     companyName: user.companyName,
     isActive: user.isActive,
     twoFactorEnabled: user.twoFactorEnabled,
     isVerified: user.isVerified,
     profileImage: user.profileImage || null,
-    // License key restrictions (for EXHIBITOR role)
     maxLicenseKeys: user.maxLicenseKeys,
     maxTotalActivations: user.maxTotalActivations,
     currentLicenseKeyCount: user.currentLicenseKeyCount,
@@ -330,55 +315,60 @@ export const getUserById = async (userId: string) => {
 export const verifyLoginOTP = async (userId: string, otp: string) => {
   await connectToMongooseDatabase();
 
-  // Use the OTP helper to verify
   const verification = await handleVerifyLoginOTP(userId, otp);
 
   if (!verification.isValid) {
     throw new Error("Invalid OTP");
   }
 
-  // Get user and generate token
-  const user = await UserModel.findById(userId).populate("role", "name");
+  const user = await UserModel.findById(userId).populate("role");
+  if (!user) throw new Error("User not found");
 
-  if (!user) {
-    throw new Error("User not found");
-  }
+  const roleName = getRoleName(user);
+  const { token, refreshToken } = buildTokens(user, roleName);
 
-  // Generate token using the existing service
-  const result = await loginUser({
-    email: user.email,
-    password: user.password,
-    skipPasswordCheck: true,
-  });
+  const refreshTokenExpiry = new Date();
+  const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace("d", "") || "7");
+  refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + expiryDays);
+  await UserModel.updateOne({ _id: user._id }, { $set: { refreshToken, refreshTokenExpiry } });
 
-  return result;
+  return {
+    token,
+    refreshToken,
+    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h",
+    user: {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      role: roleName,
+      activeRole: roleName,
+      isVerified: user.isVerified,
+    },
+  };
 };
 
 // Send Verification OTP
 export const sendVerificationOTP = async (userId: string, phoneNumber?: string) => {
   await connectToMongooseDatabase();
 
-  // Find user
   const user = await UserModel.findById(userId);
   if (!user) {
     throw new Error("User not found");
   }
 
-  // Check if user is already verified
   if (user.isVerified) {
     throw new Error("User is already verified");
   }
 
-  // Update phone number if provided
   if (phoneNumber && phoneNumber !== user.phoneNumber) {
     await UserModel.updateOne({ _id: user._id }, { $set: { phoneNumber } });
-    user.phoneNumber = phoneNumber; // Update local reference for return value
+    user.phoneNumber = phoneNumber;
   }
 
-  // Determine source (prefer phone if available, otherwise email)
   const source = user.phoneNumber ? "phoneNumber" : "email";
 
-  // Use OTP helper to send verification code
   const result = await handleSendVerificationCode({
     userId: user._id.toString(),
     source,
@@ -396,7 +386,6 @@ export const sendVerificationOTP = async (userId: string, phoneNumber?: string) 
 export const verifyUserOTP = async (userId: string, otp: string) => {
   await connectToMongooseDatabase();
 
-  // Get user to determine source
   const user = await UserModel.findById(userId);
   if (!user) {
     throw new Error("User not found");
@@ -404,7 +393,6 @@ export const verifyUserOTP = async (userId: string, otp: string) => {
 
   const source = user.phoneNumber ? "phoneNumber" : "email";
 
-  // Use OTP helper to verify code
   const result = await handleCheckVerificationCode({
     userId,
     source,
@@ -421,7 +409,6 @@ export const verifyUserOTP = async (userId: string, otp: string) => {
 export const sendForgotPasswordOTP = async (email?: string, phoneNumber?: string) => {
   await connectToMongooseDatabase();
 
-  // Use OTP helper to send forgot password OTP
   const result = await handleSendForgotPasswordOTP(email, phoneNumber);
 
   return result;
@@ -435,25 +422,21 @@ export const resetPasswordWithOTP = async (
 ) => {
   await connectToMongooseDatabase();
 
-  // Password validation (minimum 6 characters)
   if (newPassword.length < 6) {
     throw new Error("Password must be at least 6 characters long");
   }
 
-  // Verify OTP using helper
   const verification = await handleVerifyForgotPasswordOTP(userId, otp);
 
   if (!verification.isValid) {
     throw new Error("Invalid OTP");
   }
 
-  // Find user and update password
   const user = await UserModel.findById(userId).select("+password");
   if (!user) {
     throw new Error("User not found");
   }
 
-  // Hash new password
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await UserModel.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
 
@@ -466,7 +449,6 @@ export const resetPasswordWithOTP = async (
 export const send2FALoginOTP = async (userId: string) => {
   await connectToMongooseDatabase();
 
-  // Use OTP helper to send login OTP
   const result = await handleSendLoginOTP(userId);
 
   return {
@@ -483,7 +465,6 @@ export const refreshAccessToken = async (refreshToken: string) => {
     throw new Error("Refresh token is required");
   }
 
-  // Verify refresh token
   const refreshSecret = process.env.JWT_REFRESH_SECRET || "scan2card_refresh_secret";
   let decoded: any;
 
@@ -493,47 +474,31 @@ export const refreshAccessToken = async (refreshToken: string) => {
     throw new Error("Invalid or expired refresh token");
   }
 
-  // Check if it's a refresh token
-  if (decoded.type !== 'refresh') {
+  if (decoded.type !== "refresh") {
     throw new Error("Invalid token type");
   }
 
-  // Find user with this refresh token
   const user = await UserModel.findOne({
     _id: decoded.userId,
     refreshToken: refreshToken,
     isDeleted: false,
     isActive: true,
   })
-    .select('+refreshToken +refreshTokenExpiry')
-    .populate('role');
+    .select("+refreshToken +refreshTokenExpiry")
+    .populate("role");
 
-  if (!user) {
-    throw new Error("Invalid refresh token or user not found");
-  }
+  if (!user) throw new Error("Invalid refresh token or user not found");
 
-  // Check if refresh token has expired
   if (user.refreshTokenExpiry && user.refreshTokenExpiry < new Date()) {
     throw new Error("Refresh token has expired. Please login again.");
   }
 
-  // Generate new access token
-  const jwtSecret = process.env.JWT_SECRET || "scan2card_secret";
-  const newAccessToken = jwt.sign(
-    {
-      userId: user._id.toString(),
-      email: user.email,
-      role: (user.role as any).name,
-    },
-    jwtSecret,
-    {
-      expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h') as any,
-    }
-  );
+  const roleName = getRoleName(user);
+  const { token: newAccessToken } = buildTokens(user, roleName);
 
   return {
-    token: newAccessToken, // New access token (backward compatible key name)
-    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '24h',
+    token: newAccessToken,
+    expiresIn: process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h",
     user: {
       _id: user._id,
       firstName: user.firstName,
@@ -541,7 +506,8 @@ export const refreshAccessToken = async (refreshToken: string) => {
       email: user.email,
       phoneNumber: user.phoneNumber,
       countryCode: user.countryCode,
-      role: (user.role as any).name,
+      role: roleName,
+      activeRole: roleName,
       companyName: user.companyName,
       twoFactorEnabled: user.twoFactorEnabled,
       isVerified: user.isVerified,
@@ -558,52 +524,20 @@ export const verifyOTPUnified = async (
 ) => {
   await connectToMongooseDatabase();
 
-  // Validate type
   const validTypes = ["login", "verification", "forgot_password"];
   if (!validTypes.includes(type)) {
     throw new Error(`Invalid type. Must be one of: ${validTypes.join(", ")}`);
   }
 
-  // Call unified helper
   const verification = await handleUnifiedOTPVerification({ userId, otp, type });
 
-  // Type-specific post-processing
   switch (type) {
     case "login": {
-      // Generate JWT tokens for login
       const user = await UserModel.findById(userId).populate("role");
-      if (!user) {
-        throw new Error("User not found");
-      }
+      if (!user) throw new Error("User not found");
 
-      const jwtSecret = process.env.JWT_SECRET;
-      if (!jwtSecret) {
-        throw new Error("JWT_SECRET not configured");
-      }
-
-      // Generate access token
-      const token = jwt.sign(
-        {
-          userId: user._id.toString(),
-          email: user.email,
-          role: (user.role as any).name,
-        },
-        jwtSecret,
-        {
-          expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h") as any,
-        }
-      );
-
-      // Generate refresh token
-      const refreshToken = jwt.sign(
-        {
-          userId: user._id.toString(),
-        },
-        jwtSecret,
-        {
-          expiresIn: (process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || "7d") as any,
-        }
-      );
+      const roleName = getRoleName(user);
+      const { token, refreshToken } = buildTokens(user, roleName);
 
       return {
         token,
@@ -616,7 +550,8 @@ export const verifyOTPUnified = async (
           email: user.email,
           phoneNumber: user.phoneNumber,
           countryCode: user.countryCode,
-          role: (user.role as any).name,
+          role: roleName,
+          activeRole: roleName,
           companyName: user.companyName,
           twoFactorEnabled: user.twoFactorEnabled,
           isVerified: user.isVerified,
@@ -626,58 +561,16 @@ export const verifyOTPUnified = async (
     }
 
     case "verification": {
-      // Generate JWT tokens for verification (same as login)
       const user = await UserModel.findById(userId).populate("role");
-      if (!user) {
-        throw new Error("User not found");
-      }
+      if (!user) throw new Error("User not found");
 
-      const jwtSecret = process.env.JWT_SECRET;
-      const refreshSecret = process.env.JWT_REFRESH_SECRET || "scan2card_refresh_secret";
-      if (!jwtSecret) {
-        throw new Error("JWT_SECRET not configured");
-      }
+      const roleName = getRoleName(user);
+      const { token, refreshToken } = buildTokens(user, roleName);
 
-      // Generate access token
-      const token = jwt.sign(
-        {
-          userId: user._id.toString(),
-          email: user.email,
-          role: (user.role as any).name,
-        },
-        jwtSecret,
-        {
-          expiresIn: (process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "24h") as any,
-        }
-      );
-
-      // Generate refresh token
-      const refreshToken = jwt.sign(
-        {
-          userId: user._id.toString(),
-          type: 'refresh',
-        },
-        refreshSecret,
-        {
-          expiresIn: (process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || "7d") as any,
-        }
-      );
-
-      // Calculate refresh token expiry date
       const refreshTokenExpiry = new Date();
-      const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace('d', '') || '7');
+      const expiryDays = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN?.replace("d", "") || "7");
       refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + expiryDays);
-
-      // Store refresh token in database using updateOne to avoid full document validation
-      await UserModel.updateOne(
-        { _id: user._id },
-        { 
-          $set: { 
-            refreshToken: refreshToken,
-            refreshTokenExpiry: refreshTokenExpiry 
-          }
-        }
-      );
+      await UserModel.updateOne({ _id: user._id }, { $set: { refreshToken, refreshTokenExpiry } });
 
       return {
         token,
@@ -690,7 +583,8 @@ export const verifyOTPUnified = async (
           email: user.email,
           phoneNumber: user.phoneNumber,
           countryCode: user.countryCode,
-          role: (user.role as any).name,
+          role: roleName,
+          activeRole: roleName,
           companyName: user.companyName,
           twoFactorEnabled: user.twoFactorEnabled,
           isVerified: user.isVerified,
@@ -718,7 +612,6 @@ export const resetPasswordWithVerificationToken = async (
 ) => {
   await connectToMongooseDatabase();
 
-  // Verify the verification token (VOT)
   const secret = process.env.JWT_SECRET + "_VOT";
   let decoded: any;
 
@@ -728,50 +621,41 @@ export const resetPasswordWithVerificationToken = async (
     throw new Error("Verification token is invalid or expired. Please verify OTP again.");
   }
 
-  // Ensure token is for password reset
   if (decoded.purpose !== "password_reset_verified") {
     throw new Error("Invalid verification token");
   }
 
-  // Ensure token userId matches request userId
   if (decoded.userId !== userId) {
     throw new Error("Verification token does not match user");
   }
 
-  // Find the OTP record with this token to ensure it hasn't been used
   const otpRecord = await OTPModel.findOne({
     userId,
     purpose: "forgot_password",
     verificationToken,
-    isUsed: true, // Should be marked as used after OTP verification
+    isUsed: true,
   }).sort({ createdAt: -1 });
 
   if (!otpRecord) {
     throw new Error("Verification token not found. Please verify OTP again.");
   }
 
-  // Check if VOT has been used for password reset already (check expiry)
   if (otpRecord.verificationTokenExpiry && otpRecord.verificationTokenExpiry < new Date()) {
     throw new Error("Verification token has expired. Please verify OTP again.");
   }
 
-  // Password validation
   if (newPassword.length < 6) {
     throw new Error("Password must be at least 6 characters long");
   }
 
-  // Find user and update password
   const user = await UserModel.findById(userId).select("+password");
   if (!user) {
     throw new Error("User not found");
   }
 
-  // Hash new password
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await UserModel.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
 
-  // Mark the verification token as fully consumed (expire it)
-  // Use updateOne to bypass Mongoose validation (validator requires future date)
   await OTPModel.updateOne(
     { _id: otpRecord._id },
     { $set: { verificationTokenExpiry: new Date(Date.now() - 1000) } }
@@ -786,18 +670,16 @@ export const resetPasswordWithVerificationToken = async (
 export const logoutUser = async (userId: string) => {
   await connectToMongooseDatabase();
 
-  // Find user
-  const user = await UserModel.findById(userId).select('+refreshToken +refreshTokenExpiry');
+  const user = await UserModel.findById(userId).select("+refreshToken +refreshTokenExpiry");
   if (!user) {
     throw new Error("User not found");
   }
 
-  // Clear refresh token, expiry, and all FCM tokens using updateOne to avoid validation issues
   await UserModel.updateOne(
     { _id: user._id },
     {
       $unset: { refreshToken: 1, refreshTokenExpiry: 1 },
-      $set: { fcmTokens: [] }
+      $set: { fcmTokens: [] },
     }
   );
 
@@ -809,14 +691,9 @@ export const logoutUser = async (userId: string) => {
 };
 
 // Delete Account (Soft Delete with PII Anonymization)
-// - Removes personal data (phone, email, profile image)
-// - Sets name to "Scan2Card User"
-// - Marks account as inactive and deleted
-// - Preserves user's created data (leads, etc.) for admin visibility
 export const deleteAccount = async (userId: string) => {
   await connectToMongooseDatabase();
 
-  // Find user
   const user = await UserModel.findById(userId);
   if (!user) {
     throw new Error("User not found");
@@ -826,12 +703,10 @@ export const deleteAccount = async (userId: string) => {
     throw new Error("Account is already deleted");
   }
 
-  // Generate unique placeholder for phone/email to avoid unique constraint issues
   const timestamp = Date.now();
   const deletedPhonePlaceholder = `deleted_${timestamp}_${userId}`;
   const deletedEmailPlaceholder = `deleted_${timestamp}_${userId}@deleted.scan2card.com`;
 
-  // Soft delete: anonymize personal data but keep the record
   await UserModel.updateOne(
     { _id: user._id },
     {
@@ -860,3 +735,4 @@ export const deleteAccount = async (userId: string) => {
     message: "Account deleted successfully",
   };
 };
+

@@ -7,13 +7,11 @@ import {
   sendVerificationOTP,
   verifyUserOTP,
   forgotPassword,
-  resetPasswordWithOTP,
   changePassword,
   refreshToken,
-  verifyOTPUnified,
   resetPassword,
   logout,
-  deleteAccount
+  deleteAccount,
 } from "../controllers/auth.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import {

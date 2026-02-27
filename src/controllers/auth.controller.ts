@@ -161,7 +161,7 @@ export const register = async (req: Request, res: Response) => {
 // Login user
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, phoneNumber, countryCode, password } = req.body;
+    const { email, phoneNumber, countryCode, password, activeRole } = req.body;
 
     // Validation - at least one of email or phoneNumber must be provided
     if ((!email && !phoneNumber) || !password) {
@@ -171,7 +171,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.loginUser({ email, phoneNumber, countryCode, password });
+    const result = await authService.loginUser({ email, phoneNumber, countryCode, password, activeRole });
 
     res.status(200).json({
       success: true,
