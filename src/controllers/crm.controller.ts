@@ -112,7 +112,7 @@ export const disconnectZoho = async (req: AuthRequest, res: Response) => {
 export const exportToZoho = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const userRole = req.user?.role;
+    const userRole = req.user?.activeRole;
     if (!userId) {
       return res.status(401).json({ success: false, message: "User not authenticated" });
     }
@@ -225,7 +225,7 @@ export const disconnectSalesforce = async (req: AuthRequest, res: Response) => {
 export const exportToSalesforce = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const userRole = req.user?.role;
+    const userRole = req.user?.activeRole;
     if (!userId) {
       return res.status(401).json({ success: false, message: "User not authenticated" });
     }
