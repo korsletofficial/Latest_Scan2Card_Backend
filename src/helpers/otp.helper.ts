@@ -116,8 +116,35 @@ const sendOTPViaSMS = async (phoneNumber: string, otp: string, countryCode?: str
 /**
  * Send OTP via Email with retry logic
  */
-const sendOTPViaEmail = async (email: string, otp: string, retries = 3): Promise<boolean> => {
-  console.log(`📧 Attempting to send OTP email to ${email}`);
+const sendOTPViaEmail = async (
+  email: string,
+  otp: string,
+  otpType: "verification" | "login" | "forgot_password" = "verification",
+  retries = 3
+): Promise<boolean> => {
+  console.log(`📧 Attempting to send OTP email to ${email} (type: ${otpType})`);
+
+  // Type-specific content
+  const emailMeta = {
+    verification: {
+      subject: "🔐 Scan2Card - Email Verification OTP",
+      heading: "Verify Your Email Address",
+      description: "Thank you for registering! Please use the following OTP code to verify your email address and activate your account:",
+      plainSubject: "Scan2Card - Email Verification OTP",
+    },
+    login: {
+      subject: "🔐 Scan2Card - Login Verification OTP",
+      heading: "Login Verification Code",
+      description: "A login attempt was made to your account. Please use the following OTP code to complete your sign-in:",
+      plainSubject: "Scan2Card - Login Verification OTP",
+    },
+    forgot_password: {
+      subject: "🔐 Scan2Card - Password Reset OTP",
+      heading: "Reset Your Password",
+      description: "You have requested to reset your password. Please use the following OTP code to verify your identity:",
+      plainSubject: "Scan2Card - Password Reset OTP",
+    },
+  }[otpType];
 
   // Create HTML email template
   const htmlContent = `
@@ -186,12 +213,12 @@ const sendOTPViaEmail = async (email: string, otp: string, retries = 3): Promise
     <body>
       <div class="container">
         <div class="header">
-          <h1>🔐 Scan2Card Verification</h1>
+          <h1>🔐 Scan2Card</h1>
         </div>
         <div class="content">
-          <h2>Your One-Time Password (OTP)</h2>
+          <h2>${emailMeta.heading}</h2>
           <p>Hello,</p>
-          <p>You have requested to reset your password. Please use the following OTP code to verify your identity:</p>
+          <p>${emailMeta.description}</p>
 
           <div class="otp-box">
             <div style="font-size: 14px; color: #666; margin-bottom: 10px;">YOUR OTP CODE</div>
@@ -218,7 +245,7 @@ const sendOTPViaEmail = async (email: string, otp: string, retries = 3): Promise
 
   // Plain text version for email clients that don't support HTML
   const textContent = `
-Scan2Card - Password Reset OTP
+${emailMeta.plainSubject}
 
 Your One-Time Password (OTP): ${otp}
 
@@ -234,7 +261,7 @@ Scan2Card Team
     // Use the email service with built-in retry logic
     const success = await sendEmail({
       to: email,
-      subject: "🔐 Scan2Card - Password Reset OTP",
+      subject: emailMeta.subject,
       html: htmlContent,
       text: textContent,
     }, retries);
@@ -302,7 +329,7 @@ export const handleSendVerificationCode = async ({
       if (!user.email) {
         throw new Error("User email not available");
       }
-      otpSentStatus = await sendOTPViaEmail(user.email, otp);
+      otpSentStatus = await sendOTPViaEmail(user.email, otp, "verification");
       if (otpSentStatus) {
         console.log(`✅ OTP sent successfully to email ${user.email}: ${otp}`);
       } else {
@@ -447,7 +474,7 @@ export const handleSendLoginOTP = async (userId: string) => {
       sentTo = user.phoneNumber;
       sentVia = "phoneNumber";
     } else if (user.email) {
-      otpSentStatus = await sendOTPViaEmail(user.email, otp);
+      otpSentStatus = await sendOTPViaEmail(user.email, otp, "login");
       if (otpSentStatus) {
         console.log(`✅ 2FA OTP sent to email ${user.email}: ${otp}`);
       } else {
@@ -617,7 +644,7 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
         sentTo = user.phoneNumber;
         sentVia = "phoneNumber";
       } else if (user.email) {
-        otpSentStatus = await sendOTPViaEmail(user.email, otp);
+        otpSentStatus = await sendOTPViaEmail(user.email, otp, "forgot_password");
         if (otpSentStatus) {
           console.log(`✅ Forgot Password OTP sent to email ${user.email}: ${otp}`);
         } else {
@@ -631,7 +658,7 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
     } else {
       // Admin/Exhibitor/Team Manager: email first, phone fallback
       if (user.email) {
-        otpSentStatus = await sendOTPViaEmail(user.email, otp);
+        otpSentStatus = await sendOTPViaEmail(user.email, otp, "forgot_password");
         if (otpSentStatus) {
           console.log(`✅ Forgot Password OTP sent to email ${user.email}: ${otp}`);
         } else {
