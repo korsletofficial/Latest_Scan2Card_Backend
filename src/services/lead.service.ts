@@ -34,6 +34,7 @@ interface GetLeadsFilter {
   timeZone?: string; // New: user's timezone (e.g., "Asia/Kolkata")
   licenseKey?: string; // New: filter by license key/stall
   canCreateMeeting?: string; // Filter leads where user can create meetings
+  memberId?: string; // Filter by team member userId
 }
 
 interface UpdateLeadData {
@@ -984,6 +985,7 @@ export const getLeadsForExport = async (filter: GetLeadsFilter) => {
     rating,
     search,
     licenseKey,
+    memberId,
   } = filter;
 
   // Build filter query based on role
@@ -1020,6 +1022,11 @@ export const getLeadsForExport = async (filter: GetLeadsFilter) => {
     query.rating = parseInt(rating);
   }
 
+  // Team member filtering (for TeamManager filtering by specific member)
+  if (memberId) {
+    query.userId = memberId;
+  }
+
   // License key (stall) filtering
   if (licenseKey) {
     // Find all RSVPs with this license key
@@ -1033,7 +1040,12 @@ export const getLeadsForExport = async (filter: GetLeadsFilter) => {
 
     // Filter leads to only show those from users who used this license key
     if (userIds.length > 0) {
-      query.userId = { $in: userIds };
+      if (memberId) {
+        // If both memberId and licenseKey are set, intersect them
+        query.userId = userIds.some((id) => id.toString() === memberId) ? memberId : null;
+      } else {
+        query.userId = { $in: userIds };
+      }
     } else {
       // No users found for this license key, return empty results
       query.userId = null; // This will match no documents

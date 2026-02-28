@@ -20,6 +20,7 @@ import notificationRoutes from "./routes/notification.routes";
 import calendarRoutes from "./routes/calendar.routes";
 import catalogRoutes from "./routes/catalog.routes";
 import invitationRoutes from "./routes/invitation.routes";
+import crmRoutes from "./routes/crm.routes";
 import keepServerActive from "./cron/serverActive";
 import startMeetingReminderCron from "./cron/meetingReminders";
 import startLicenseExpiryReminderCron from "./cron/licenseExpiryReminders";
@@ -64,6 +65,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/catalogs", catalogRoutes);
 app.use("/api/invitations", invitationRoutes);
+app.use("/api/crm", crmRoutes);
 
 // Health check route
 app.get("/health", (req: Request, res: Response) => {

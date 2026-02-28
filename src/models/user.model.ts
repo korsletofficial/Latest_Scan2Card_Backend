@@ -40,6 +40,7 @@ export interface IUser extends Document {
   calendarTokenExpiry?: Date; // Access token expiry time
   calendarConnectedAt?: Date; // When the calendar was connected
   calendarEmail?: string; // Email of connected calendar account
+  country?: string;
   address?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -62,16 +63,17 @@ const UserSchema = new Schema<IUser>(
       maxlength: 100,
       trim: true
     },
-    email: { 
-      type: String, 
-      unique: true, 
+    email: {
+      type: String,
+      // No unique constraint at DB level — uniqueness is enforced per-role in the service layer
+      // so the same email can exist as both TEAMMANAGER and ENDUSER (separate accounts).
       sparse: true,
       maxlength: 255,
       lowercase: true,
       trim: true,
       validate: {
         validator: function (v: string) {
-          if (!v) return true; // Allow null/undefined (sparse index)
+          if (!v) return true; // Allow null/undefined
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           return emailRegex.test(v);
         },
@@ -223,6 +225,11 @@ const UserSchema = new Schema<IUser>(
       type: String,
       maxlength: 255,
       lowercase: true,
+      trim: true
+    },
+    country: {
+      type: String,
+      maxlength: 100,
       trim: true
     },
     address: {

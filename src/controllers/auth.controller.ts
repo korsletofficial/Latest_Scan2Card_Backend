@@ -6,7 +6,7 @@ import { sanitizeEmptyStrings } from "../utils/sanitize.util";
 // Register new user
 export const register = async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, email, phoneNumber, countryCode, password, roleName, companyName, exhibitorId } = req.body;
+    const { firstName, lastName, email, phoneNumber, countryCode, country, password, roleName, companyName, exhibitorId } = req.body;
 
     // Validation - Required fields
     if (!firstName || !lastName || !password || !roleName) {
@@ -104,6 +104,14 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
+    // Country validation (optional, max 100)
+    if (country && String(country).length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Country must not exceed 100 characters",
+      });
+    }
+
     // Company name validation (max 200)
     if (companyName && String(companyName).length > 200) {
       return res.status(400).json({
@@ -127,6 +135,7 @@ export const register = async (req: Request, res: Response) => {
       email,
       phoneNumber,
       countryCode,
+      country,
       password,
       roleName,
       companyName,
@@ -152,7 +161,7 @@ export const register = async (req: Request, res: Response) => {
 // Login user
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, phoneNumber, countryCode, password } = req.body;
+    const { email, phoneNumber, countryCode, password, activeRole } = req.body;
 
     // Validation - at least one of email or phoneNumber must be provided
     if ((!email && !phoneNumber) || !password) {
@@ -162,7 +171,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.loginUser({ email, phoneNumber, countryCode, password });
+    const result = await authService.loginUser({ email, phoneNumber, countryCode, password, activeRole });
 
     res.status(200).json({
       success: true,
@@ -170,6 +179,19 @@ export const login = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error: any) {
+    // Special handling for multi-role selection
+    if (error.requiresRoleSelection) {
+      return res.status(200).json({
+        success: true,
+        requiresRoleSelection: true,
+        message: error.message,
+        data: {
+          requiresRoleSelection: true,
+          availableRoles: error.availableRoles,
+        },
+      });
+    }
+
     // Special handling for 2FA
     if (error.requires2FA || (error.message && error.message.includes("2FA"))) {
       // Determine where OTP was sent based on error data
@@ -327,9 +349,9 @@ export const verifyUserOTP = async (req: Request, res: Response) => {
 // Forgot password - Send OTP
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
-    const { email, phoneNumber } = req.body;
+    const { email, phoneNumber, activeRole } = req.body;
 
-    console.log("Forgot password request received:", { email, phoneNumber });
+    console.log("Forgot password request received:", { email, phoneNumber, activeRole });
 
     // Validate that at least one identifier is provided
     if (!email && !phoneNumber) {
@@ -339,7 +361,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.sendForgotPasswordOTP(email, phoneNumber);
+    const result = await authService.sendForgotPasswordOTP(email, phoneNumber, activeRole);
 
     res.status(200).json({
       success: true,

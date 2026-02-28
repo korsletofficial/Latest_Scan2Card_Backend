@@ -303,7 +303,7 @@ export const createLead = async (req: AuthRequest, res: Response) => {
 export const getLeads = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const userRole = req.user?.role;
+    const userRole = req.user?.activeRole;
     const {
       page = 1,
       limit = 10,
@@ -618,7 +618,7 @@ export const scanQRCode = async (req: AuthRequest, res: Response) => {
 export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const userRole = req.user?.role;
+    const userRole = req.user?.activeRole;
     const { timeZone = "UTC" } = req.query;
 
     const analytics = await leadService.getLeadAnalytics(
@@ -643,9 +643,9 @@ export const getLeadAnalytics = async (req: AuthRequest, res: Response) => {
 // Export Leads to CSV
 export const exportLeads = async (req: AuthRequest, res: Response) => {
   try {
-    const { type, eventId, search, rating, licenseKey } = req.query;
+    const { type, eventId, search, rating, licenseKey, memberId } = req.query;
     const userId = req.user?.userId;
-    const userRole = req.user?.role;
+    const userRole = req.user?.activeRole;
 
     if (!userId) {
       return res.status(401).json({
@@ -675,6 +675,10 @@ export const exportLeads = async (req: AuthRequest, res: Response) => {
 
     if (licenseKey) {
       queryParams.licenseKey = licenseKey;
+    }
+
+    if (memberId) {
+      queryParams.memberId = memberId;
     }
 
     // Get leads data with all fields for export
@@ -908,7 +912,7 @@ const escapeCSVValue = (value: string): string => {
 export const getLeadStatsByPeriod = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const userRole = req.user?.role;
+    const userRole = req.user?.activeRole;
     const { filter, timeZone = "UTC" } = req.query;
 
     // Validate filter parameter

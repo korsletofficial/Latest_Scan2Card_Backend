@@ -16,7 +16,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { firstName, lastName, phoneNumber } = req.body;
+    const { firstName, lastName, phoneNumber, country } = req.body;
     const userId = req.user.userId;
 
     // Validate firstName length (1-100) if provided
@@ -50,6 +50,14 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
           message: "Invalid phone format (use digits, spaces, dashes, plus, or parentheses)",
         });
       }
+    }
+
+    // Validate country if provided (max 100)
+    if (country && String(country).length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Country must not exceed 100 characters",
+      });
     }
 
     let profileImageUrl = req.body.profileImage;
@@ -103,6 +111,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       firstName,
       lastName,
       phoneNumber,
+      country,
       profileImage: profileImageUrl,
     });
 

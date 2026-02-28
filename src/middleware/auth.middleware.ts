@@ -9,7 +9,7 @@ export interface AuthRequest extends Request {
     _id: string;
     userId: string;
     email: string;
-    role: string;
+    activeRole: string; // the account's single role, kept as activeRole for middleware compat
   };
   file?: Express.Multer.File;
   files?:
@@ -51,12 +51,14 @@ export const authenticateToken = async (
       });
     }
 
-    // Attach user to request
+    // activeRole is the account's single role (supports both new `activeRole` and legacy `role`)
+    const activeRole: string = decoded.activeRole || decoded.role || "";
+
     req.user = {
       _id: decoded.userId,
       userId: decoded.userId,
       email: decoded.email,
-      role: decoded.role,
+      activeRole,
     };
 
     next();
@@ -69,7 +71,7 @@ export const authenticateToken = async (
   }
 };
 
-// Role-based authorization middleware
+// Role-based authorization middleware — checks activeRole (current context)
 export const authorizeRoles = (...allowedRoles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
@@ -79,7 +81,7 @@ export const authorizeRoles = (...allowedRoles: string[]) => {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    if (!allowedRoles.includes(req.user.activeRole)) {
       return res.status(403).json({
         success: false,
         message: `Access denied. Required roles: ${allowedRoles.join(", ")}`,

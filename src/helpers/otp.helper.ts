@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { config } from "../config/config";
 import OTPModel from "../models/otp.model";
 import UserModel from "../models/user.model";
+import RoleModel from "../models/role.model";
 import { sendEmail } from "../services/email.service";
 
 /**
@@ -539,12 +540,11 @@ export const handleVerifyLoginOTP = async (userId: string, code: string) => {
 /**
  * Send OTP for forgot password
  */
-export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: string) => {
+export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: string, activeRole?: string) => {
   // Build query to find user by email or phone number
   const query: any = { isDeleted: false };
 
   if (email && phoneNumber) {
-    // If both provided, find by either
     query.$or = [{ email }, { phoneNumber }];
   } else if (email) {
     query.email = email;
@@ -554,15 +554,19 @@ export const handleSendForgotPasswordOTP = async (email?: string, phoneNumber?: 
     throw new Error("Email or phone number is required");
   }
 
-  // Populate role to check user type
+  // Scope to the requested role when provided (same pattern as login)
+  if (activeRole) {
+    const role = await RoleModel.findOne({ name: activeRole, isDeleted: false });
+    if (role) query.role = role._id;
+  }
+
   const user = await UserModel.findOne(query).populate("role");
   if (!user) {
     throw new Error("User with this email or phone number does not exist");
   }
 
-  // Determine if user is an end user (phone-first) or admin/exhibitor/team manager (email-first)
-  const roleName = (user.role as any)?.name?.toUpperCase() || "";
-  const isEndUser = roleName === "ENDUSER";
+  // Determine if this is an ENDUSER account (phone-first OTP) or other role (email-first)
+  const isEndUser = (user.role as any)?.name?.toUpperCase() === "ENDUSER";
 
   // Generate OTP
   let otp: string;

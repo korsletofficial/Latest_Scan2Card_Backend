@@ -180,16 +180,15 @@ const createTeamManagerForLicense = async (
     // Check if user already exists
     const existingUser = await UserModel.findOne({ email, isDeleted: false }).populate('role');
     if (existingUser) {
-      // If user exists and is already a TEAMMANAGER, return their ID (no new password generated)
-      if (existingUser.role && (existingUser.role as any).name === "TEAMMANAGER") {
+      const existingRoleName = (existingUser.role as any)?.name || "";
+      // If user already has TEAMMANAGER role, reuse the account (no new password)
+      if (existingRoleName === "TEAMMANAGER") {
         console.log(`ℹ️  TeamManager already exists: ${email}`);
         return { teamManagerId: existingUser._id, password: "", isNewUser: false };
       }
-
-      // If user exists with a different role (ENDUSER, EXHIBITOR, SUPERADMIN), throw error
-      const roleName = existingUser.role ? (existingUser.role as any).name : "Unknown";
+      // Email is taken by a different role — block to avoid conflicts
       throw new Error(
-        `Email already exists with role ${roleName}. Cannot create license key for this email. Please use a different email address.`
+        `Email already exists with role '${existingRoleName}'. Cannot create a license key for this email. Please use a different email address.`
       );
     }
 

@@ -23,7 +23,7 @@ const router = Router();
 
 const ensureSuperAdmin: RequestHandler = (req, res, next) => {
   const { user } = req as AuthRequest;
-  if (!user || user.role !== "SUPERADMIN") {
+  if (!user || user.activeRole !== "SUPERADMIN") {
     return res.status(403).json({ message: "Only SUPERADMIN users can perform this action." });
   }
   return next();
