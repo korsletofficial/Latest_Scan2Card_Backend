@@ -1,6 +1,6 @@
 {
   "name": "scan2card-backend",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Scan2Card Backend - Digital lead collection system",
   "main": "dist/server.js",
   "scripts": {
