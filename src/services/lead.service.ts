@@ -83,9 +83,14 @@ export const createLead = async (data: CreateLeadData) => {
     const hasPhones = data.details?.phoneNumbers && data.details.phoneNumbers.length > 0;
 
     if (hasEmails || hasPhones || entryCode) {
+      // Fetch event early to scope duplicate check per-user for trial events
+      const eventForDupCheck = await EventModel.findById(data.eventId);
+
       const duplicateQuery: any = {
         eventId: data.eventId,
         isDeleted: false,
+        // For trial events, scope duplicates to the same user only (multiple users share one trial event)
+        ...(eventForDupCheck?.isTrialEvent && { userId: data.userId }),
         $or: []
       };
 
@@ -112,8 +117,7 @@ export const createLead = async (data: CreateLeadData) => {
           .lean();
 
         if (existingLead) {
-          // Check if this is a trial event
-          const event = await EventModel.findById(data.eventId);
+          const event = eventForDupCheck;
           let stallInfo = 'Unknown Stall';
 
           if (event?.isTrialEvent) {
