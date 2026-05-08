@@ -171,9 +171,9 @@ export const createLead = async (data: CreateLeadData) => {
       // Check user's trial lead count
       const user = await UserModel.findById(data.userId);
 
-      if (user && user.trialLeadsCount && user.trialLeadsCount >= 5) {
+      if (user && user.trialLeadsCount && user.trialLeadsCount >= 1000) {
         throw new Error(
-          "Trial event limit reached. You've created 5 leads with the trial event. " +
+          "Trial event limit reached. You've created 1000 leads with the trial event. " +
           "Please join a regular event with a license key to continue creating leads."
         );
       }
@@ -937,8 +937,8 @@ export const getUserTrialStatus = async (userId: string) => {
 
   const trialLeadsCount = user.trialLeadsCount || 0;
   const hasJoinedTrialEvent = user.hasJoinedTrialEvent || false;
-  const remainingTrialLeads = Math.max(0, 5 - trialLeadsCount);
-  const isTrialActive = trialLeadsCount < 5;
+  const remainingTrialLeads = Math.max(0, 1000 - trialLeadsCount);
+  const isTrialActive = trialLeadsCount < 1000;
 
   // Get trial event details
   const trialEvent = await EventModel.findOne({
@@ -950,7 +950,7 @@ export const getUserTrialStatus = async (userId: string) => {
   return {
     trialLeadsUsed: trialLeadsCount,
     remainingTrialLeads,
-    maxTrialLeads: 5,
+    maxTrialLeads: 1000,
     isTrialActive,
     hasJoinedTrialEvent,
     trialEvent: trialEvent ? {
