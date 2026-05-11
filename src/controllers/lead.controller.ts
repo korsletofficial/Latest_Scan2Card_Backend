@@ -312,10 +312,14 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       rating,
       search,
       minimal,
-      period, // New: "today" | "weekly" | "earlier"
-      timeZone = "Asia/Kolkata", // New: user's timezone
-      licenseKey, // New: filter by license key/stall
-      canCreateMeeting, // Filter leads where user can create meetings
+      period, // "today" | "weekly" | "earlier"
+      timeZone = "Asia/Kolkata",
+      licenseKey,
+      canCreateMeeting,
+      startDate,
+      endDate,
+      sortBy,
+      sortOrder,
     } = req.query;
 
     const result = await leadService.getLeads({
@@ -332,6 +336,10 @@ export const getLeads = async (req: AuthRequest, res: Response) => {
       timeZone: timeZone as string,
       licenseKey: licenseKey as string,
       canCreateMeeting: canCreateMeeting as string,
+      startDate: startDate as string,
+      endDate: endDate as string,
+      sortBy: sortBy as string,
+      sortOrder: sortOrder as "asc" | "desc" | undefined,
     });
 
     return res.status(200).json({

@@ -1627,7 +1627,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/leads?page=1&limit=10&period=today&timeZone=Asia/Kolkata",
+							"raw": "{{baseUrl}}/leads?page=1&limit=10",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1692,10 +1692,34 @@
 									"value": "true",
 									"description": "Filter leads where user can create meetings (true). Checks RSVP and license key permissions.",
 									"disabled": true
+								},
+								{
+									"key": "startDate",
+									"value": "2025-01-01",
+									"description": "Filter leads created on or after this date (YYYY-MM-DD). For a single date set startDate=endDate to same value.",
+									"disabled": true
+								},
+								{
+									"key": "endDate",
+									"value": "2025-12-31",
+									"description": "Filter leads created on or before this date (YYYY-MM-DD). For a single date set startDate=endDate to same value.",
+									"disabled": true
+								},
+								{
+									"key": "sortBy",
+									"value": "createdAt",
+									"description": "Field to sort by: createdAt | updatedAt | rating (default: createdAt)",
+									"disabled": true
+								},
+								{
+									"key": "sortOrder",
+									"value": "desc",
+									"description": "Sort direction: asc | desc (default: desc)",
+									"disabled": true
 								}
 							]
 						},
-						"description": "Get all leads for authenticated user with pagination and filters.\n\n**Query Parameters:**\n- `page` (number): Page number (default: 1)\n- `limit` (number): Items per page (default: 10)\n- `eventId` (string): Filter by specific event\n- `isIndependentLead` (boolean): Filter independent leads\n- `search` (string): Search by name, company, email, or phone\n- `minimal` (boolean): Return minimal data without populated refs\n- `period` (string): Filter by time period (new feature)\n  - `today`: Leads created today (00:00-23:59 in user's timezone)\n  - `weekly`: Leads created this week excluding today (Monday-Sunday)\n  - `earlier`: Leads created before this week\n- `timeZone` (string): IANA timezone for period filtering (default: Asia/Kolkata)\n  - Examples: Asia/Kolkata, America/New_York, Europe/London, UTC\n- `licenseKey` (string): Filter leads by license key/stall\n- `canCreateMeeting` (boolean): Filter leads where user can create meetings\n  - When `true`, only returns leads from events where meeting creation is allowed\n  - Checks individual RSVP permission (`canCreateMeeting` field)\n  - Checks license key bulk permission (`allowTeamMeetings` field)\n  - Individual RSVP permission takes priority over license key setting\n\n**Time-based Filtering:**\nThe `period` parameter enables timezone-aware lead filtering:\n- MongoDB stores all timestamps in UTC\n- The API converts your timezone to UTC for accurate queries\n- Week starts on Monday and ends on Sunday\n- Default timezone is Asia/Kolkata (Indian Standard Time)\n\n**Meeting Permission Logic:**\nWhen `canCreateMeeting=true`:\n1. If RSVP has `canCreateMeeting=false` → event excluded\n2. If RSVP has `canCreateMeeting=true` → event included (individual override)\n3. Otherwise, if license key has `allowTeamMeetings=false` → event excluded\n4. If no restrictions → event included\n\n**Sorting:**\nLeads are sorted by creation date in descending order (newest first).\n\n**Response:**\nReturns paginated list of leads with metadata."
+						"description": "Get all leads for authenticated user with pagination and filters.\n\n**Query Parameters:**\n- `page` (number): Page number (default: 1)\n- `limit` (number): Items per page (default: 10)\n- `eventId` (string): Filter by specific event\n- `isIndependentLead` (boolean): Filter independent leads\n- `search` (string): Search by name, company, email, or phone\n- `minimal` (boolean): Return minimal data without populated refs\n- `period` (string): Filter by time period\n  - `today`: Leads created today (00:00-23:59 in user's timezone)\n  - `weekly`: Leads created this week excluding today (Monday-Sunday)\n  - `earlier`: Leads created before this week\n- `timeZone` (string): IANA timezone for period filtering (default: Asia/Kolkata)\n  - Examples: Asia/Kolkata, America/New_York, Europe/London, UTC\n- `licenseKey` (string): Filter leads by license key/stall\n- `canCreateMeeting` (boolean): Filter leads where user can create meetings\n  - When `true`, only returns leads from events where meeting creation is allowed\n  - Checks individual RSVP permission (`canCreateMeeting` field)\n  - Checks license key bulk permission (`allowTeamMeetings` field)\n  - Individual RSVP permission takes priority over license key setting\n- `startDate` (string): Filter leads created on or after this date (YYYY-MM-DD)\n  - Single date: set `startDate` and `endDate` to the same value (e.g. startDate=2025-05-10&endDate=2025-05-10)\n  - Date range: set different values (e.g. startDate=2025-01-01&endDate=2025-03-31)\n  - Note: `period` takes precedence if both are provided\n- `endDate` (string): Filter leads created on or before this date (YYYY-MM-DD)\n- `sortBy` (string): Field to sort by — `createdAt`, `updatedAt`, or `rating` (default: createdAt)\n- `sortOrder` (string): Sort direction — `asc` or `desc` (default: desc)\n\n**Time-based Filtering:**\nThe `period` parameter enables timezone-aware lead filtering:\n- MongoDB stores all timestamps in UTC\n- The API converts your timezone to UTC for accurate queries\n- Week starts on Monday and ends on Sunday\n- Default timezone is Asia/Kolkata (Indian Standard Time)\n\n**Meeting Permission Logic:**\nWhen `canCreateMeeting=true`:\n1. If RSVP has `canCreateMeeting=false` \u2192 event excluded\n2. If RSVP has `canCreateMeeting=true` \u2192 event included (individual override)\n3. Otherwise, if license key has `allowTeamMeetings=false` \u2192 event excluded\n4. If no restrictions \u2192 event included\n\n**Sorting:**\nUse `sortBy` + `sortOrder` to control result order. Default is newest first (`createdAt desc`).\n\n**Response:**\nReturns paginated list of leads with metadata."
 					}
 				},
 				{

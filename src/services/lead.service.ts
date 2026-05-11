@@ -35,6 +35,10 @@ interface GetLeadsFilter {
   licenseKey?: string; // New: filter by license key/stall
   canCreateMeeting?: string; // Filter leads where user can create meetings
   memberId?: string; // Filter by team member userId
+  startDate?: string; // Filter leads from this date (ISO string or YYYY-MM-DD)
+  endDate?: string; // Filter leads up to this date (ISO string or YYYY-MM-DD)
+  sortBy?: string; // Field to sort by (e.g., "createdAt", "rating")
+  sortOrder?: "asc" | "desc"; // Sort direction
 }
 
 interface UpdateLeadData {
@@ -264,6 +268,10 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     timeZone = "Asia/Kolkata", // Default to Indian timezone
     licenseKey,
     canCreateMeeting,
+    startDate,
+    endDate,
+    sortBy = "createdAt",
+    sortOrder = "desc",
   } = filter;
 
   // Build filter query based on role
@@ -329,10 +337,23 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     }
   }
 
-  // Time-based filtering
+  // Time-based filtering (period takes precedence over startDate/endDate)
   if (period) {
     const dateRanges = getDateRangesByPeriod(period, timeZone);
     query.createdAt = dateRanges;
+  } else if (startDate || endDate) {
+    const dateFilter: any = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      dateFilter.$gte = start;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.$lte = end;
+    }
+    query.createdAt = dateFilter;
   }
 
   // Filter leads by meeting creation permission
@@ -432,10 +453,14 @@ export const getLeads = async (filter: GetLeadsFilter) => {
     ];
   }
 
+  const allowedSortFields = ["createdAt", "updatedAt", "rating"];
+  const resolvedSortBy = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+  const resolvedSortOrder = sortOrder === "asc" ? 1 : -1;
+
   const options: any = {
     page: parseInt(page.toString()),
     limit: parseInt(limit.toString()),
-    sort: { createdAt: -1 }, // Descending order (newest first)
+    sort: { [resolvedSortBy]: resolvedSortOrder },
   };
 
   // If minimal mode, only select ID and name fields, skip populates
