@@ -400,7 +400,7 @@ export const getRsvpById = async (rsvpId: string, userId: string) => {
     userId: userId,
     isDeleted: false,
   })
-    .populate("eventId", "eventName type startDate endDate location description")
+    .populate("eventId", "eventName type startDate endDate location description isTrialEvent")
     .populate("userId", "firstName lastName email phoneNumber")
     .populate("addedBy", "firstName lastName email");
 
