@@ -28,6 +28,8 @@ export interface IRsvp extends Document {
   canUseOwnCalendar: boolean; // Whether member can use their own Google/Outlook calendar
   calendarPermissionGrantedBy?: Types.ObjectId; // Team manager who granted calendar permission
   calendarPermissionGrantedAt?: Date; // When calendar permission was granted
+  hasExited?: boolean; // User voluntarily exited the event
+  exitedAt?: Date; // When the user exited
   createdAt: Date;
   updatedAt: Date;
 }
@@ -96,6 +98,8 @@ const RsvpSchema = new Schema<IRsvp>(
       ref: "Users"
     },
     calendarPermissionGrantedAt: { type: Date },
+    hasExited: { type: Boolean, default: false },
+    exitedAt: { type: Date },
   },
   {
     timestamps: true,

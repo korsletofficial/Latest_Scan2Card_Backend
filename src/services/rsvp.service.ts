@@ -48,11 +48,38 @@ export const createRsvp = async (data: CreateRsvpData) => {
     throw new Error("License key has reached maximum activations");
   }
 
-  // Check if user already has RSVP for this event
+  // Check if user has an exited RSVP for this event — re-activate instead of creating new
+  const exitedRsvp = await RsvpModel.findOne({
+    eventId: event._id,
+    userId: userId,
+    hasExited: true,
+    isDeleted: false,
+  });
+
+  if (exitedRsvp) {
+    exitedRsvp.hasExited = false;
+    exitedRsvp.isActive = true;
+    exitedRsvp.exitedAt = undefined;
+    await exitedRsvp.save();
+
+    await EventModel.updateOne(
+      { _id: event._id, "licenseKeys.key": rsvpLicenseKey },
+      { $inc: { "licenseKeys.$.usedCount": 1 } }
+    );
+
+    const populatedRejoin = await RsvpModel.findById(exitedRsvp._id)
+      .populate("eventId", "eventName type startDate endDate location")
+      .populate("userId", "firstName lastName email");
+
+    return populatedRejoin;
+  }
+
+  // Check if user already has an active RSVP for this event
   const existingRsvp = await RsvpModel.findOne({
     eventId: event._id,
     userId: userId,
     isDeleted: false,
+    hasExited: { $ne: true },
   });
 
   if (existingRsvp) {
@@ -101,7 +128,8 @@ export const getUserRsvps = async (
   page: number = 1,
   limit: number = 10,
   search: string = '',
-  isActive?: boolean
+  isActive?: boolean,
+  includeExited: boolean = true
 ) => {
   const normalizedSearch = search?.trim() || "";
 
@@ -165,6 +193,11 @@ export const getUserRsvps = async (
     rsvpQuery.expiresAt = { $lt: now };
   }
   // If isActive is undefined, return all RSVPs (both expired and non-expired)
+
+  // Filter exited RSVPs based on includeExited parameter
+  if (!includeExited) {
+    rsvpQuery.hasExited = { $ne: true };
+  }
 
   // If search is provided, find matching event IDs first
   if (normalizedSearch) {
@@ -300,6 +333,38 @@ export const getEventRsvps = async (
   };
 };
 
+// Rejoin Event (re-activate exited RSVP without needing license key again)
+export const rejoinEvent = async (eventId: string, userId: string) => {
+  const rsvp = await RsvpModel.findOne({
+    eventId,
+    userId,
+    hasExited: true,
+    isDeleted: false,
+  });
+
+  if (!rsvp) {
+    throw new Error("No exited RSVP found for this event");
+  }
+
+  rsvp.hasExited = false;
+  rsvp.isActive = true;
+  rsvp.exitedAt = undefined;
+  await rsvp.save();
+
+  if (rsvp.eventLicenseKey) {
+    await EventModel.updateOne(
+      { _id: rsvp.eventId, "licenseKeys.key": rsvp.eventLicenseKey },
+      { $inc: { "licenseKeys.$.usedCount": 1 } }
+    );
+  }
+
+  const populated = await RsvpModel.findById(rsvp._id)
+    .populate("eventId", "eventName type startDate endDate location")
+    .populate("userId", "firstName lastName email");
+
+  return populated;
+};
+
 // Cancel RSVP
 export const cancelRsvp = async (rsvpId: string, userId: string) => {
   const rsvp = await RsvpModel.findOne({
@@ -344,6 +409,37 @@ export const getRsvpById = async (rsvpId: string, userId: string) => {
   }
 
   return rsvp;
+};
+
+// Exit Event (user voluntarily leaves — preserves leads, blocks new lead creation)
+export const exitEvent = async (eventId: string, userId: string) => {
+  const event = await EventModel.findOne({ _id: eventId, isDeleted: false });
+
+  if (!event) {
+    throw new Error("Event not found");
+  }
+
+  if (event.isTrialEvent) {
+    throw new Error("Cannot exit a trial event");
+  }
+
+  const rsvp = await RsvpModel.findOne({
+    eventId,
+    userId,
+    isDeleted: false,
+    hasExited: { $ne: true },
+  });
+
+  if (!rsvp) {
+    throw new Error("RSVP not found or already exited");
+  }
+
+  rsvp.hasExited = true;
+  rsvp.isActive = false;
+  rsvp.exitedAt = new Date();
+  await rsvp.save();
+
+  return { message: "Successfully exited the event" };
 };
 
 // Validate License Key (Before Registration)

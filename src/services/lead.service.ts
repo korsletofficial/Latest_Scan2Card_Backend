@@ -201,6 +201,14 @@ export const createLead = async (data: CreateLeadData) => {
         );
       }
 
+      // Check if user has voluntarily exited the event
+      if (rsvp.hasExited) {
+        throw new Error(
+          "You have exited this event and cannot create new leads. " +
+          "Rejoin the event to continue capturing leads."
+        );
+      }
+
       // Check if RSVP is active
       if (!rsvp.isActive) {
         throw new Error(

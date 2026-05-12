@@ -62,6 +62,7 @@ export const getMyRsvps = async (req: AuthRequest, res: Response) => {
     const sanitizedQuery = sanitizeEmptyStrings({ search: req.query.search });
     const search = (sanitizedQuery.search as string)?.trim() || "";
     const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
+    const includeExited = req.query.includeExited !== 'false';
 
     // Input validation
     if (page < 1) {
@@ -85,7 +86,7 @@ export const getMyRsvps = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const result = await rsvpService.getUserRsvps(userId!, page, limit, search, isActive);
+    const result = await rsvpService.getUserRsvps(userId!, page, limit, search, isActive, includeExited);
 
     res.status(200).json({
       success: true,
@@ -190,6 +191,72 @@ export const getRsvpById = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch RSVP details",
+    });
+  }
+};
+
+// Rejoin Event
+export const rejoinEvent = async (req: AuthRequest, res: Response) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user?._id;
+
+    const rsvp = await rsvpService.rejoinEvent(eventId, userId!);
+
+    res.status(200).json({
+      success: true,
+      message: "Successfully rejoined the event",
+      data: { rsvp },
+    });
+  } catch (error: any) {
+    console.error("Error rejoining event:", error);
+
+    if (error.message === "No exited RSVP found for this event") {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to rejoin event",
+    });
+  }
+};
+
+// Exit Event
+export const exitEvent = async (req: AuthRequest, res: Response) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user?._id;
+
+    await rsvpService.exitEvent(eventId, userId!);
+
+    res.status(200).json({
+      success: true,
+      message: "Successfully exited the event",
+    });
+  } catch (error: any) {
+    console.error("Error exiting event:", error);
+
+    if (error.message === "RSVP not found or already exited" || error.message === "Event not found") {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (error.message === "Cannot exit a trial event") {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to exit event",
     });
   }
 };
