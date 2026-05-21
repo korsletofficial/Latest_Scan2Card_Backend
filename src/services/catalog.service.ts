@@ -243,7 +243,20 @@ export const getCatalogsForLicenseKey = async (
     isDeleted: false
   }).lean();
 
-  return catalogs;
+  return catalogs.map((catalog: any) => {
+    // Legacy catalogs: docLink at top level
+    if (catalog.docLink && catalog.shortLink) {
+      catalog.docLink = catalog.shortLink;
+    }
+    // New catalogs: docLink inside files[]
+    if (catalog.files && catalog.files.length > 0) {
+      catalog.files = catalog.files.map((file: any) => {
+        if (file.shortLink) file.docLink = file.shortLink;
+        return file;
+      });
+    }
+    return catalog;
+  });
 };
 
 // Get catalog categories
