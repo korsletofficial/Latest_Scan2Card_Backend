@@ -878,6 +878,14 @@ export const updateLicenseKey = async (
 
   await event.save();
 
+  // Sync expiresAt to all RSVPs that used this license key
+  if (data.expiresAt !== undefined) {
+    await RsvpModel.updateMany(
+      { eventId: event._id, eventLicenseKey: licenseKey.key },
+      { $set: { expiresAt: data.expiresAt } }
+    );
+  }
+
   // Update the organiser's currentTotalActivations if maxActivations was changed
   if (activationsDifference !== 0) {
     await UserModel.findByIdAndUpdate(
