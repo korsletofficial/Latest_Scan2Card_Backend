@@ -42,6 +42,7 @@ export interface ICatalog extends Document {
   whatsappTemplate: string;
   emailTemplate: IEmailTemplate;
   assignedLicenseKeys: IAssignedLicenseKey[];
+  shortLink?: string;
   isActive: boolean;
   isDeleted: boolean;
   createdAt: Date;
@@ -138,6 +139,10 @@ const CatalogSchema = new Schema<ICatalog>(
         trim: true
       }
     }],
+    shortLink: {
+      type: String,
+      trim: true
+    },
     isActive: {
       type: Boolean,
       default: true
