@@ -17,36 +17,43 @@ async function backfillShortLinks() {
       process.exit(1);
     }
 
-    // Find all active catalogs that have at least one file without a shortLink
-    const catalogs = await CatalogModel.find({
-      isDeleted: false,
-      "files.shortLink": { $exists: false }
-    });
+    const catalogs = await CatalogModel.find({ isDeleted: false }).lean();
+    console.log(`📋 Found ${catalogs.length} catalog(s) to process`);
 
-    console.log(`📋 Found ${catalogs.length} catalog(s) with files missing short links`);
-
-    let totalFilesUpdated = 0;
+    let totalUpdated = 0;
 
     for (const catalog of catalogs) {
-      let modified = false;
+      const raw = catalog as any;
 
-      for (const file of catalog.files) {
-        if (!file.shortLink) {
-          const code = await createShortUrl(file.docLink);
-          file.shortLink = `${baseUrl}/s/${code}`;
-          modified = true;
-          totalFilesUpdated++;
-          console.log(`  ✅ Created short link for: ${file.originalFileName} → ${file.shortLink}`);
-        }
+      // Legacy catalogs: file fields are at the top level, no files[]
+      if ((!raw.files || raw.files.length === 0) && raw.docLink && !raw.shortLink) {
+        const code = await createShortUrl(raw.docLink);
+        const shortLink = `${baseUrl}/s/${code}`;
+        await CatalogModel.updateOne({ _id: raw._id }, { $set: { shortLink } });
+        totalUpdated++;
+        console.log(`  ✅ [legacy] ${raw.name}: ${shortLink}`);
+        continue;
       }
 
-      if (modified) {
-        await catalog.save();
-        console.log(`💾 Saved catalog: ${catalog.name}`);
+      // New catalogs: files[] array — backfill any file missing shortLink
+      if (raw.files && raw.files.length > 0) {
+        let modified = false;
+        for (let i = 0; i < raw.files.length; i++) {
+          if (!raw.files[i].shortLink) {
+            const code = await createShortUrl(raw.files[i].docLink);
+            raw.files[i].shortLink = `${baseUrl}/s/${code}`;
+            modified = true;
+            totalUpdated++;
+            console.log(`  ✅ [files[${i}]] ${raw.name} — ${raw.files[i].originalFileName}: ${raw.files[i].shortLink}`);
+          }
+        }
+        if (modified) {
+          await CatalogModel.updateOne({ _id: raw._id }, { $set: { files: raw.files } });
+        }
       }
     }
 
-    console.log(`\n✅ Migration complete. Updated ${totalFilesUpdated} file(s) across ${catalogs.length} catalog(s).`);
+    console.log(`\n✅ Migration complete. Generated short links for ${totalUpdated} file(s).`);
     process.exit(0);
   } catch (error) {
     console.error("❌ Migration failed:", error);
