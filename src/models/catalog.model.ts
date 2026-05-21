@@ -29,6 +29,7 @@ export interface ICatalogFile {
   originalFileName: string;
   fileSize?: number;
   contentType?: string;
+  shortLink?: string;
 }
 
 // Catalog Interface
@@ -98,6 +99,11 @@ const CatalogSchema = new Schema<ICatalog>(
       contentType: {
         type: String,
         trim: true
+      },
+      shortLink: {
+        type: String,
+        trim: true,
+        maxlength: 500
       }
     }],
     whatsappTemplate: {
