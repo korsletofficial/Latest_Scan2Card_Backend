@@ -7,15 +7,9 @@ import { createShortUrl } from "../services/shortUrl.service";
 
 async function backfillShortLinks() {
   try {
-    console.log("🚀 Starting short link backfill migration...");
+    console.log("🚀 Starting short code backfill migration...");
 
     await connectToMongooseDatabase();
-
-    const baseUrl = process.env.BASE_URL;
-    if (!baseUrl) {
-      console.error("❌ BASE_URL environment variable is not set");
-      process.exit(1);
-    }
 
     const catalogs = await CatalogModel.find({ isDeleted: false }).lean();
     console.log(`📋 Found ${catalogs.length} catalog(s) to process`);
@@ -25,26 +19,25 @@ async function backfillShortLinks() {
     for (const catalog of catalogs) {
       const raw = catalog as any;
 
-      // Legacy catalogs: file fields are at the top level, no files[]
-      if ((!raw.files || raw.files.length === 0) && raw.docLink && !raw.shortLink) {
+      // Legacy catalogs: file fields at top level, no files[]
+      if ((!raw.files || raw.files.length === 0) && raw.docLink && !raw.shortCode) {
         const code = await createShortUrl(raw.docLink);
-        const shortLink = `${baseUrl}/s/${code}`;
-        await CatalogModel.updateOne({ _id: raw._id }, { $set: { shortLink } });
+        await CatalogModel.updateOne({ _id: raw._id }, { $set: { shortCode: code } });
         totalUpdated++;
-        console.log(`  ✅ [legacy] ${raw.name}: ${shortLink}`);
+        console.log(`  ✅ [legacy] ${raw.name}: code=${code}`);
         continue;
       }
 
-      // New catalogs: files[] array — backfill any file missing shortLink
+      // New catalogs: files[] array — backfill any file missing shortCode
       if (raw.files && raw.files.length > 0) {
         let modified = false;
         for (let i = 0; i < raw.files.length; i++) {
-          if (!raw.files[i].shortLink) {
+          if (!raw.files[i].shortCode) {
             const code = await createShortUrl(raw.files[i].docLink);
-            raw.files[i].shortLink = `${baseUrl}/s/${code}`;
+            raw.files[i].shortCode = code;
             modified = true;
             totalUpdated++;
-            console.log(`  ✅ [files[${i}]] ${raw.name} — ${raw.files[i].originalFileName}: ${raw.files[i].shortLink}`);
+            console.log(`  ✅ [files[${i}]] ${raw.name} — ${raw.files[i].originalFileName}: code=${code}`);
           }
         }
         if (modified) {
@@ -53,7 +46,7 @@ async function backfillShortLinks() {
       }
     }
 
-    console.log(`\n✅ Migration complete. Generated short links for ${totalUpdated} file(s).`);
+    console.log(`\n✅ Migration complete. Generated short codes for ${totalUpdated} file(s).`);
     process.exit(0);
   } catch (error) {
     console.error("❌ Migration failed:", error);

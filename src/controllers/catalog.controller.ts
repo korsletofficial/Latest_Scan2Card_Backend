@@ -91,7 +91,6 @@ export const createCatalog = async (req: AuthRequest, res: Response) => {
     }
 
     // Upload files to S3
-    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
     console.log(`📤 Uploading ${files.length} catalog file(s)`);
     const uploadedFiles = await Promise.all(
       files.map(async (file) => {
@@ -101,14 +100,14 @@ export const createCatalog = async (req: AuthRequest, res: Response) => {
           makePublic: true
         });
         console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
-        const code = await createShortUrl(uploadResult.url);
+        const shortCode = await createShortUrl(uploadResult.url);
         return {
           docLink: uploadResult.url,
           s3Key: uploadResult.key,
           originalFileName: file.originalname,
           fileSize: file.size,
           contentType: file.mimetype,
-          shortLink: `${baseUrl}/s/${code}`
+          shortCode
         };
       })
     );
@@ -315,7 +314,6 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
 
       // Upload new files if any
       if (files && files.length > 0) {
-        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
         console.log(`📤 Uploading ${files.length} new catalog file(s)`);
         const newUploadedFiles = await Promise.all(
           files.map(async (file) => {
@@ -325,14 +323,14 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
               makePublic: true
             });
             console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
-            const code = await createShortUrl(uploadResult.url);
+            const shortCode = await createShortUrl(uploadResult.url);
             return {
               docLink: uploadResult.url,
               s3Key: uploadResult.key,
               originalFileName: file.originalname,
               fileSize: file.size,
               contentType: file.mimetype,
-              shortLink: `${baseUrl}/s/${code}`
+              shortCode
             };
           })
         );

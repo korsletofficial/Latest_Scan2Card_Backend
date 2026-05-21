@@ -233,6 +233,11 @@ export const unassignCatalogFromLicenseKeys = async (
   return catalog;
 };
 
+const buildShortUrl = (code: string): string => {
+  const baseUrl = process.env.BASE_URL || "https://api.scan2card.com";
+  return `${baseUrl}/s/${code}`;
+};
+
 // Get catalogs assigned to a specific license key
 export const getCatalogsForLicenseKey = async (
   licenseKey: string
@@ -244,14 +249,14 @@ export const getCatalogsForLicenseKey = async (
   }).lean();
 
   return catalogs.map((catalog: any) => {
-    // Legacy catalogs: docLink at top level
-    if (catalog.docLink && catalog.shortLink) {
-      catalog.docLink = catalog.shortLink;
+    // Legacy catalogs: shortCode at top level
+    if (catalog.shortCode) {
+      catalog.docLink = buildShortUrl(catalog.shortCode);
     }
-    // New catalogs: docLink inside files[]
+    // New catalogs: shortCode inside files[]
     if (catalog.files && catalog.files.length > 0) {
       catalog.files = catalog.files.map((file: any) => {
-        if (file.shortLink) file.docLink = file.shortLink;
+        if (file.shortCode) file.docLink = buildShortUrl(file.shortCode);
         return file;
       });
     }
