@@ -238,6 +238,9 @@ const buildShortUrl = (slug: string): string => {
   return `${baseUrl}/catalogue/${slug}`;
 };
 
+const isShortUrlEnabled = (): boolean =>
+  process.env.CATALOG_SHORT_URL_ENABLED === "true";
+
 // Get catalogs assigned to a specific license key
 export const getCatalogsForLicenseKey = async (
   licenseKey: string
@@ -250,13 +253,13 @@ export const getCatalogsForLicenseKey = async (
 
   return catalogs.map((catalog: any) => {
     // Legacy catalogs: shortCode at top level
-    if (catalog.shortCode) {
+    if (catalog.shortCode && isShortUrlEnabled()) {
       catalog.docLink = buildShortUrl(catalog.shortCode);
     }
     // New catalogs: shortCode inside files[]
     if (catalog.files && catalog.files.length > 0) {
       catalog.files = catalog.files.map((file: any) => {
-        if (file.shortCode) file.docLink = buildShortUrl(file.shortCode);
+        if (file.shortCode && isShortUrlEnabled()) file.docLink = buildShortUrl(file.shortCode);
         return file;
       });
     }
