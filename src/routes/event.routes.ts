@@ -12,8 +12,19 @@ import {
   getExhibitorDashboardStats,
   getTopEventsByLeads,
   getLeadsTrend,
+  getLeadsMoMGrowth,
   getEventPerformance,
   getStallPerformance,
+  getEventROIAnalytics,
+  getLeadQualityAnalytics,
+  getTeamMemberPerformance,
+  getMeetingConversionAnalytics,
+  getDuplicateLeads,
+  getLeadCaptureHeatmap,
+  getEventComparison,
+  getLeadDemographics,
+  getExhibitorExpiringKeysAlert,
+  getStallCoverageByDay,
 } from "../controllers/event.controller";
 
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
@@ -31,7 +42,19 @@ router.get("/dashboard/top-events", authenticateToken, authorizeRoles("EXHIBITOR
 router.get("/dashboard/leads-trend", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getLeadsTrend);
 router.get("/dashboard/event-performance", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getEventPerformance);
 router.get("/dashboard/stall-performance", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getStallPerformance);
+router.get("/dashboard/leads-mom-growth", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getLeadsMoMGrowth);
+router.get("/dashboard/event-roi", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getEventROIAnalytics);
 
+// New analytics routes
+router.get("/dashboard/lead-quality", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getLeadQualityAnalytics);
+router.get("/dashboard/team-performance", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getTeamMemberPerformance);
+router.get("/dashboard/meeting-conversion", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getMeetingConversionAnalytics);
+router.get("/dashboard/duplicate-leads", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getDuplicateLeads);
+router.get("/dashboard/lead-capture-heatmap", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getLeadCaptureHeatmap);
+router.get("/dashboard/event-comparison", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getEventComparison);
+router.get("/dashboard/lead-demographics", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getLeadDemographics);
+router.get("/dashboard/expiring-keys-alert", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getExhibitorExpiringKeysAlert);
+router.get("/dashboard/stall-coverage-by-day", authenticateToken, authorizeRoles("EXHIBITOR"), adminDashboardLimiter, getStallCoverageByDay);
 
 // Event CRUD routes - All require authentication and EXHIBITOR role
 // Write operations - Moderate limit (100/min per user)

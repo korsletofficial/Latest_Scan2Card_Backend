@@ -5,6 +5,7 @@ import LeadsModel from "../models/leads.model";
 import RoleModel from "../models/role.model";
 import RsvpModel from "../models/rsvp.model";
 import mongoose from "mongoose";
+import { buildMonthSeries } from "../helpers/dateStats.helper";
 
 // Get all meetings for team manager's team members
 export const getTeamMeetings = async (
@@ -381,32 +382,88 @@ export const getDashboardStats = async (teamManagerId: string) => {
   // Get all event IDs managed by this team manager
   const managedEventIds = events.map((e) => e._id);
 
-  // Count total leads scanned by team members for this team manager's events only
-  const totalLeads = await LeadsModel.countDocuments({
-    eventId: { $in: managedEventIds },
-    isDeleted: false,
-  });
+  // Only count members and leads for THIS TM's specific keys (events can have multiple TMs)
+  const myKeyStrings = licenseKeys.map((k) => k.key);
 
-  // Count team members (all unique users who joined events using license keys assigned to this team manager)
+  // Count members: unique users who joined using THIS TM's keys (excluding exited users)
   const teamMembersResult = await RsvpModel.aggregate([
     {
       $match: {
         eventId: { $in: managedEventIds },
-        eventLicenseKey: { $nin: [null, ""] },
+        eventLicenseKey: { $in: myKeyStrings },
         isDeleted: false,
+        hasExited: { $ne: true },
       },
     },
-    {
-      $group: {
-        _id: "$userId",
-      },
-    },
-    {
-      $count: "uniqueUsers",
-    },
+    { $group: { _id: "$userId" } },
+    { $count: "uniqueUsers" },
   ]);
-
   const totalMembers = teamMembersResult.length > 0 ? teamMembersResult[0].uniqueUsers : 0;
+
+  // Fetch member IDs to scope lead count to only THIS TM's members
+  const memberRsvps = await RsvpModel.find({
+    eventId: { $in: managedEventIds },
+    eventLicenseKey: { $in: myKeyStrings },
+    isDeleted: false,
+    hasExited: { $ne: true },
+  }).select("userId eventLicenseKey eventId").lean();
+  const memberIds = [...new Set(memberRsvps.map((r: any) => r.userId.toString()))].map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
+
+  // Build key → user set + event map for live per-key lead counts
+  const keyUserMap = new Map<string, Set<string>>();
+  const keyEventIdMap = new Map<string, string>();
+  for (const rsvp of memberRsvps as any[]) {
+    const k = rsvp.eventLicenseKey as string;
+    if (!keyUserMap.has(k)) keyUserMap.set(k, new Set());
+    keyUserMap.get(k)!.add(rsvp.userId.toString());
+    if (!keyEventIdMap.has(k)) keyEventIdMap.set(k, rsvp.eventId.toString());
+  }
+
+  const liveLeadCountRows: { _id: { userId: string; eventId: string }; count: number }[] =
+    memberIds.length > 0
+      ? await LeadsModel.aggregate([
+          {
+            $match: {
+              eventId: { $in: managedEventIds },
+              userId: { $in: memberIds },
+              isDeleted: false,
+            },
+          },
+          {
+            $group: {
+              _id: {
+                userId: { $toString: "$userId" },
+                eventId: { $toString: "$eventId" },
+              },
+              count: { $sum: 1 },
+            },
+          },
+        ])
+      : [];
+
+  const liveLeadCountMap = new Map<string, number>();
+  for (const row of liveLeadCountRows) {
+    liveLeadCountMap.set(`${row._id.userId}:${row._id.eventId}`, row.count);
+  }
+
+  const getLiveLeadCountByKey = (keyStr: string): number => {
+    const users = keyUserMap.get(keyStr) ?? new Set();
+    const eid = keyEventIdMap.get(keyStr) ?? "";
+    let total = 0;
+    for (const uid of users) total += liveLeadCountMap.get(`${uid}:${eid}`) ?? 0;
+    return total;
+  };
+
+  // Count total leads scanned only by THIS TM's members in their events
+  const totalLeads = memberIds.length > 0
+    ? await LeadsModel.countDocuments({
+        eventId: { $in: managedEventIds },
+        userId: { $in: memberIds },
+        isDeleted: false,
+      })
+    : 0;
 
   // Total license keys assigned
   const totalLicenseKeys = licenseKeys.length;
@@ -427,6 +484,8 @@ export const getDashboardStats = async (teamManagerId: string) => {
       expiresAt: key.expiresAt,
       usedCount: key.usedCount,
       maxActivations: key.maxActivations,
+      maxLeads: key.maxLeads ?? 10000,
+      currentLeadCount: getLiveLeadCountByKey(key.key),
     })),
   };
 };
@@ -508,25 +567,45 @@ export const getLeadsGraph = async (
     }
   }
 
-  // Get actual lead counts
-  const leadsData = await LeadsModel.aggregate([
-    {
-      $match: {
-        eventId: new mongoose.Types.ObjectId(eventId),
-        createdAt: {
-          $gte: startDate,
-          $lte: endDate,
+  // Get this TM's key strings for this specific event
+  const myTMKeyStrings = event.licenseKeys
+    .filter((k) => k.teamManagerId?.toString() === teamManagerId)
+    .map((k) => k.key);
+
+  // Get member IDs scoped to TM's keys (excluding exited)
+  const graphMemberRsvps = await RsvpModel.find({
+    eventId: new mongoose.Types.ObjectId(eventId),
+    eventLicenseKey: { $in: myTMKeyStrings },
+    isDeleted: false,
+    hasExited: { $ne: true },
+  }).select("userId").lean();
+
+  const graphMemberIds = [...new Set(graphMemberRsvps.map((r: any) => r.userId.toString()))].map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
+
+  // Get actual lead counts (scoped to TM's members only)
+  const leadsData = graphMemberIds.length > 0
+    ? await LeadsModel.aggregate([
+        {
+          $match: {
+            eventId: new mongoose.Types.ObjectId(eventId),
+            userId: { $in: graphMemberIds },
+            createdAt: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+            isDeleted: false,
+          },
         },
-        isDeleted: false,
-      },
-    },
-    {
-      $group: {
-        _id: groupByFormat,
-        count: { $sum: 1 },
-      },
-    },
-  ]);
+        {
+          $group: {
+            _id: groupByFormat,
+            count: { $sum: 1 },
+          },
+        },
+      ])
+    : [];
 
   // Merge actual data with dateArray
   leadsData.forEach((item) => {
@@ -688,6 +767,8 @@ export const getMyEvents = async (teamManagerId: string) => {
         expiresAt: key.expiresAt,
         usedCount: key.usedCount,
         maxActivations: key.maxActivations,
+        maxLeads: key.maxLeads ?? 10000,
+        currentLeadCount: key.currentLeadCount ?? 0,
       })),
     };
   });
@@ -726,6 +807,8 @@ export const getAllLicenseKeys = async (
         expiresAt: key.expiresAt,
         usedCount: key.usedCount,
         maxActivations: key.maxActivations,
+        maxLeads: key.maxLeads ?? 10000,
+        currentLeadCount: key.currentLeadCount ?? 0,
         eventId: event._id,
         eventName: event.eventName,
       });
@@ -1421,3 +1504,777 @@ export const getLicenseKeyUsageDetails = async (
     users: usersWithLeads,
   };
 };
+
+// Compute ROI label from a 0–1 utilization score
+const computeROILabel = (score: number): "High" | "Medium" | "Low" => {
+  if (score >= 0.7) return "High";
+  if (score >= 0.3) return "Medium";
+  return "Low";
+};
+
+// Get Month-over-Month lead growth for team manager across managed events + member breakdown
+export const getLeadsMoMGrowth = async (
+  teamManagerId: string,
+  months: number = 12
+) => {
+  // Step 1: Get all events managed by this team manager (include licenseKeys for key scoping)
+  const managedEvents = await EventModel.find({
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  }).select("_id eventName licenseKeys");
+
+  if (managedEvents.length === 0) {
+    const trends = buildEmptyTMMonthTrends(months);
+    return {
+      trends,
+      summary: {
+        totalInPeriod: 0,
+        currentMonthCount: 0,
+        previousMonthCount: 0,
+        momChangeAbsolute: 0,
+        momChangePercent: null,
+      },
+    };
+  }
+
+  const eventIds = managedEvents.map((e) => e._id);
+  const eventNameMap = new Map(
+    managedEvents.map((e) => [e._id.toString(), e.eventName])
+  );
+
+  // Extract only THIS TM's key strings across all managed events
+  const myKeyStrings: string[] = [];
+  for (const ev of managedEvents) {
+    for (const k of ev.licenseKeys) {
+      if (k.teamManagerId?.toString() === teamManagerId) myKeyStrings.push(k.key);
+    }
+  }
+
+  // Step 2: Get member IDs scoped to THIS TM's keys, excluding exited users
+  const memberRsvps = await RsvpModel.aggregate([
+    {
+      $match: {
+        eventId: { $in: eventIds },
+        eventLicenseKey: { $in: myKeyStrings },
+        isDeleted: false,
+        hasExited: { $ne: true },
+      },
+    },
+    { $group: { _id: "$userId" } },
+  ]);
+  const memberIds = memberRsvps.map((r) => r._id);
+
+  // Step 3: Fetch member names for breakdown labels
+  const members = await UserModel.find({ _id: { $in: memberIds } }).select(
+    "_id firstName lastName email"
+  );
+  const memberNameMap = new Map(
+    members.map((m) => [
+      m._id.toString(),
+      { name: `${m.firstName} ${m.lastName}`.trim() || "Unknown", email: m.email },
+    ])
+  );
+
+  // Step 4: Define month window
+  const windowStart = new Date();
+  windowStart.setMonth(windowStart.getMonth() - (months - 1));
+  windowStart.setDate(1);
+  windowStart.setHours(0, 0, 0, 0);
+
+  // Step 5: Aggregate leads by {month, eventId} — scoped to this TM's members so
+  // event totals are consistent with memberBreakdown totals
+  const byEvent = await LeadsModel.aggregate([
+    {
+      $match: {
+        eventId: { $in: eventIds },
+        userId: { $in: memberIds },
+        isDeleted: false,
+        createdAt: { $gte: windowStart },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          month: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+          eventId: "$eventId",
+        },
+        leadCount: { $sum: 1 },
+      },
+    },
+    { $sort: { "_id.month": 1 } },
+  ]);
+
+  // Step 6: Aggregate leads by {month, userId} → member breakdown
+  const byMember = await LeadsModel.aggregate([
+    {
+      $match: {
+        eventId: { $in: eventIds },
+        userId: { $in: memberIds },
+        isDeleted: false,
+        createdAt: { $gte: windowStart },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          month: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+          userId: "$userId",
+        },
+        leadCount: { $sum: 1 },
+      },
+    },
+    { $sort: { "_id.month": 1 } },
+  ]);
+
+  // Step 7: Build month series and bucket aggregation results
+  const monthSeries = buildMonthSeries(months);
+  const monthlyTotals = new Map<string, number>();
+  const monthlyEventBreakdown = new Map<string, Map<string, number>>();
+  const monthlyMemberBreakdown = new Map<string, Map<string, number>>();
+
+  for (const m of monthSeries) {
+    monthlyTotals.set(m, 0);
+    monthlyEventBreakdown.set(m, new Map());
+    monthlyMemberBreakdown.set(m, new Map());
+  }
+
+  for (const row of byEvent) {
+    const month: string = row._id.month;
+    if (!monthlyTotals.has(month)) continue;
+    const eventId: string = row._id.eventId.toString();
+    monthlyTotals.set(month, (monthlyTotals.get(month) ?? 0) + row.leadCount);
+    const evMap = monthlyEventBreakdown.get(month)!;
+    evMap.set(eventId, (evMap.get(eventId) ?? 0) + row.leadCount);
+  }
+
+  for (const row of byMember) {
+    const month: string = row._id.month;
+    if (!monthlyMemberBreakdown.has(month)) continue;
+    const userId: string = row._id.userId.toString();
+    const memMap = monthlyMemberBreakdown.get(month)!;
+    memMap.set(userId, (memMap.get(userId) ?? 0) + row.leadCount);
+  }
+
+  // Step 8: Build trend array with MoM delta + both breakdowns
+  const trends = monthSeries.map((month, idx) => {
+    const count = monthlyTotals.get(month) ?? 0;
+    const prevCount = idx > 0 ? (monthlyTotals.get(monthSeries[idx - 1]) ?? 0) : null;
+
+    let momChangeAbsolute: number | null = null;
+    let momChangePercent: number | null = null;
+
+    if (prevCount !== null) {
+      momChangeAbsolute = count - prevCount;
+      if (prevCount > 0) {
+        momChangePercent = parseFloat(
+          (((count - prevCount) / prevCount) * 100).toFixed(2)
+        );
+      }
+    }
+
+    const eventBreakdown = Array.from(
+      (monthlyEventBreakdown.get(month) ?? new Map()).entries()
+    )
+      .map(([eventId, leadCount]) => ({
+        eventId,
+        eventName: eventNameMap.get(eventId) ?? "Unknown Event",
+        leadCount,
+      }))
+      .sort((a, b) => b.leadCount - a.leadCount);
+
+    const memberBreakdown = Array.from(
+      (monthlyMemberBreakdown.get(month) ?? new Map()).entries()
+    )
+      .map(([userId, leadCount]) => {
+        const info = memberNameMap.get(userId);
+        return {
+          userId,
+          memberName: info?.name ?? "Unknown Member",
+          email: info?.email ?? "",
+          leadCount,
+        };
+      })
+      .sort((a, b) => b.leadCount - a.leadCount);
+
+    return { month, count, momChangeAbsolute, momChangePercent, eventBreakdown, memberBreakdown };
+  });
+
+  // Step 9: Summary using last two complete months
+  const currentMonthCount = trends[trends.length - 1]?.count ?? 0;
+  const previousMonthCount = trends[trends.length - 2]?.count ?? 0;
+  const totalInPeriod = trends.reduce((sum, t) => sum + t.count, 0);
+
+  let summaryMomChangePercent: number | null = null;
+  if (previousMonthCount > 0) {
+    summaryMomChangePercent = parseFloat(
+      (((currentMonthCount - previousMonthCount) / previousMonthCount) * 100).toFixed(2)
+    );
+  }
+
+  return {
+    trends,
+    summary: {
+      totalInPeriod,
+      currentMonthCount,
+      previousMonthCount,
+      momChangeAbsolute: currentMonthCount - previousMonthCount,
+      momChangePercent: summaryMomChangePercent,
+    },
+  };
+};
+
+function buildEmptyTMMonthTrends(months: number) {
+  return buildMonthSeries(months).map((month, idx) => ({
+    month,
+    count: 0,
+    momChangeAbsolute: idx > 0 ? 0 : null,
+    momChangePercent: null,
+    eventBreakdown: [],
+    memberBreakdown: [],
+  }));
+}
+
+export const getLicenseROIPerTeamManager = async (teamManagerId: string) => {
+  const events = await EventModel.find({
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  }).select("_id eventName startDate endDate licenseKeys");
+
+  const now = new Date();
+
+  // Collect TM's key strings and event IDs for live lead count queries
+  const roiKeyStrings: string[] = [];
+  const roiEventIds: mongoose.Types.ObjectId[] = [];
+  for (const ev of events) {
+    for (const k of ev.licenseKeys) {
+      if (k.teamManagerId?.toString() === teamManagerId) {
+        roiKeyStrings.push(k.key);
+        roiEventIds.push(ev._id as mongoose.Types.ObjectId);
+      }
+    }
+  }
+
+  // Fetch RSVPs for TM's keys (excluding exited) to map key → active user IDs
+  const roiRsvps = roiKeyStrings.length > 0
+    ? await RsvpModel.find({
+        eventId: { $in: roiEventIds },
+        eventLicenseKey: { $in: roiKeyStrings },
+        isDeleted: false,
+        hasExited: { $ne: true },
+      }).select("userId eventId eventLicenseKey").lean()
+    : [];
+
+  // "licenseKey:eventId" → Set<userId>
+  const roiKeyUserMap = new Map<string, Set<string>>();
+  for (const rsvp of roiRsvps as any[]) {
+    const mapKey = `${rsvp.eventLicenseKey}:${rsvp.eventId.toString()}`;
+    if (!roiKeyUserMap.has(mapKey)) roiKeyUserMap.set(mapKey, new Set());
+    roiKeyUserMap.get(mapKey)!.add(rsvp.userId.toString());
+  }
+
+  // Batch-aggregate live lead counts by (userId, eventId)
+  const roiMemberIds = [...new Set((roiRsvps as any[]).map((r) => r.userId.toString()))].map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
+
+  const roiLeadCountRows: { _id: { userId: string; eventId: string }; count: number }[] =
+    roiMemberIds.length > 0
+      ? await LeadsModel.aggregate([
+          {
+            $match: {
+              userId: { $in: roiMemberIds },
+              eventId: { $in: roiEventIds },
+              isDeleted: false,
+            },
+          },
+          {
+            $group: {
+              _id: {
+                userId: { $toString: "$userId" },
+                eventId: { $toString: "$eventId" },
+              },
+              count: { $sum: 1 },
+            },
+          },
+        ])
+      : [];
+
+  const roiLeadCountMap = new Map<string, number>();
+  for (const row of roiLeadCountRows) {
+    roiLeadCountMap.set(`${row._id.userId}:${row._id.eventId}`, row.count);
+  }
+
+  const getLiveROILeadCount = (licenseKey: string, eventId: string): number => {
+    const users = roiKeyUserMap.get(`${licenseKey}:${eventId}`) ?? new Set();
+    let total = 0;
+    for (const uid of users) total += roiLeadCountMap.get(`${uid}:${eventId}`) ?? 0;
+    return total;
+  };
+
+  let totalLeadsGenerated = 0;
+  let totalLeadsCapacity = 0;
+  let totalActivationsUsed = 0;
+  let totalActivationsCapacity = 0;
+
+  const licenseKeyROI = events.flatMap((event) => {
+    const myKeys = event.licenseKeys.filter(
+      (k) => k.teamManagerId?.toString() === teamManagerId
+    );
+
+    return myKeys.map((key) => {
+      const maxLeads = key.maxLeads ?? 10000;
+      const liveLeadCount = getLiveROILeadCount(key.key, event._id.toString());
+      const maxActivations = key.maxActivations ?? 1;
+      const usedCount = key.usedCount ?? 0;
+
+      const leadUtilization = maxLeads > 0 ? liveLeadCount / maxLeads : 0;
+      const activationUtilization = maxActivations > 0 ? usedCount / maxActivations : 0;
+      const roiScore = leadUtilization * 0.7 + activationUtilization * 0.3;
+      const roiIndicator = computeROILabel(roiScore);
+
+      totalLeadsGenerated += liveLeadCount;
+      totalLeadsCapacity += maxLeads;
+      totalActivationsUsed += usedCount;
+      totalActivationsCapacity += maxActivations;
+
+      return {
+        licenseKey: key.key,
+        stallName: key.stallName ?? null,
+        email: key.email,
+        eventId: event._id,
+        eventName: event.eventName,
+        isExpired: new Date(key.expiresAt) < now,
+        expiresAt: key.expiresAt,
+        isActive: key.isActive,
+        currentLeadCount: liveLeadCount,
+        maxLeads,
+        leadUtilizationPct: Math.round(leadUtilization * 100),
+        usedCount,
+        maxActivations,
+        activationUtilizationPct: Math.round(activationUtilization * 100),
+        roiScore: Math.round(roiScore * 100),
+        roiIndicator,
+      };
+    });
+  });
+
+  // Sort: High first, then Medium, then Low; within same tier sort by roiScore desc
+  const order: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
+  licenseKeyROI.sort(
+    (a, b) =>
+      order[a.roiIndicator] - order[b.roiIndicator] ||
+      b.roiScore - a.roiScore
+  );
+
+  const overallLeadUtilization =
+    totalLeadsCapacity > 0 ? totalLeadsGenerated / totalLeadsCapacity : 0;
+  const overallActivationUtilization =
+    totalActivationsCapacity > 0
+      ? totalActivationsUsed / totalActivationsCapacity
+      : 0;
+  const overallScore =
+    overallLeadUtilization * 0.7 + overallActivationUtilization * 0.3;
+
+  const highCount = licenseKeyROI.filter((k) => k.roiIndicator === "High").length;
+  const mediumCount = licenseKeyROI.filter((k) => k.roiIndicator === "Medium").length;
+  const lowCount = licenseKeyROI.filter((k) => k.roiIndicator === "Low").length;
+
+  return {
+    summary: {
+      totalLicenseKeys: licenseKeyROI.length,
+      totalLeadsGenerated,
+      totalLeadsCapacity,
+      totalActivationsUsed,
+      totalActivationsCapacity,
+      overallLeadUtilizationPct: Math.round(overallLeadUtilization * 100),
+      overallActivationUtilizationPct: Math.round(overallActivationUtilization * 100),
+      overallROIScore: Math.round(overallScore * 100),
+      overallROIIndicator: computeROILabel(overallScore),
+      breakdown: { high: highCount, medium: mediumCount, low: lowCount },
+    },
+    licenseKeys: licenseKeyROI,
+  };
+};
+
+// ─────────────────────────────────────────────
+// NEW ANALYTICS
+// ─────────────────────────────────────────────
+
+// Helper: get managed event IDs + license keys for a team manager
+const getManagedContext = async (teamManagerId: string) => {
+  const events = await EventModel.find({
+    "licenseKeys.teamManagerId": teamManagerId,
+    isDeleted: false,
+  }).lean();
+
+  const managedEventIds = events.map((e: any) => e._id);
+  const myKeys: any[] = [];
+  for (const ev of events) {
+    for (const key of (ev as any).licenseKeys) {
+      if (key.teamManagerId?.toString() === teamManagerId) {
+        myKeys.push({ ...key, eventId: (ev as any)._id, eventName: (ev as any).eventName });
+      }
+    }
+  }
+
+  // Get team members via RSVPs using managed event IDs and license keys
+  const myKeyStrings = myKeys.map((k) => k.key);
+  const rsvps = await RsvpModel.find({
+    eventId: { $in: managedEventIds },
+    eventLicenseKey: { $in: myKeyStrings },
+    isDeleted: false,
+    isRevoked: false,
+    hasExited: { $ne: true },
+  }).select("userId eventId eventLicenseKey createdAt").lean();
+
+  const memberIdSet = new Set(rsvps.map((r: any) => r.userId.toString()));
+  const memberIds = [...memberIdSet].map((id) => new mongoose.Types.ObjectId(id));
+
+  return { events, managedEventIds, myKeys, rsvps, memberIds };
+};
+
+// 2. Active vs Inactive Members Today
+export const getActiveMembersToday = async (teamManagerId: string, eventId?: string) => {
+  const { managedEventIds, memberIds, rsvps } = await getManagedContext(teamManagerId);
+  if (!managedEventIds.length || !memberIds.length) {
+    return { activeToday: 0, inactiveToday: 0, hotLastHour: 0, members: [] };
+  }
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const oneHourAgo = new Date(now.getTime() - 3600000);
+
+  const leadMatchBase: any = {
+    userId: { $in: memberIds },
+    isDeleted: false,
+  };
+  if (eventId) {
+    leadMatchBase.eventId = new mongoose.Types.ObjectId(eventId);
+  } else {
+    leadMatchBase.eventId = { $in: managedEventIds };
+  }
+
+  const recentLeads = await LeadsModel.find({
+    ...leadMatchBase,
+    createdAt: { $gte: todayStart },
+  }).select("userId createdAt").lean();
+
+  const leadsToday = new Map<string, Date>();
+  for (const lead of recentLeads) {
+    const uid = (lead as any).userId.toString();
+    const existing = leadsToday.get(uid);
+    if (!existing || new Date((lead as any).createdAt) > existing) {
+      leadsToday.set(uid, new Date((lead as any).createdAt));
+    }
+  }
+
+  const allMembers = await UserModel.find({ _id: { $in: memberIds }, isDeleted: false })
+    .select("_id firstName lastName email")
+    .lean();
+
+  const memberResults = allMembers.map((m: any) => {
+    const lastToday = leadsToday.get(m._id.toString());
+    return {
+      userId: m._id,
+      firstName: m.firstName,
+      lastName: m.lastName,
+      email: m.email,
+      isActiveToday: !!lastToday,
+      isHotLastHour: lastToday ? lastToday >= oneHourAgo : false,
+      leadsToday: recentLeads.filter((l: any) => l.userId.toString() === m._id.toString()).length,
+      lastActivityAt: lastToday ?? null,
+    };
+  });
+
+  return {
+    activeToday: memberResults.filter((m) => m.isActiveToday).length,
+    inactiveToday: memberResults.filter((m) => !m.isActiveToday).length,
+    hotLastHour: memberResults.filter((m) => m.isHotLastHour).length,
+    members: memberResults.sort((a, b) => (b.leadsToday ?? 0) - (a.leadsToday ?? 0)),
+  };
+};
+
+// 3. Meeting Outcome Analytics
+const emptyMeetingOverall = () => ({
+  totalMeetings: 0,
+  completionRate: 0,
+  avgHoursLeadToMeeting: 0,
+  byStatus: { scheduled: 0, completed: 0, cancelled: 0, rescheduled: 0 },
+});
+
+export const getMeetingOutcomeAnalytics = async (teamManagerId: string) => {
+  const { managedEventIds, memberIds } = await getManagedContext(teamManagerId);
+  if (!managedEventIds.length || !memberIds.length) {
+    return { overall: emptyMeetingOverall(), perMember: [] };
+  }
+
+  const allLeads = await LeadsModel.find({
+    eventId: { $in: managedEventIds },
+    userId: { $in: memberIds },
+    isDeleted: false,
+  }).select("_id userId createdAt").lean();
+
+  const leadIds = allLeads.map((l: any) => l._id);
+  const leadCreatedMap = new Map(allLeads.map((l: any) => [l._id.toString(), l.createdAt]));
+
+  if (!leadIds.length) return { overall: emptyMeetingOverall(), perMember: [] };
+
+  const meetings = await MeetingModel.find({
+    leadId: { $in: leadIds },
+    isDeleted: false,
+  }).select("leadId userId meetingStatus createdAt").lean();
+
+  const statusCount: Record<string, number> = {
+    scheduled: 0, completed: 0, cancelled: 0, rescheduled: 0,
+  };
+  let totalTimeDiff = 0;
+  let timeDiffCount = 0;
+
+  const memberMeetingMap = new Map<string, { total: number; completed: number; cancelled: number }>();
+
+  for (const m of meetings) {
+    const s = (m as any).meetingStatus as string;
+    if (s in statusCount) statusCount[s]++;
+
+    const leadCreated = leadCreatedMap.get((m as any).leadId.toString());
+    if (leadCreated) {
+      const diff = (new Date((m as any).createdAt).getTime() - new Date(leadCreated).getTime()) / 3600000;
+      if (diff >= 0) { totalTimeDiff += diff; timeDiffCount++; }
+    }
+
+    const uid = (m as any).userId.toString();
+    if (!memberMeetingMap.has(uid)) memberMeetingMap.set(uid, { total: 0, completed: 0, cancelled: 0 });
+    const entry = memberMeetingMap.get(uid)!;
+    entry.total++;
+    if (s === "completed") entry.completed++;
+    if (s === "cancelled") entry.cancelled++;
+  }
+
+  const total = meetings.length;
+  const completionRate =
+    statusCount.completed + statusCount.cancelled > 0
+      ? parseFloat(
+          ((statusCount.completed / (statusCount.completed + statusCount.cancelled)) * 100).toFixed(2)
+        )
+      : 0;
+
+  const memberUsers = await UserModel.find({ _id: { $in: memberIds }, isDeleted: false })
+    .select("_id firstName lastName email")
+    .lean();
+
+  const perMember = memberUsers.map((u: any) => {
+    const stats = memberMeetingMap.get(u._id.toString()) ?? { total: 0, completed: 0, cancelled: 0 };
+    return {
+      userId: u._id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      email: u.email,
+      totalMeetings: stats.total,
+      completed: stats.completed,
+      cancelled: stats.cancelled,
+      completionRate:
+        stats.completed + stats.cancelled > 0
+          ? parseFloat(((stats.completed / (stats.completed + stats.cancelled)) * 100).toFixed(2))
+          : 0,
+    };
+  });
+
+  return {
+    overall: {
+      totalMeetings: total,
+      byStatus: statusCount,
+      completionRate,
+      avgHoursLeadToMeeting: timeDiffCount > 0 ? parseFloat((totalTimeDiff / timeDiffCount).toFixed(2)) : null,
+    },
+    perMember,
+  };
+};
+
+// 4. Duplicate Leads Within Team
+export const getDuplicateLeadsInTeam = async (teamManagerId: string, eventId?: string) => {
+  const { managedEventIds, memberIds } = await getManagedContext(teamManagerId);
+  if (!managedEventIds.length || !memberIds.length) {
+    return { totalLeads: 0, duplicateGroups: 0, duplicateLeadCount: 0, duplicatePct: 0.0, groups: [] };
+  }
+
+  const leadMatch: any = {
+    eventId: eventId ? new mongoose.Types.ObjectId(eventId) : { $in: managedEventIds },
+    userId: { $in: memberIds },
+    isDeleted: false,
+  };
+
+  const leads = await LeadsModel.find(leadMatch)
+    .select("_id userId eventId details.emails details.phoneNumbers details.firstName details.lastName")
+    .lean();
+
+  const emailMap = new Map<string, any[]>();
+  const phoneMap = new Map<string, any[]>();
+
+  for (const lead of leads) {
+    const d = (lead as any).details ?? {};
+    for (const email of (d.emails ?? [])) {
+      if (!email) continue;
+      const key = email.toLowerCase();
+      if (!emailMap.has(key)) emailMap.set(key, []);
+      emailMap.get(key)!.push(lead);
+    }
+    for (const phone of (d.phoneNumbers ?? [])) {
+      if (!phone) continue;
+      if (!phoneMap.has(phone)) phoneMap.set(phone, []);
+      phoneMap.get(phone)!.push(lead);
+    }
+  }
+
+  const groups: any[] = [];
+  const seenKeys = new Set<string>();
+
+  const processMap = (map: Map<string, any[]>, contactType: "email" | "phone") => {
+    for (const [contact, contactLeads] of map.entries()) {
+      if (contactLeads.length < 2) continue;
+      const uniqueUsers = new Set(contactLeads.map((l: any) => l.userId.toString()));
+      if (uniqueUsers.size < 2) continue;
+      const key = contactLeads.map((l: any) => l._id.toString()).sort().join(",");
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      groups.push({
+        contactType,
+        contact,
+        count: contactLeads.length,
+        capturedBy: contactLeads.map((l: any) => ({
+          leadId: l._id,
+          userId: l.userId,
+          eventId: l.eventId,
+          name: `${l.details?.firstName ?? ""} ${l.details?.lastName ?? ""}`.trim(),
+        })),
+      });
+    }
+  };
+
+  processMap(emailMap, "email");
+  processMap(phoneMap, "phone");
+
+  const duplicateLeadCount = new Set(
+    groups.flatMap((g) => g.capturedBy.map((l: any) => l.leadId.toString()))
+  ).size;
+
+  return {
+    totalLeads: leads.length,
+    duplicateGroups: groups.length,
+    duplicateLeadCount,
+    duplicatePct: leads.length > 0 ? parseFloat(((duplicateLeadCount / leads.length) * 100).toFixed(2)) : 0,
+    groups,
+  };
+};
+
+// 5. Stall Underperformance Alerts
+export const getStallUnderperformanceAlerts = async (teamManagerId: string) => {
+  const { events, myKeys, rsvps } = await getManagedContext(teamManagerId);
+  const now = new Date();
+
+  // Build a live lead count per (licenseKey, eventId) by querying LeadsModel directly.
+  // key.currentLeadCount is a denormalized cache on the Event doc and can be stale.
+  // RSVPs link a userId to a licenseKey+eventId, so we sum lead counts for all
+  // users who activated each key.
+  const keyUserMap = new Map<string, Set<string>>(); // "key:eventId" → Set<userId>
+  for (const rsvp of rsvps) {
+    const mapKey = `${rsvp.eventLicenseKey}:${(rsvp as any).eventId.toString()}`;
+    if (!keyUserMap.has(mapKey)) keyUserMap.set(mapKey, new Set());
+    keyUserMap.get(mapKey)!.add((rsvp as any).userId.toString());
+  }
+
+  // Collect all (userId, eventId) combos that matter, then batch-fetch counts.
+  const allMemberIds = [...new Set(rsvps.map((r: any) => r.userId.toString()))].map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
+  const activeEventIds = myKeys.map((k: any) => k.eventId);
+
+  const leadCountRows: { _id: { userId: string; eventId: string }; count: number }[] =
+    allMemberIds.length > 0
+      ? await LeadsModel.aggregate([
+          {
+            $match: {
+              userId: { $in: allMemberIds },
+              eventId: { $in: activeEventIds },
+              isDeleted: false,
+            },
+          },
+          {
+            $group: {
+              _id: {
+                userId: { $toString: "$userId" },
+                eventId: { $toString: "$eventId" },
+              },
+              count: { $sum: 1 },
+            },
+          },
+        ])
+      : [];
+
+  // Build lookup: "userId:eventId" → count
+  const leadCountMap = new Map<string, number>();
+  for (const row of leadCountRows) {
+    leadCountMap.set(`${row._id.userId}:${row._id.eventId}`, row.count);
+  }
+
+  const getLiveLeadCount = (licenseKey: string, eventId: string): number => {
+    const users = keyUserMap.get(`${licenseKey}:${eventId}`) ?? new Set();
+    let total = 0;
+    for (const uid of users) {
+      total += leadCountMap.get(`${uid}:${eventId}`) ?? 0;
+    }
+    return total;
+  };
+
+  const alerts: any[] = [];
+
+  for (const ev of events) {
+    const startDate = new Date((ev as any).startDate);
+    const endDate = new Date((ev as any).endDate);
+
+    if (now < startDate || now > endDate) continue;
+
+    const totalMs = endDate.getTime() - startDate.getTime();
+    const elapsedMs = now.getTime() - startDate.getTime();
+    const eventElapsedPct = totalMs > 0 ? parseFloat(((elapsedMs / totalMs) * 100).toFixed(2)) : 0;
+
+    if (eventElapsedPct < 25) continue;
+
+    const daysRemaining = Math.max(
+      0,
+      Math.floor((endDate.getTime() - now.getTime()) / 86400000)
+    );
+
+    const keysForEvent = myKeys.filter((k: any) => k.eventId.toString() === (ev as any)._id.toString());
+
+    for (const key of keysForEvent) {
+      const maxLeads = key.maxLeads ?? 10000;
+      const currentLeadCount = getLiveLeadCount(key.key, key.eventId.toString());
+      const utilizationPct = maxLeads > 0 ? parseFloat(((currentLeadCount / maxLeads) * 100).toFixed(2)) : 0;
+      const expectedMinUtilizationPct = parseFloat((eventElapsedPct * 0.5).toFixed(2));
+
+      if (utilizationPct < expectedMinUtilizationPct) {
+        alerts.push({
+          eventId: (ev as any)._id,
+          eventName: (ev as any).eventName,
+          key: key.key,
+          stallName: key.stallName ?? key.key,
+          email: key.email,
+          eventElapsedPct,
+          utilizationPct,
+          expectedMinUtilizationPct,
+          currentLeadCount,
+          maxLeads,
+          daysRemaining,
+        });
+      }
+    }
+  }
+
+  alerts.sort((a, b) => a.utilizationPct - b.utilizationPct);
+
+  return { totalAlerts: alerts.length, alerts };
+};
+
+// ─────────────────────────────────────────────
+// END NEW ANALYTICS
+// ─────────────────────────────────────────────

@@ -614,6 +614,39 @@ export const getEventPerformance = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Get MoM lead growth across events
+export const getLeadsMoMGrowth = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId;
+    const rawMonths = req.query.months;
+    let months = 12;
+
+    if (rawMonths !== undefined) {
+      months = parseInt(rawMonths as string, 10);
+      if (isNaN(months) || months < 1 || months > 24) {
+        return res.status(400).json({
+          success: false,
+          message: "months must be a number between 1 and 24",
+        });
+      }
+    }
+
+    const result = await eventService.getLeadsMoMGrowth(exhibitorId!, months);
+
+    return res.status(200).json({
+      success: true,
+      message: "MoM lead growth retrieved successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get MoM lead growth error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve MoM lead growth",
+    });
+  }
+};
+
 // Get stall performance (bar graph data)
 export const getStallPerformance = async (req: AuthRequest, res: Response) => {
   try {
@@ -646,3 +679,159 @@ export const getStallPerformance = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+// Get Event ROI analytics for the calling Exhibitor
+export const getEventROIAnalytics = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId;
+
+    const result = await eventService.getEventROIAnalytics(exhibitorId!);
+
+    return res.status(200).json({
+      success: true,
+      message: "Event ROI analytics retrieved successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get event ROI analytics error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve event ROI analytics",
+    });
+  }
+};
+
+// ─────────────────────────────────────────────
+// NEW ANALYTICS CONTROLLERS
+// ─────────────────────────────────────────────
+
+export const getLeadQualityAnalytics = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const eventId = req.query.eventId as string | undefined;
+    const result = await eventService.getLeadQualityAnalytics(exhibitorId, eventId);
+    return res.status(200).json({ success: true, message: "Lead quality analytics retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getLeadQualityAnalytics error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve lead quality analytics" });
+  }
+};
+
+export const getTeamMemberPerformance = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const eventId = req.query.eventId as string | undefined;
+    const result = await eventService.getTeamMemberPerformance(exhibitorId, eventId);
+    return res.status(200).json({ success: true, message: "Team member performance retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getTeamMemberPerformance error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve team member performance" });
+  }
+};
+
+export const getMeetingConversionAnalytics = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const eventId = req.query.eventId as string | undefined;
+    const result = await eventService.getMeetingConversionAnalytics(exhibitorId, eventId);
+    return res.status(200).json({ success: true, message: "Meeting conversion analytics retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getMeetingConversionAnalytics error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve meeting conversion analytics" });
+  }
+};
+
+export const getDuplicateLeads = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const eventId = req.query.eventId as string | undefined;
+    const result = await eventService.getDuplicateLeads(exhibitorId, eventId);
+    return res.status(200).json({ success: true, message: "Duplicate leads retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getDuplicateLeads error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve duplicate leads" });
+  }
+};
+
+export const getLeadCaptureHeatmap = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const { eventId } = req.query;
+    if (!eventId) {
+      return res.status(400).json({ success: false, message: "eventId is required" });
+    }
+    const result = await eventService.getLeadCaptureHeatmap(exhibitorId, eventId as string);
+    return res.status(200).json({ success: true, message: "Lead capture heatmap retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getLeadCaptureHeatmap error:", error);
+    return res.status(error.message === "Event not found" ? 404 : 500).json({ success: false, message: error.message || "Failed to retrieve heatmap" });
+  }
+};
+
+export const getEventComparison = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const eventIdsParam = req.query.eventIds as string;
+    if (!eventIdsParam) {
+      return res.status(400).json({ success: false, message: "eventIds query param is required (comma-separated)" });
+    }
+    const eventIds = eventIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
+    if (eventIds.length < 2) {
+      return res.status(400).json({ success: false, message: "At least 2 eventIds are required for comparison" });
+    }
+    if (eventIds.length > 10) {
+      return res.status(400).json({ success: false, message: "Maximum 10 events can be compared at once" });
+    }
+    const result = await eventService.getEventComparison(exhibitorId, eventIds);
+    return res.status(200).json({ success: true, message: "Event comparison retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getEventComparison error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve event comparison" });
+  }
+};
+
+export const getLeadDemographics = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const eventId = req.query.eventId as string | undefined;
+    const result = await eventService.getLeadDemographics(exhibitorId, eventId);
+    return res.status(200).json({ success: true, message: "Lead demographics retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getLeadDemographics error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve lead demographics" });
+  }
+};
+
+export const getExhibitorExpiringKeysAlert = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const days = Number(req.query.days) || 7;
+    if (days < 1 || days > 90) {
+      return res.status(400).json({ success: false, message: "days must be between 1 and 90" });
+    }
+    const result = await eventService.getExhibitorExpiringKeysAlert(exhibitorId, days);
+    return res.status(200).json({ success: true, message: "Expiring keys alert retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getExhibitorExpiringKeysAlert error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve expiring keys alert" });
+  }
+};
+
+export const getStallCoverageByDay = async (req: AuthRequest, res: Response) => {
+  try {
+    const exhibitorId = req.user?.userId!;
+    const { eventId } = req.query;
+    if (!eventId) {
+      return res.status(400).json({ success: false, message: "eventId is required" });
+    }
+    const result = await eventService.getStallCoverageByDay(exhibitorId, eventId as string);
+    return res.status(200).json({ success: true, message: "Stall coverage by day retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getStallCoverageByDay error:", error);
+    return res.status(error.message === "Event not found" ? 404 : 500).json({ success: false, message: error.message || "Failed to retrieve stall coverage" });
+  }
+};
+
+// ─────────────────────────────────────────────
+// END NEW ANALYTICS CONTROLLERS
+// ─────────────────────────────────────────────

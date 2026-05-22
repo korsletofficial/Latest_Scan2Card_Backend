@@ -11,7 +11,18 @@ import {
   getLicenseKeysTrend,
   getTopPerformers,
   getExhibitorKeys,
-  updateKeyPaymentStatus
+  updateKeyPaymentStatus,
+  getExhibitorsMoMTrend,
+  getPlatformConversionFunnel,
+  getExhibitorRetentionChurn,
+  getExpiringKeysWithLowUtilization,
+  getPlatformKeyUtilization,
+  getGeographicDistribution,
+  getExhibitorTimeToFirstEvent,
+  getEventTypeDistribution,
+  getPeakUsageHours,
+  getScanStats,
+  getPdfReport,
 } from "../controllers/admin.controller";
 import { authenticateToken, AuthRequest } from "../middleware/auth.middleware";
 import {
@@ -34,6 +45,19 @@ router.get("/dashboard/stats", authenticateToken, ensureSuperAdmin, adminDashboa
 router.get("/dashboard/trends/events", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getEventsTrend);
 router.get("/dashboard/trends/leads", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getLeadsTrend);
 router.get("/dashboard/trends/keys", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getLicenseKeysTrend);
+router.get("/dashboard/trends/exhibitors", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getExhibitorsMoMTrend);
+
+// New analytics routes
+router.get("/dashboard/analytics/conversion-funnel", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getPlatformConversionFunnel);
+router.get("/dashboard/analytics/exhibitor-retention", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getExhibitorRetentionChurn);
+router.get("/dashboard/analytics/expiring-keys", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getExpiringKeysWithLowUtilization);
+router.get("/dashboard/analytics/key-utilization", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getPlatformKeyUtilization);
+router.get("/dashboard/analytics/geographic", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getGeographicDistribution);
+router.get("/dashboard/analytics/time-to-first-event", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getExhibitorTimeToFirstEvent);
+router.get("/dashboard/analytics/event-type-distribution", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getEventTypeDistribution);
+router.get("/dashboard/analytics/peak-usage-hours", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getPeakUsageHours);
+router.get("/dashboard/analytics/scan-stats", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getScanStats);
+router.get("/pdf-report", authenticateToken, ensureSuperAdmin, adminDashboardLimiter, getPdfReport);
 
 // Exhibitor CRUD routes - Admin limit (300/min per user)
 router.post("/exhibitors", authenticateToken, ensureSuperAdmin, adminLimiter, createExhibitor);

@@ -834,3 +834,110 @@ export const getLicenseKeyUsageDetails = async (req: AuthRequest, res: Response)
     });
   }
 };
+
+// Get License ROI per license key for the calling Team Manager
+export const getLicenseROI = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+
+    const result = await teamManagerService.getLicenseROIPerTeamManager(teamManagerId!);
+
+    return res.status(200).json({
+      success: true,
+      message: "License ROI analytics retrieved successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get license ROI error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get license ROI analytics",
+    });
+  }
+};
+
+export const getLeadsMoMGrowth = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId;
+    const rawMonths = req.query.months;
+    let months = 12;
+
+    if (rawMonths !== undefined) {
+      months = parseInt(rawMonths as string, 10);
+      if (isNaN(months) || months < 1 || months > 24) {
+        return res.status(400).json({
+          success: false,
+          message: "months must be a number between 1 and 24",
+        });
+      }
+    }
+
+    const result = await teamManagerService.getLeadsMoMGrowth(teamManagerId!, months);
+
+    return res.status(200).json({
+      success: true,
+      message: "MoM lead growth retrieved successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get team manager MoM lead growth error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve MoM lead growth",
+    });
+  }
+};
+
+// ─────────────────────────────────────────────
+// NEW ANALYTICS CONTROLLERS
+// ─────────────────────────────────────────────
+
+export const getActiveMembersToday = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId!;
+    const eventId = req.query.eventId as string | undefined;
+    const result = await teamManagerService.getActiveMembersToday(teamManagerId, eventId);
+    res.status(200).json({ success: true, message: "Active members today retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getActiveMembersToday error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to retrieve active members" });
+  }
+};
+
+export const getMeetingOutcomeAnalytics = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId!;
+    const result = await teamManagerService.getMeetingOutcomeAnalytics(teamManagerId);
+    res.status(200).json({ success: true, message: "Meeting outcome analytics retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getMeetingOutcomeAnalytics error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to retrieve meeting outcomes" });
+  }
+};
+
+export const getDuplicateLeadsInTeam = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId!;
+    const eventId = req.query.eventId as string | undefined;
+    const result = await teamManagerService.getDuplicateLeadsInTeam(teamManagerId, eventId);
+    res.status(200).json({ success: true, message: "Duplicate leads in team retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getDuplicateLeadsInTeam error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to retrieve duplicate leads" });
+  }
+};
+
+export const getStallUnderperformanceAlerts = async (req: AuthRequest, res: Response) => {
+  try {
+    const teamManagerId = req.user?.userId!;
+    const result = await teamManagerService.getStallUnderperformanceAlerts(teamManagerId);
+    res.status(200).json({ success: true, message: "Stall underperformance alerts retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getStallUnderperformanceAlerts error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to retrieve stall alerts" });
+  }
+};
+
+// ─────────────────────────────────────────────
+// END NEW ANALYTICS CONTROLLERS
+// ─────────────────────────────────────────────

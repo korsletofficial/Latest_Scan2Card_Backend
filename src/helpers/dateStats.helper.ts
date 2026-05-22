@@ -47,6 +47,20 @@ export function fillMissingMonths(data: any[], months: number) {
 }
 
 /**
+ * Build a YYYY-MM series for the given number of trailing months.
+ * Shared by any service that builds MoM trend arrays.
+ */
+export function buildMonthSeries(months: number): string[] {
+  const series: string[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    series.push(d.toISOString().slice(0, 7));
+  }
+  return series;
+}
+
+/**
  * Fill missing years with 0 counts
  * @param data - Array of {_id: year, count: number}
  * @param years - Number of years to fill

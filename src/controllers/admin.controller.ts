@@ -509,3 +509,183 @@ export const getTopPerformers = async (req: Request, res: Response) => {
     });
   }
 };
+
+// ─────────────────────────────────────────────
+// NEW ANALYTICS CONTROLLERS
+// ─────────────────────────────────────────────
+
+export const getPlatformConversionFunnel = async (req: Request, res: Response) => {
+  try {
+    const result = await adminService.getPlatformConversionFunnel();
+    return res.status(200).json({ success: true, message: "Platform conversion funnel retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getPlatformConversionFunnel error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve conversion funnel" });
+  }
+};
+
+export const getExhibitorRetentionChurn = async (req: Request, res: Response) => {
+  try {
+    const inactiveDays = Number(req.query.inactiveDays) || 30;
+    if (inactiveDays < 1 || inactiveDays > 365) {
+      return res.status(400).json({ success: false, message: "inactiveDays must be between 1 and 365" });
+    }
+    const result = await adminService.getExhibitorRetentionChurn(inactiveDays);
+    return res.status(200).json({ success: true, message: "Exhibitor retention & churn retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getExhibitorRetentionChurn error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve retention data" });
+  }
+};
+
+export const getExpiringKeysWithLowUtilization = async (req: Request, res: Response) => {
+  try {
+    const days = Number(req.query.days) || 14;
+    const utilizationThreshold = Number(req.query.utilizationThreshold) || 30;
+    if (days < 1 || days > 90) {
+      return res.status(400).json({ success: false, message: "days must be between 1 and 90" });
+    }
+    if (utilizationThreshold < 0 || utilizationThreshold > 100) {
+      return res.status(400).json({ success: false, message: "utilizationThreshold must be between 0 and 100" });
+    }
+    const result = await adminService.getExpiringKeysWithLowUtilization(days, utilizationThreshold);
+    return res.status(200).json({ success: true, message: "Expiring keys with low utilization retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getExpiringKeysWithLowUtilization error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve expiring keys" });
+  }
+};
+
+export const getPlatformKeyUtilization = async (req: Request, res: Response) => {
+  try {
+    const result = await adminService.getPlatformKeyUtilization();
+    return res.status(200).json({ success: true, message: "Platform key utilization retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getPlatformKeyUtilization error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve key utilization" });
+  }
+};
+
+export const getGeographicDistribution = async (req: Request, res: Response) => {
+  try {
+    const result = await adminService.getGeographicDistribution();
+    return res.status(200).json({ success: true, message: "Geographic distribution retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getGeographicDistribution error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve geographic data" });
+  }
+};
+
+export const getExhibitorTimeToFirstEvent = async (req: Request, res: Response) => {
+  try {
+    const result = await adminService.getExhibitorTimeToFirstEvent();
+    return res.status(200).json({ success: true, message: "Exhibitor time-to-first-event retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getExhibitorTimeToFirstEvent error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve time-to-first-event" });
+  }
+};
+
+export const getEventTypeDistribution = async (req: Request, res: Response) => {
+  try {
+    const result = await adminService.getEventTypeDistribution();
+    return res.status(200).json({ success: true, message: "Event type distribution retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getEventTypeDistribution error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve event type distribution" });
+  }
+};
+
+export const getPeakUsageHours = async (req: Request, res: Response) => {
+  try {
+    const days = req.query.days ? Number(req.query.days) : undefined;
+    if (days !== undefined && (days < 1 || days > 365)) {
+      return res.status(400).json({ success: false, message: "days must be between 1 and 365" });
+    }
+    const result = await adminService.getPeakUsageHours(days);
+    return res.status(200).json({ success: true, message: "Peak usage hours retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getPeakUsageHours error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve peak usage hours" });
+  }
+};
+
+export const getScanStats = async (req: Request, res: Response) => {
+  try {
+    const result = await adminService.getScanStats();
+    return res.status(200).json({ success: true, message: "Scan stats retrieved", data: result });
+  } catch (error: any) {
+    console.error("❌ getScanStats error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve scan stats" });
+  }
+};
+
+// ─────────────────────────────────────────────
+// END NEW ANALYTICS CONTROLLERS
+// ─────────────────────────────────────────────
+
+export const getPdfReport = async (req: Request, res: Response) => {
+  try {
+    const { fromDate, toDate } = req.query as { fromDate?: string; toDate?: string };
+
+    let from: Date | undefined;
+    let to: Date | undefined;
+
+    if (fromDate) {
+      from = new Date(fromDate);
+      if (isNaN(from.getTime())) {
+        return res.status(400).json({ success: false, message: "Invalid fromDate. Use ISO format e.g. 2024-01-01" });
+      }
+      from.setHours(0, 0, 0, 0);
+    }
+
+    if (toDate) {
+      to = new Date(toDate);
+      if (isNaN(to.getTime())) {
+        return res.status(400).json({ success: false, message: "Invalid toDate. Use ISO format e.g. 2024-12-31" });
+      }
+      to.setHours(23, 59, 59, 999);
+    }
+
+    if (from && to && from > to) {
+      return res.status(400).json({ success: false, message: "fromDate must be before toDate" });
+    }
+
+    const data = await adminService.getPdfReportStats(from, to);
+    return res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    console.error("❌ getPdfReport error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to retrieve PDF report data" });
+  }
+};
+
+export const getExhibitorsMoMTrend = async (req: Request, res: Response) => {
+  try {
+    const rawMonths = req.query.months;
+    let months = 12;
+
+    if (rawMonths !== undefined) {
+      months = parseInt(rawMonths as string, 10);
+      if (isNaN(months) || months < 1 || months > 24) {
+        return res.status(400).json({
+          success: false,
+          message: "months must be a number between 1 and 24",
+        });
+      }
+    }
+
+    const result = await adminService.getExhibitorsMoMTrend(months);
+
+    return res.status(200).json({
+      success: true,
+      message: "Exhibitors MoM trend retrieved successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("❌ Get exhibitors MoM trend error:", error);
+    return res.status(error.message === "Exhibitor role not found" ? 404 : 500).json({
+      success: false,
+      message: error.message || "Failed to retrieve exhibitors MoM trend",
+    });
+  }
+};

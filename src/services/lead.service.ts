@@ -167,12 +167,18 @@ export const createLead = async (data: CreateLeadData) => {
   }
 
   // VALIDATE EVENT ACCESS & LICENSE KEY
+  // Hoist these so the post-create trial increment and the compensation block can use them.
+  let isTrialEventForLead = false;
+  let licenseKeyForIncrement: string | null = null;
+
   if (data.eventId && !data.isIndependentLead) {
     const event = await EventModel.findById(data.eventId);
 
     if (!event || event.isDeleted) {
       throw new Error("Event not found");
     }
+
+    isTrialEventForLead = !!event.isTrialEvent;
 
     // CHECK TRIAL EVENT LIMIT
     if (event.isTrialEvent) {
@@ -226,35 +232,77 @@ export const createLead = async (data: CreateLeadData) => {
         );
       }
 
+      // Atomically reserve a lead slot before creating the document — this eliminates the
+      // TOCTOU race where two concurrent requests both pass a stale-read check and both
+      // proceed past the limit.
+      if (rsvp.eventLicenseKey) {
+        const licenseKeyDoc = event.licenseKeys.find(
+          (lk) => lk.key === rsvp.eventLicenseKey
+        );
+        const maxLeads = licenseKeyDoc?.maxLeads ?? 10000;
+
+        const reserved = await EventModel.updateOne(
+          {
+            _id: data.eventId,
+            licenseKeys: {
+              $elemMatch: { key: rsvp.eventLicenseKey, currentLeadCount: { $lt: maxLeads } },
+            },
+          },
+          { $inc: { "licenseKeys.$.currentLeadCount": 1 } }
+        );
+
+        if (reserved.modifiedCount === 0) {
+          throw new Error(
+            `Lead limit reached for this license key. ` +
+            `The maximum of ${maxLeads} leads has been collected.`
+          );
+        }
+
+        licenseKeyForIncrement = rsvp.eventLicenseKey;
+      }
+
       console.log(`✅ License key validated for user ${data.userId} in event ${data.eventId}`);
     }
   }
 
-  const lead = await LeadModel.create({
-    userId: data.userId,
-    eventId: data.eventId,
-    isIndependentLead: data.isIndependentLead || !data.eventId,
-    leadType: data.leadType,
-    scannedCardImage: data.scannedCardImage,
-    images: data.images,
-    entryCode: data.entryCode,
-    ocrText: data.ocrText,
-    details: data.details,
-    rating: data.rating,
-  });
-
-  // INCREMENT TRIAL LEAD COUNT if this was for trial event
-  if (data.eventId) {
-    const event = await EventModel.findById(data.eventId);
-
-    if (event && event.isTrialEvent) {
-      await UserModel.updateOne(
-        { _id: data.userId },
-        { $inc: { trialLeadsCount: 1 } }
-      );
-
-      console.log(`✅ Incremented trial lead count for user ${data.userId}`);
+  let lead;
+  try {
+    lead = await LeadModel.create({
+      userId: data.userId,
+      eventId: data.eventId,
+      isIndependentLead: data.isIndependentLead || !data.eventId,
+      leadType: data.leadType,
+      scannedCardImage: data.scannedCardImage,
+      images: data.images,
+      entryCode: data.entryCode,
+      ocrText: data.ocrText,
+      details: data.details,
+      rating: data.rating,
+    });
+  } catch (err) {
+    // Compensate: undo the atomic slot reservation if the lead document itself failed to save.
+    if (licenseKeyForIncrement) {
+      await EventModel.updateOne(
+        { _id: data.eventId, "licenseKeys.key": licenseKeyForIncrement },
+        { $inc: { "licenseKeys.$.currentLeadCount": -1 } }
+      ).catch((compensationErr) => {
+        console.error(
+          `❌ CRITICAL: failed to compensate currentLeadCount for key ${licenseKeyForIncrement} after lead create failure:`,
+          compensationErr
+        );
+      });
     }
+    throw err;
+  }
+
+  // Increment trial lead count after successful lead creation.
+  // Non-trial license key count was already incremented atomically above.
+  if (isTrialEventForLead) {
+    await UserModel.updateOne(
+      { _id: data.userId },
+      { $inc: { trialLeadsCount: 1 } }
+    );
+    console.log(`✅ Incremented trial lead count for user ${data.userId}`);
   }
 
   return lead;
@@ -675,24 +723,45 @@ export const deleteLead = async (id: string, userId: string) => {
     throw new Error("Lead not found");
   }
 
-  // Check if this is a trial event lead - decrement counter if so
+  // Soft-delete first — counter adjustments only happen after the document is safely deleted.
+  lead.isDeleted = true;
+  lead.isActive = false;
+  await lead.save();
+
+  // Decrement trial lead count or license key lead count after successful delete.
   if (lead.eventId) {
     const event = await EventModel.findById(lead.eventId);
 
     if (event && event.isTrialEvent) {
-      // Decrement trial lead count
       await UserModel.updateOne(
         { _id: userId },
         { $inc: { trialLeadsCount: -1 } }
       );
-
       console.log(`✅ Decremented trial lead count for user ${userId}`);
+    } else if (event) {
+      const rsvp = await RsvpModel.findOne({
+        userId: lead.userId,
+        eventId: lead.eventId,
+        isDeleted: false,
+      }).select("eventLicenseKey");
+
+      if (rsvp?.eventLicenseKey) {
+        // Guard against decrementing below 0 in case of data inconsistency.
+        await EventModel.updateOne(
+          {
+            _id: lead.eventId,
+            licenseKeys: {
+              $elemMatch: { key: rsvp.eventLicenseKey, currentLeadCount: { $gt: 0 } },
+            },
+          },
+          { $inc: { "licenseKeys.$.currentLeadCount": -1 } }
+        ).catch((err) => {
+          console.error(`❌ CRITICAL: failed to decrement lead count for key ${rsvp.eventLicenseKey} after lead delete:`, err);
+        });
+        console.log(`✅ Decremented lead count for license key ${rsvp.eventLicenseKey}`);
+      }
     }
   }
-
-  lead.isDeleted = true;
-  lead.isActive = false;
-  await lead.save();
 
   return { message: "Lead deleted successfully" };
 };

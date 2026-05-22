@@ -24,6 +24,15 @@ import {
   revokeCalendarPermission,
   // License key usage details
   getLicenseKeyUsageDetails,
+  // License ROI analytics
+  getLicenseROI,
+  // MoM lead growth
+  getLeadsMoMGrowth,
+  // New analytics
+  getActiveMembersToday,
+  getMeetingOutcomeAnalytics,
+  getDuplicateLeadsInTeam,
+  getStallUnderperformanceAlerts,
 } from "../controllers/teamManager.controller";
 import {
   adminDashboardLimiter,
@@ -35,7 +44,15 @@ const router = Router();
 // All routes require TEAMMANAGER role
 // Dashboard routes - High limit for frequent polling (500/min per user)
 router.get("/dashboard/stats", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getDashboardStats);
+router.get("/dashboard/license-roi", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getLicenseROI);
+router.get("/dashboard/leads-mom-growth", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getLeadsMoMGrowth);
 router.get("/leads/graph", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getLeadsGraph);
+
+// New analytics routes
+router.get("/dashboard/active-members", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getActiveMembersToday);
+router.get("/dashboard/meeting-outcomes", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getMeetingOutcomeAnalytics);
+router.get("/dashboard/duplicate-leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getDuplicateLeadsInTeam);
+router.get("/dashboard/stall-alerts", authenticateToken, authorizeRoles("TEAMMANAGER"), adminDashboardLimiter, getStallUnderperformanceAlerts);
 
 // Other routes - Admin limit (300/min per user)
 router.get("/leads", authenticateToken, authorizeRoles("TEAMMANAGER"), adminLimiter, getAllLeadsForManager);
