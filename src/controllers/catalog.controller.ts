@@ -3,6 +3,7 @@ import { AuthRequest } from "../middleware/auth.middleware";
 import * as catalogService from "../services/catalog.service";
 import { CatalogCategory } from "../models/catalog.model";
 import { uploadFileToS3 } from "../services/awsS3.service";
+import { createShortUrl } from "../services/shortUrl.service";
 
 // Create a new catalog
 export const createCatalog = async (req: AuthRequest, res: Response) => {
@@ -99,12 +100,14 @@ export const createCatalog = async (req: AuthRequest, res: Response) => {
           makePublic: true
         });
         console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
+        const shortCode = await createShortUrl(uploadResult.url, file.originalname);
         return {
           docLink: uploadResult.url,
           s3Key: uploadResult.key,
           originalFileName: file.originalname,
           fileSize: file.size,
-          contentType: file.mimetype
+          contentType: file.mimetype,
+          shortCode
         };
       })
     );
@@ -320,12 +323,14 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
               makePublic: true
             });
             console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
+            const shortCode = await createShortUrl(uploadResult.url, file.originalname);
             return {
               docLink: uploadResult.url,
               s3Key: uploadResult.key,
               originalFileName: file.originalname,
               fileSize: file.size,
-              contentType: file.mimetype
+              contentType: file.mimetype,
+              shortCode
             };
           })
         );

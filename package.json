@@ -12,6 +12,7 @@
     "create:superadmin": "ts-node src/scripts/createSuperAdmin.ts",
     "qr": "ts-node src/scripts/generateQRCode.ts",
     "migrate:meetings": "ts-node src/scripts/migrate-meetings.ts",
+    "backfill:short-links": "ts-node src/scripts/backfillShortLinks.ts",
     "lint": "eslint . --ext .ts"
   },
   "keywords": [

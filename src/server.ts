@@ -2,7 +2,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import express, { Application, Request, Response } from "express";
+import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { connectToMongooseDatabase } from "./config/db.config";
 import { seedRoles } from "./services/role.service";
@@ -19,6 +19,7 @@ import teamManagerRoutes from "./routes/teamManager.routes";
 import notificationRoutes from "./routes/notification.routes";
 import calendarRoutes from "./routes/calendar.routes";
 import catalogRoutes from "./routes/catalog.routes";
+import { resolveShortUrl } from "./services/shortUrl.service";
 import invitationRoutes from "./routes/invitation.routes";
 import crmRoutes from "./routes/crm.routes";
 import keepServerActive from "./cron/serverActive";
@@ -74,6 +75,15 @@ app.get("/health", (req: Request, res: Response) => {
     message: "Scan2Card Backend is running",
     timestamp: new Date().toISOString()
   });
+});
+
+// Catalog short URL redirect
+app.get("/catalogue/:slug", async (req: Request, res: Response, _next: NextFunction) => {
+  const originalUrl = await resolveShortUrl(req.params.slug);
+  if (!originalUrl) {
+    return res.status(404).json({ success: false, message: "Document not found" });
+  }
+  res.redirect(302, originalUrl);
 });
 
 // Catch-all route for undefined endpoints (including root)

@@ -29,6 +29,7 @@ export interface ICatalogFile {
   originalFileName: string;
   fileSize?: number;
   contentType?: string;
+  shortCode?: string;
 }
 
 // Catalog Interface
@@ -41,6 +42,7 @@ export interface ICatalog extends Document {
   whatsappTemplate: string;
   emailTemplate: IEmailTemplate;
   assignedLicenseKeys: IAssignedLicenseKey[];
+  shortCode?: string;
   isActive: boolean;
   isDeleted: boolean;
   createdAt: Date;
@@ -98,6 +100,11 @@ const CatalogSchema = new Schema<ICatalog>(
       contentType: {
         type: String,
         trim: true
+      },
+      shortCode: {
+        type: String,
+        trim: true,
+        maxlength: 20
       }
     }],
     whatsappTemplate: {
@@ -132,6 +139,11 @@ const CatalogSchema = new Schema<ICatalog>(
         trim: true
       }
     }],
+    shortCode: {
+      type: String,
+      trim: true,
+      maxlength: 20
+    },
     isActive: {
       type: Boolean,
       default: true
