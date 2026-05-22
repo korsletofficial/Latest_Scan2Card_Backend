@@ -13,6 +13,7 @@ export interface IRsvp extends Document {
   userId: Types.ObjectId;
   addedBy?: Types.ObjectId;
   eventLicenseKey?: string;
+  stallName?: string;
   expiresAt?: Date;
   status: number;
   isActive: boolean;
@@ -52,6 +53,12 @@ const RsvpSchema = new Schema<IRsvp>(
       maxlength: 100,
       trim: true,
       uppercase: true
+    },
+    stallName: {
+      type: String,
+      maxlength: 200,
+      trim: true,
+      default: '',
     },
     expiresAt: {
       type: Date,

@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import RsvpModel from "../models/rsvp.model";
+import EventModel from "../models/event.model";
 
 /**
  * RSVP Expiry Cron Job
@@ -35,6 +36,32 @@ export const startRsvpExpiryCron = () => {
       );
 
       console.log(`✅ Deactivated ${result.modifiedCount} expired RSVP(s)`);
+
+      // Deactivate RSVPs whose license key has been marked inactive
+      const eventsWithInactiveKeys = await EventModel.find(
+        { "licenseKeys.isActive": false, isDeleted: false },
+        { _id: 1, licenseKeys: 1 }
+      );
+
+      let inactiveKeyCount = 0;
+      for (const event of eventsWithInactiveKeys) {
+        const inactiveKeys = event.licenseKeys
+          .filter((lk: any) => !lk.isActive)
+          .map((lk: any) => lk.key);
+
+        if (inactiveKeys.length > 0) {
+          const r = await RsvpModel.updateMany(
+            { eventId: event._id, eventLicenseKey: { $in: inactiveKeys }, isActive: true, isDeleted: false },
+            { $set: { isActive: false, isRevoked: true } }
+          );
+          inactiveKeyCount += r.modifiedCount;
+        }
+      }
+
+      if (inactiveKeyCount > 0) {
+        console.log(`✅ Deactivated ${inactiveKeyCount} RSVP(s) from inactive license keys`);
+      }
+
       console.log("✅ RSVP expiry cron job completed");
     } catch (error: any) {
       console.error("❌ RSVP expiry cron job failed:", error.message);
@@ -53,18 +80,33 @@ export const checkAndExpireRsvps = async () => {
     const now = new Date();
 
     const result = await RsvpModel.updateMany(
-      {
-        expiresAt: { $exists: true, $ne: null, $lt: now },
-        isActive: true,
-        isDeleted: false,
-      },
-      {
-        $set: { isActive: false },
-      }
+      { expiresAt: { $exists: true, $ne: null, $lt: now }, isActive: true, isDeleted: false },
+      { $set: { isActive: false } }
     );
+
+    const eventsWithInactiveKeys = await EventModel.find(
+      { "licenseKeys.isActive": false, isDeleted: false },
+      { _id: 1, licenseKeys: 1 }
+    );
+
+    let inactiveKeyCount = 0;
+    for (const event of eventsWithInactiveKeys) {
+      const inactiveKeys = event.licenseKeys
+        .filter((lk: any) => !lk.isActive)
+        .map((lk: any) => lk.key);
+
+      if (inactiveKeys.length > 0) {
+        const r = await RsvpModel.updateMany(
+          { eventId: event._id, eventLicenseKey: { $in: inactiveKeys }, isActive: true, isDeleted: false },
+          { $set: { isActive: false, isRevoked: true } }
+        );
+        inactiveKeyCount += r.modifiedCount;
+      }
+    }
 
     return {
       expiredCount: result.modifiedCount,
+      inactiveKeyRsvpsDeactivated: inactiveKeyCount,
       timestamp: now.toISOString(),
     };
   } catch (error: any) {
