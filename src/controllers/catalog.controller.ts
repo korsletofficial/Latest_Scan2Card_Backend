@@ -323,7 +323,7 @@ export const updateCatalog = async (req: AuthRequest, res: Response) => {
               makePublic: true
             });
             console.log(`✅ File uploaded to S3: ${uploadResult.key}`);
-            const shortCode = await createShortUrl(uploadResult.url);
+            const shortCode = await createShortUrl(uploadResult.url, file.originalname);
             return {
               docLink: uploadResult.url,
               s3Key: uploadResult.key,
