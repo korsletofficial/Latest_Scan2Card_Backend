@@ -1,6 +1,5 @@
 import cron from "node-cron";
 import RsvpModel from "../models/rsvp.model";
-import EventModel from "../models/event.model";
 
 /**
  * RSVP Expiry Cron Job
@@ -36,37 +35,6 @@ export const startRsvpExpiryCron = () => {
       );
 
       console.log(`✅ Deactivated ${result.modifiedCount} expired RSVP(s)`);
-
-      // Deactivate RSVPs whose license key has been deactivated
-      const eventsWithInactiveKeys = await EventModel.find(
-        { "licenseKeys.isActive": false, isDeleted: false },
-        { _id: 1, "licenseKeys.$": 1 }
-      );
-
-      let inactiveKeyRsvpsDeactivated = 0;
-      for (const event of eventsWithInactiveKeys) {
-        const inactiveKeyNames = event.licenseKeys
-          .filter((lk: any) => !lk.isActive)
-          .map((lk: any) => lk.key);
-
-        if (inactiveKeyNames.length > 0) {
-          const inactiveResult = await RsvpModel.updateMany(
-            {
-              eventId: event._id,
-              eventLicenseKey: { $in: inactiveKeyNames },
-              isActive: true,
-              isDeleted: false,
-            },
-            { $set: { isActive: false, isRevoked: true } }
-          );
-          inactiveKeyRsvpsDeactivated += inactiveResult.modifiedCount;
-        }
-      }
-
-      if (inactiveKeyRsvpsDeactivated > 0) {
-        console.log(`✅ Deactivated ${inactiveKeyRsvpsDeactivated} RSVP(s) from inactive license keys`);
-      }
-
       console.log("✅ RSVP expiry cron job completed");
     } catch (error: any) {
       console.error("❌ RSVP expiry cron job failed:", error.message);
@@ -90,37 +58,13 @@ export const checkAndExpireRsvps = async () => {
         isActive: true,
         isDeleted: false,
       },
-      { $set: { isActive: false } }
-    );
-
-    const eventsWithInactiveKeys = await EventModel.find(
-      { "licenseKeys.isActive": false, isDeleted: false },
-      { _id: 1, "licenseKeys.$": 1 }
-    );
-
-    let inactiveKeyRsvpsDeactivated = 0;
-    for (const event of eventsWithInactiveKeys) {
-      const inactiveKeyNames = event.licenseKeys
-        .filter((lk: any) => !lk.isActive)
-        .map((lk: any) => lk.key);
-
-      if (inactiveKeyNames.length > 0) {
-        const inactiveResult = await RsvpModel.updateMany(
-          {
-            eventId: event._id,
-            eventLicenseKey: { $in: inactiveKeyNames },
-            isActive: true,
-            isDeleted: false,
-          },
-          { $set: { isActive: false, isRevoked: true } }
-        );
-        inactiveKeyRsvpsDeactivated += inactiveResult.modifiedCount;
+      {
+        $set: { isActive: false },
       }
-    }
+    );
 
     return {
       expiredCount: result.modifiedCount,
-      inactiveKeyRsvpsDeactivated,
       timestamp: now.toISOString(),
     };
   } catch (error: any) {

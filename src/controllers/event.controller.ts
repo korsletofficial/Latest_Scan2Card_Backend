@@ -416,22 +416,14 @@ export const getLicenseKeys = async (req: AuthRequest, res: Response) => {
 export const updateLicenseKey = async (req: AuthRequest, res: Response) => {
   try {
     const { id: eventId, licenseKeyId } = req.params;
-    const { stallName, maxActivations, expiresAt, isActive } = req.body;
+    const { stallName, maxActivations, expiresAt } = req.body;
     const exhibitorId = req.user?.userId;
 
     // Validate that at least one field is provided
-    if (stallName === undefined && maxActivations === undefined && expiresAt === undefined && isActive === undefined) {
+    if (stallName === undefined && maxActivations === undefined && expiresAt === undefined) {
       return res.status(400).json({
         success: false,
-        message: "At least one field must be provided for update (stallName, maxActivations, expiresAt, or isActive)",
-      });
-    }
-
-    // Validate isActive if provided
-    if (isActive !== undefined && typeof isActive !== "boolean") {
-      return res.status(400).json({
-        success: false,
-        message: "isActive must be a boolean",
+        message: "At least one field must be provided for update (stallName, maxActivations, or expiresAt)",
       });
     }
 
@@ -498,7 +490,6 @@ export const updateLicenseKey = async (req: AuthRequest, res: Response) => {
       stallName,
       maxActivations: maxActivations !== undefined ? Number(maxActivations) : undefined,
       expiresAt: validatedExpiresAt,
-      isActive,
     });
 
     const result = await eventService.updateLicenseKey(eventId, exhibitorId!, licenseKeyId, updateData);

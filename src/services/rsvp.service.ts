@@ -57,25 +57,15 @@ export const createRsvp = async (data: CreateRsvpData) => {
   });
 
   if (exitedRsvp) {
-    const reactivateResult = await EventModel.updateOne(
-      {
-        _id: event._id,
-        "licenseKeys.key": rsvpLicenseKey,
-        "licenseKeys.usedCount": { $lt: licenseKey.maxActivations },
-      },
-      { $inc: { "licenseKeys.$.usedCount": 1 } }
-    );
-
-    if (reactivateResult.modifiedCount === 0) {
-      throw new Error("License key has reached maximum activations");
-    }
-
     exitedRsvp.hasExited = false;
     exitedRsvp.isActive = true;
     exitedRsvp.exitedAt = undefined;
-    exitedRsvp.expiresAt = licenseKey.expiresAt;
-    exitedRsvp.stallName = licenseKey.stallName;
     await exitedRsvp.save();
+
+    await EventModel.updateOne(
+      { _id: event._id, "licenseKeys.key": rsvpLicenseKey },
+      { $inc: { "licenseKeys.$.usedCount": 1 } }
+    );
 
     const populatedRejoin = await RsvpModel.findById(exitedRsvp._id)
       .populate("eventId", "eventName type startDate endDate location")
@@ -107,31 +97,22 @@ export const createRsvp = async (data: CreateRsvpData) => {
     }
   }
 
-  // Atomically increment usedCount only if still below maxActivations (prevents race condition)
-  const incrementResult = await EventModel.updateOne(
-    {
-      _id: event._id,
-      "licenseKeys.key": rsvpLicenseKey,
-      "licenseKeys.usedCount": { $lt: licenseKey.maxActivations },
-    },
-    { $inc: { "licenseKeys.$.usedCount": 1 } }
-  );
-
-  if (incrementResult.modifiedCount === 0) {
-    throw new Error("License key has reached maximum activations");
-  }
-
-  // Create RSVP after successfully claiming a slot
+  // Create RSVP
   const rsvp = await RsvpModel.create({
     eventId: event._id,
     userId: userId,
     eventLicenseKey: rsvpLicenseKey,
     expiresAt: licenseKey.expiresAt,
-    stallName: licenseKey.stallName,
     status: 1,
     isActive: true,
     isDeleted: false,
   });
+
+  // Increment usedCount for the license key
+  await EventModel.updateOne(
+    { _id: event._id, "licenseKeys.key": rsvpLicenseKey },
+    { $inc: { "licenseKeys.$.usedCount": 1 } }
+  );
 
   // Populate event and user details
   const populatedRsvp = await RsvpModel.findById(rsvp._id)
@@ -264,14 +245,19 @@ export const getUserRsvps = async (
     }
   );
 
-  // Add stallName to each RSVP — use stored snapshot, fall back to live lookup for old RSVPs
+  // Add stallName to each RSVP by matching eventLicenseKey with event's licenseKeys
   const rsvpsWithStallName = rsvps.docs.map((rsvp) => {
     const rsvpObj: any = rsvp.toJSON();
 
-    if (!rsvpObj.stallName && rsvpObj.eventLicenseKey && rsvpObj.eventLicenseKey.trim() !== '' && rsvpObj.eventId?.licenseKeys) {
+    // Initialize stallName as empty string
+    rsvpObj.stallName = '';
+
+    // Find matching license key and extract stallName if license key exists
+    if (rsvpObj.eventLicenseKey && rsvpObj.eventLicenseKey.trim() !== '' && rsvpObj.eventId?.licenseKeys) {
       const matchingLicenseKey = rsvpObj.eventId.licenseKeys.find(
         (lk: any) => lk.key === rsvpObj.eventLicenseKey
       );
+
       if (matchingLicenseKey) {
         rsvpObj.stallName = matchingLicenseKey.stallName || '';
       }
@@ -358,29 +344,6 @@ export const rejoinEvent = async (eventId: string, userId: string) => {
 
   if (!rsvp) {
     throw new Error("No exited RSVP found for this event");
-  }
-
-  // Validate license key is still valid before allowing rejoin
-  if (rsvp.eventLicenseKey) {
-    const event = await EventModel.findOne({ _id: eventId, isDeleted: false });
-    if (!event) {
-      throw new Error("Event not found");
-    }
-
-    const licenseKey = event.licenseKeys.find((lk) => lk.key === rsvp.eventLicenseKey);
-    if (!licenseKey) {
-      throw new Error("License key no longer exists on this event");
-    }
-    if (!licenseKey.isActive) {
-      throw new Error("License key is inactive — rejoining is not allowed");
-    }
-    if (licenseKey.expiresAt && new Date(licenseKey.expiresAt) < new Date()) {
-      throw new Error("License key has expired — rejoining is not allowed");
-    }
-    const remainingActivations = licenseKey.maxActivations - licenseKey.usedCount;
-    if (remainingActivations <= 0) {
-      throw new Error("License key has reached maximum activations");
-    }
   }
 
   rsvp.hasExited = false;
