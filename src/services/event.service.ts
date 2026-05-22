@@ -498,6 +498,12 @@ export const deleteEvent = async (id: string, exhibitorId: string) => {
   event.isActive = false;
   await event.save();
 
+  // Deactivate all RSVPs for this event
+  await RsvpModel.updateMany(
+    { eventId: event._id, isDeleted: false },
+    { $set: { isActive: false } }
+  );
+
   return { message: "Event deleted successfully" };
 };
 
@@ -780,6 +786,7 @@ interface UpdateLicenseKeyData {
   stallName?: string;
   maxActivations?: number;
   expiresAt?: Date;
+  isActive?: boolean;
 }
 
 export const updateLicenseKey = async (
@@ -876,6 +883,15 @@ export const updateLicenseKey = async (
     licenseKey.expiresAt = data.expiresAt;
   }
 
+  if (data.isActive !== undefined && data.isActive !== licenseKey.isActive) {
+    changes.push({
+      field: 'Active Status',
+      oldValue: licenseKey.isActive ? 'Active' : 'Inactive',
+      newValue: data.isActive ? 'Active' : 'Inactive',
+    });
+    licenseKey.isActive = data.isActive;
+  }
+
   await event.save();
 
   // Sync expiresAt to all RSVPs that used this license key
@@ -883,6 +899,37 @@ export const updateLicenseKey = async (
     await RsvpModel.updateMany(
       { eventId: event._id, eventLicenseKey: licenseKey.key },
       { $set: { expiresAt: data.expiresAt } }
+    );
+  }
+
+  // Sync stallName snapshot on RSVPs
+  if (data.stallName !== undefined) {
+    await RsvpModel.updateMany(
+      { eventId: event._id, eventLicenseKey: licenseKey.key },
+      { $set: { stallName: data.stallName } }
+    );
+  }
+
+  // When license key is deactivated, revoke all RSVPs linked to it
+  if (data.isActive === false) {
+    await RsvpModel.updateMany(
+      { eventId: event._id, eventLicenseKey: licenseKey.key, isDeleted: false },
+      { $set: { isActive: false, isRevoked: true, revokedAt: new Date() } }
+    );
+  }
+
+  // When license key is re-activated, restore non-expired RSVPs
+  if (data.isActive === true) {
+    const now = new Date();
+    await RsvpModel.updateMany(
+      {
+        eventId: event._id,
+        eventLicenseKey: licenseKey.key,
+        isDeleted: false,
+        isRevoked: true,
+        $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gte: now } }],
+      },
+      { $set: { isActive: true, isRevoked: false, revokedAt: null } }
     );
   }
 
