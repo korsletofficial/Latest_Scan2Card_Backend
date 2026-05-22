@@ -11,6 +11,11 @@ async function backfillShortLinks() {
 
     await connectToMongooseDatabase();
 
+    if (!process.env.CATALOG_BASE_URL) {
+      console.error("❌ CATALOG_BASE_URL environment variable is not set");
+      process.exit(1);
+    }
+
     const catalogs = await CatalogModel.find({ isDeleted: false }).lean();
     console.log(`📋 Found ${catalogs.length} catalog(s) to process`);
 
@@ -21,10 +26,10 @@ async function backfillShortLinks() {
 
       // Legacy catalogs: file fields at top level, no files[]
       if ((!raw.files || raw.files.length === 0) && raw.docLink && !raw.shortCode) {
-        const code = await createShortUrl(raw.docLink);
-        await CatalogModel.updateOne({ _id: raw._id }, { $set: { shortCode: code } });
+        const slug = await createShortUrl(raw.docLink, raw.originalFileName || raw.name);
+        await CatalogModel.updateOne({ _id: raw._id }, { $set: { shortCode: slug } });
         totalUpdated++;
-        console.log(`  ✅ [legacy] ${raw.name}: code=${code}`);
+        console.log(`  ✅ [legacy] ${raw.name}: /catalogue/${slug}`);
         continue;
       }
 
@@ -33,11 +38,11 @@ async function backfillShortLinks() {
         let modified = false;
         for (let i = 0; i < raw.files.length; i++) {
           if (!raw.files[i].shortCode) {
-            const code = await createShortUrl(raw.files[i].docLink);
-            raw.files[i].shortCode = code;
+            const slug = await createShortUrl(raw.files[i].docLink, raw.files[i].originalFileName);
+            raw.files[i].shortCode = slug;
             modified = true;
             totalUpdated++;
-            console.log(`  ✅ [files[${i}]] ${raw.name} — ${raw.files[i].originalFileName}: code=${code}`);
+            console.log(`  ✅ [files[${i}]] ${raw.name} — ${raw.files[i].originalFileName}: /catalogue/${slug}`);
           }
         }
         if (modified) {
@@ -46,7 +51,7 @@ async function backfillShortLinks() {
       }
     }
 
-    console.log(`\n✅ Migration complete. Generated short codes for ${totalUpdated} file(s).`);
+    console.log(`\n✅ Migration complete. Generated slugs for ${totalUpdated} file(s).`);
     process.exit(0);
   } catch (error) {
     console.error("❌ Migration failed:", error);

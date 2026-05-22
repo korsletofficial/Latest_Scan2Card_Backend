@@ -77,11 +77,11 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
-// Short URL redirect
-app.get("/s/:code", async (req: Request, res: Response, _next: NextFunction) => {
-  const originalUrl = await resolveShortUrl(req.params.code);
+// Catalog short URL redirect
+app.get("/catalogue/:slug", async (req: Request, res: Response, _next: NextFunction) => {
+  const originalUrl = await resolveShortUrl(req.params.slug);
   if (!originalUrl) {
-    return res.status(404).json({ success: false, message: "Short URL not found" });
+    return res.status(404).json({ success: false, message: "Document not found" });
   }
   res.redirect(302, originalUrl);
 });

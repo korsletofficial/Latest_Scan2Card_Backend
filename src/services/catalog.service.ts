@@ -233,9 +233,9 @@ export const unassignCatalogFromLicenseKeys = async (
   return catalog;
 };
 
-const buildShortUrl = (code: string): string => {
-  const baseUrl = process.env.BASE_URL || "https://api.scan2card.com";
-  return `${baseUrl}/s/${code}`;
+const buildShortUrl = (slug: string): string => {
+  const baseUrl = process.env.CATALOG_BASE_URL || "https://api.scan2card.com";
+  return `${baseUrl}/catalogue/${slug}`;
 };
 
 // Get catalogs assigned to a specific license key

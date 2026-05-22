@@ -1,24 +1,29 @@
-import crypto from "crypto";
 import ShortUrlModel from "../models/shortUrl.model";
+import path from "path";
 
-const generateCode = (): string =>
-  crypto.randomBytes(6).toString("base64url").slice(0, 8);
-
-export const createShortUrl = async (originalUrl: string): Promise<string> => {
-  let code: string;
-  let attempts = 0;
-
-  do {
-    code = generateCode();
-    attempts++;
-    if (attempts > 10) throw new Error("Failed to generate unique short code");
-  } while (await ShortUrlModel.exists({ code }));
-
-  await ShortUrlModel.create({ code, originalUrl });
-  return code;
+const generateSlug = (fileName: string): string => {
+  return path
+    .basename(fileName, path.extname(fileName))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 };
 
-export const resolveShortUrl = async (code: string): Promise<string | null> => {
-  const record = await ShortUrlModel.findOne({ code }).lean();
+export const createShortUrl = async (originalUrl: string, fileName: string): Promise<string> => {
+  const base = generateSlug(fileName);
+  let slug = base;
+  let counter = 1;
+
+  while (await ShortUrlModel.exists({ slug })) {
+    counter++;
+    slug = `${base}-${counter}`;
+  }
+
+  await ShortUrlModel.create({ slug, originalUrl });
+  return slug;
+};
+
+export const resolveShortUrl = async (slug: string): Promise<string | null> => {
+  const record = await ShortUrlModel.findOne({ slug }).lean();
   return record?.originalUrl ?? null;
 };
